@@ -318,11 +318,11 @@
         <!-- Section 1: Getting Started -->
         <section id="getting-started">
             <h2>1. Getting Started</h2>
-            <p>The Worship Practice App is a multitrack audio player designed to help musicians practice worship songs. It allows you to load multiple audio tracks for a song, control individual track volumes, adjust playback speed and pitch, and create practice loops.</p>
+            <p>The Worship Practice App is a multitrack audio player designed to help musicians practice worship songs. It allows you to load multiple audio tracks for a song, control individual track volume, pan, mute, solo, adjust playback speed and pitch, and create practice loops.</p>
             
             <h3>Opening Your First Song</h3>
             <ol>
-                <li>Click the <strong>+ button</strong> in the tab bar at the top of the screen</li>
+                <li>Click the <strong>+ button</strong> in the tab bar at the top right of the screen</li>
                 <li>Select a song from the dropdown list that appears</li>
                 <li>The <strong>Track Picker</strong> modal will open automatically</li>
                 <li>Select the tracks you want to load (use "Select All" for all tracks)</li>
@@ -330,7 +330,7 @@
             </ol>
             
             <div class="note">
-                <strong>Note:</strong> The first time you load a song, audio files will be downloaded and cached. Subsequent loads will be much faster as files are retrieved from local storage.
+                <strong>Note:</strong> The first time you load a song, audio files will be downloaded and cached. This makes offline use possible. Additionally, subsequent loads will be much faster as files are retrieved from local storage.
             </div>
         </section>
         
@@ -383,11 +383,9 @@
             <ul>
                 <li>Hover over a tab to reveal the <strong>X</strong> button</li>
                 <li>Click the X to close the song</li>
+                <li>Closing a song clears all local resources. If you open the song again, resources are pulled from the web.</li>
                 <li>Use <kbd>Ctrl</kbd> + <kbd>W</kbd> to close the active song</li>
             </ul>
-            
-            <h3>Renaming Songs</h3>
-            <p><strong>Double-click</strong> on a tab name to edit it inline. Press <kbd>Enter</kbd> to confirm or <kbd>Escape</kbd> to cancel.</p>
             
             <div class="tip">
                 <strong>Tip:</strong> Press <kbd>Ctrl</kbd> + <kbd>N</kbd> to quickly create a new song.
@@ -515,7 +513,7 @@
             </ul>
             
             <h3>Markers</h3>
-            <p>If the song has section markers defined (in metadata), they appear as labeled triangles on the beats timeline. Common markers include Intro, Verse, Chorus, Bridge, etc.</p>
+            <p>If the song has section markers defined, they appear as labeled triangles on the beats timeline. Common markers include Intro, Verse, Chorus, Bridge, etc.</p>
             
             <h3>Timeline Interactions</h3>
             <table>
@@ -643,17 +641,14 @@
             
             <h3>Tempo Display</h3>
             <ul>
-                <li><strong>Range:</strong> 20 to 300 BPM</li>
-                <li><strong>Function:</strong> Affects timeline beat grid display</li>
-                <li><strong>Editable:</strong> Only when the song has no tempo metadata</li>
-                <li><strong>Read-only:</strong> When song has tempo metadata (updates as playhead moves through tempo changes)</li>
+                <li><strong>Function:</strong> Displays tempo at playhead position</li>
+                <li><strong>Read-only:</strong> Updates as playhead moves through tempo changes</li>
             </ul>
             
             <h3>Time Signature</h3>
             <ul>
-                <li><strong>Options:</strong> 4/4, 6/8, 3/4, 2/2, 2/4, 6/4, 12/4, 9/8, 12/8, 3/2</li>
-                <li><strong>Function:</strong> Affects timeline beat grid display</li>
-                <li><strong>Editable:</strong> When no time signature metadata exists</li>
+                <li><strong>Function:</strong> Displays time signature at playhead position</li>
+                <li><strong>Read-only:</strong> Updates as playhead moves through time signature changes</li>
             </ul>
             
             <h3>Pan Knob (Track Controls)</h3>
@@ -790,13 +785,11 @@
             <h3>Double-Click Actions</h3>
             <ul>
                 <li><strong>Double-click pan knob:</strong> Reset to center (0)</li>
-                <li><strong>Double-click tab name:</strong> Rename the song</li>
             </ul>
             
             <h3>Click-to-Edit Values</h3>
             <ul>
                 <li><strong>Speed value:</strong> Click to type a custom speed (0.5 - 2.0)</li>
-                <li><strong>Tempo value:</strong> Click to type a custom tempo (20 - 300 BPM) - only when no metadata</li>
             </ul>
             
             <h3>Timeline Loop Creation</h3>
@@ -817,6 +810,9 @@
             
             <h3>Variable Tempo Support</h3>
             <p>Songs can have tempo changes. The timeline grid and tempo display update as the playhead moves through different tempo sections.</p>
+            
+            <h3>Variable Time Signature Support</h3>
+            <p>Songs can have time signature changes. The timeline grid and time signature display update as the playhead moves through different time signature sections.</p>
             
             <h3>Waveform Auto-Scroll</h3>
             <p>During playback, the waveform view automatically scrolls to keep the playhead visible.</p>
