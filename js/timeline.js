@@ -4,7 +4,7 @@
  */
 
 import * as State from './state.js';
-import { getBeatPositionsInRange, findNearestBeat, getTempoAtTime } from './metadata.js';
+import { getBeatPositionsInRange, findNearestBeat, getTempoAtTime, getTimeSigAtTime } from './metadata.js';
 
 const BASE_PIXELS_PER_SECOND = 100;
 
@@ -226,17 +226,16 @@ class Timeline {
     }
 
     /**
-     * Snap time to nearest beat (accounts for variable tempo)
+     * Snap time to nearest beat (accounts for variable tempo and time signature)
      */
     snapToBeat(time) {
         const song = State.getActiveSong();
         if (!song) return time;
         
         const tempos = song.metadata?.tempos;
-        const timeSignature = song.transport?.timeSignature || '4/4';
-        const [beatsPerMeasure] = timeSignature.split('/').map(Number);
+        const timeSigs = song.metadata?.['time-sigs'];
         
-        return findNearestBeat(time, tempos, beatsPerMeasure);
+        return findNearestBeat(time, tempos, timeSigs);
     }
 
     /**
@@ -484,7 +483,10 @@ class Timeline {
     calculateZoomLimits() {
         const maxDuration = State.getMaxDuration();
         const song = State.getActiveSong();
-        const timeSignature = song?.transport?.timeSignature || '4/4';
+        
+        // Use first time signature from metadata, or fall back to transport time signature
+        const timeSigs = song?.metadata?.['time-sigs'];
+        const timeSignature = (timeSigs && timeSigs.length > 0) ? timeSigs[0].sig : (song?.transport?.timeSignature || '4/4');
         
         // Use first tempo from metadata, or fall back to transport tempo
         const tempos = song?.metadata?.tempos;
@@ -640,7 +642,7 @@ class Timeline {
     /**
      * Render the beats timeline (M:B format)
      * Shows measure:beat labels (e.g., "1:1", "4:2", "8:3")
-     * Accounts for variable tempo changes from metadata
+     * Accounts for variable tempo and time signature changes from metadata
      */
     renderBeatsTimeline() {
         const canvas = this.beatsCanvas;
@@ -655,23 +657,24 @@ class Timeline {
         
         const zoom = song.timeline?.zoom || 1;
         const offset = song.timeline?.offset || 0;
-        const timeSignature = song.transport?.timeSignature || '4/4';
         const tempos = song.metadata?.tempos;
+        const timeSigs = song.metadata?.['time-sigs'];
         
-        const [beatsPerMeasure] = timeSignature.split('/').map(Number);
         const pixelsPerSecond = BASE_PIXELS_PER_SECOND * zoom;
         
         // Calculate visible time range
         const startTime = Math.max(0, this.scrollOffset / pixelsPerSecond - offset);
         const endTime = (this.scrollOffset + canvas.width) / pixelsPerSecond - offset;
         
-        // Get beat positions for visible range (accounts for variable tempo)
-        const beatPositions = getBeatPositionsInRange(startTime, endTime, tempos, beatsPerMeasure);
+        // Get beat positions for visible range (accounts for variable tempo and time signature)
+        const beatPositions = getBeatPositionsInRange(startTime, endTime, tempos, timeSigs);
         
         // Determine labeling density based on zoom level
-        // Use the tempo at the center of the view to estimate spacing
+        // Use the tempo and time signature at the center of the view to estimate spacing
         const centerTime = (startTime + endTime) / 2;
         const centerTempo = getTempoAtTime(centerTime, tempos);
+        const centerTimeSig = getTimeSigAtTime(centerTime, timeSigs);
+        const [beatsPerMeasure] = centerTimeSig.split('/').map(Number);
         const pixelsPerBeat = pixelsPerSecond * (60 / centerTempo);
         const pixelsPerMeasure = pixelsPerBeat * beatsPerMeasure;
         
@@ -812,7 +815,7 @@ class Timeline {
 
     /**
      * Legacy single timeline renderer (fallback)
-     * Accounts for variable tempo changes from metadata
+     * Accounts for variable tempo and time signature changes from metadata
      */
     renderLegacyTimeline() {
         const canvas = this.legacyCanvas;
@@ -826,17 +829,16 @@ class Timeline {
         if (!song) return;
         
         const zoom = song.timeline?.zoom || 1;
-        const timeSignature = song.transport?.timeSignature || '4/4';
         const tempos = song.metadata?.tempos;
+        const timeSigs = song.metadata?.['time-sigs'];
         
-        const [beatsPerMeasure] = timeSignature.split('/').map(Number);
         const pixelsPerSecond = BASE_PIXELS_PER_SECOND * zoom;
         
         const startTime = Math.max(0, this.scrollOffset / pixelsPerSecond);
         const endTime = (this.scrollOffset + canvas.width) / pixelsPerSecond;
         
-        // Get beat positions for visible range (accounts for variable tempo)
-        const beatPositions = getBeatPositionsInRange(startTime, endTime, tempos, beatsPerMeasure);
+        // Get beat positions for visible range (accounts for variable tempo and time signature)
+        const beatPositions = getBeatPositionsInRange(startTime, endTime, tempos, timeSigs);
         
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';

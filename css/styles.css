@@ -1166,6 +1166,16 @@ body {
     color: var(--text-primary);
 }
 
+.icon-btn svg,
+.add-btn svg {
+    pointer-events: none;
+}
+
+.zoom-fit-btn {
+    width: auto;
+    padding: 0 4px;
+}
+
 /* ========================================
    Loading Overlay
    ======================================== */

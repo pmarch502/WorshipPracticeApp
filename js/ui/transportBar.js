@@ -5,7 +5,7 @@
 
 import * as State from '../state.js';
 import { getTransport } from '../transport.js';
-import { getTempoAtTime } from '../metadata.js';
+import { getTempoAtTime, getTimeSigAtTime } from '../metadata.js';
 
 // Key names in chromatic order starting from A
 const KEYS = ['A', 'Bb', 'B', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab'];
@@ -183,6 +183,7 @@ class TransportBar {
         State.subscribe(State.Events.POSITION_CHANGED, (position) => {
             this.updateTimeDisplay(position);
             this.updateTempoFromPosition(position);
+            this.updateTimeSigFromPosition(position);
         });
 
         // Update total time when tracks change
@@ -267,9 +268,21 @@ class TransportBar {
         // Update tempo editability based on metadata presence
         this.updateTempoEditability(hasTempoMetadata);
 
+        const hasTimeSigMetadata = song.metadata?.['time-sigs']?.length > 0;
+
         // Update selects
         this.pitchSelect.value = transport.pitch;
-        this.timeSignatureSelect.value = transport.timeSignature;
+        
+        // For time signature: use metadata if available, otherwise use transport value
+        if (hasTimeSigMetadata) {
+            const timeSig = getTimeSigAtTime(transport.position, song.metadata['time-sigs']);
+            this.timeSignatureSelect.value = timeSig;
+        } else {
+            this.timeSignatureSelect.value = transport.timeSignature;
+        }
+
+        // Update time signature editability based on metadata presence
+        this.updateTimeSigEditability(hasTimeSigMetadata);
 
         // Update time display
         this.updateTimeDisplay(transport.position);
@@ -298,6 +311,21 @@ class TransportBar {
     }
 
     /**
+     * Update time signature display based on current playhead position
+     * Only updates display if song has time signature metadata
+     * @param {number} position - Current position in seconds
+     */
+    updateTimeSigFromPosition(position) {
+        const song = State.getActiveSong();
+        const timeSigs = song?.metadata?.['time-sigs'];
+        
+        if (timeSigs && timeSigs.length > 0) {
+            const timeSig = getTimeSigAtTime(position, timeSigs);
+            this.timeSignatureSelect.value = timeSig;
+        }
+    }
+
+    /**
      * Enable/disable tempo editing based on whether metadata exists
      * @param {boolean} hasTempoMetadata - Whether song has tempo metadata
      */
@@ -308,6 +336,20 @@ class TransportBar {
         } else {
             this.tempoValueEl.classList.remove('read-only');
             this.tempoValueEl.style.cursor = 'pointer';
+        }
+    }
+
+    /**
+     * Enable/disable time signature editing based on whether metadata exists
+     * @param {boolean} hasTimeSigMetadata - Whether song has time signature metadata
+     */
+    updateTimeSigEditability(hasTimeSigMetadata) {
+        if (hasTimeSigMetadata) {
+            this.timeSignatureSelect.disabled = true;
+            this.timeSignatureSelect.style.cursor = 'default';
+        } else {
+            this.timeSignatureSelect.disabled = false;
+            this.timeSignatureSelect.style.cursor = 'pointer';
         }
     }
 

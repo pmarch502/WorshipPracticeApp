@@ -24,14 +24,16 @@ class TabsUI {
 
     init() {
         // Add song button - show picker dropdown
-        this.addBtn.addEventListener('click', (e) => {
+        // Using mousedown instead of click to avoid Edge browser event delay issues
+        this.addBtn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
             e.stopPropagation();
             this.toggleSongPicker();
         });
 
         // Close picker when clicking outside
         document.addEventListener('click', (e) => {
-            if (this.isPickerOpen && !this.songPicker.contains(e.target) && e.target !== this.addBtn) {
+            if (this.isPickerOpen && !this.songPicker.contains(e.target) && !this.addBtn.contains(e.target)) {
                 this.closeSongPicker();
             }
         });

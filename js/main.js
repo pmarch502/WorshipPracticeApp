@@ -196,6 +196,17 @@ class App {
                     transport.seek(song.transport.position + step);
                 }
             }
+
+            // Escape: Clear loop (only if no modal is open)
+            if (e.code === 'Escape') {
+                const modalOverlay = document.getElementById('modal-overlay');
+                const isModalOpen = modalOverlay && !modalOverlay.classList.contains('hidden');
+                
+                if (!isModalOpen && State.getLoopState().enabled) {
+                    e.preventDefault();
+                    State.clearLoop();
+                }
+            }
         });
     }
 
