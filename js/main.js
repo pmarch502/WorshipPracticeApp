@@ -91,6 +91,15 @@ class App {
         initDragDrop();
         getModal();
         getSongLoader();
+        
+        // Help button
+        const helpBtn = document.getElementById('help-btn');
+        if (helpBtn) {
+            helpBtn.addEventListener('click', () => {
+                const modal = getModal();
+                modal.showHelp();
+            });
+        }
     }
 
     async loadSavedState() {

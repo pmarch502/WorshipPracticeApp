@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worship Practice App - User Guide</title>
+    <link rel="icon" href="RLC_favicon.png" type="image/png" />
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f0f1a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --accent: #00d4ff;
+            --accent-dim: #00a4cc;
+            --warning: #ffcc00;
+            --danger: #ff4444;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 0;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
+            border-bottom: 2px solid var(--accent);
+        }
+        
+        header h1 {
+            font-size: 2.5rem;
+            color: var(--accent);
+            margin-bottom: 10px;
+        }
+        
+        header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+        
+        nav {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 40px;
+        }
+        
+        nav h2 {
+            color: var(--accent);
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+        
+        nav ul {
+            list-style: none;
+            columns: 2;
+            gap: 20px;
+        }
+        
+        nav li {
+            margin-bottom: 8px;
+        }
+        
+        nav a {
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        nav a:hover {
+            color: var(--accent);
+        }
+        
+        section {
+            margin-bottom: 50px;
+        }
+        
+        h2 {
+            color: var(--accent);
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--accent-dim);
+        }
+        
+        h3 {
+            color: var(--text-primary);
+            font-size: 1.3rem;
+            margin: 25px 0 15px 0;
+        }
+        
+        h4 {
+            color: var(--accent-dim);
+            font-size: 1.1rem;
+            margin: 20px 0 10px 0;
+        }
+        
+        p {
+            margin-bottom: 15px;
+            color: var(--text-secondary);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+        
+        th {
+            background: var(--bg-tertiary);
+            color: var(--accent);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+        
+        tr:last-child td {
+            border-bottom: none;
+        }
+        
+        tr:hover td {
+            background: rgba(0, 212, 255, 0.05);
+        }
+        
+        kbd {
+            display: inline-block;
+            padding: 3px 8px;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+            border: 1px solid #444;
+            border-radius: 4px;
+            box-shadow: 0 2px 0 #333;
+        }
+        
+        .note {
+            background: rgba(0, 212, 255, 0.1);
+            border-left: 4px solid var(--accent);
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .note strong {
+            color: var(--accent);
+        }
+        
+        .warning {
+            background: rgba(255, 204, 0, 0.1);
+            border-left: 4px solid var(--warning);
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .warning strong {
+            color: var(--warning);
+        }
+        
+        .tip {
+            background: rgba(0, 255, 100, 0.1);
+            border-left: 4px solid #00ff64;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .tip strong {
+            color: #00ff64;
+        }
+        
+        ul, ol {
+            margin: 15px 0 15px 25px;
+            color: var(--text-secondary);
+        }
+        
+        li {
+            margin-bottom: 8px;
+        }
+        
+        code {
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            background: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--accent);
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .feature-card {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        
+        .feature-card h4 {
+            margin-top: 0;
+            color: var(--accent);
+        }
+        
+        .back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: var(--accent);
+            color: var(--bg-primary);
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            font-size: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+            transition: transform 0.2s;
+        }
+        
+        .back-to-top:hover {
+            transform: translateY(-3px);
+        }
+        
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            margin-top: 60px;
+        }
+        
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        
+        @media (max-width: 600px) {
+            nav ul {
+                columns: 1;
+            }
+            
+            header h1 {
+                font-size: 1.8rem;
+            }
+            
+            table {
+                font-size: 0.9rem;
+            }
+            
+            th, td {
+                padding: 8px 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Worship Practice App</h1>
+        <p>User Guide &amp; Reference Manual</p>
+    </header>
+    
+    <div class="container">
+        <nav id="toc">
+            <h2>Table of Contents</h2>
+            <ul>
+                <li><a href="#getting-started">1. Getting Started</a></li>
+                <li><a href="#interface-overview">2. Interface Overview</a></li>
+                <li><a href="#song-management">3. Song Management</a></li>
+                <li><a href="#track-management">4. Track Management</a></li>
+                <li><a href="#transport-controls">5. Transport Controls</a></li>
+                <li><a href="#timeline-waveform">6. Timeline &amp; Waveform</a></li>
+                <li><a href="#loop-functionality">7. Loop Functionality</a></li>
+                <li><a href="#audio-controls">8. Audio Controls</a></li>
+                <li><a href="#keyboard-shortcuts">9. Keyboard Shortcuts</a></li>
+                <li><a href="#hidden-features">10. Hidden Features</a></li>
+                <li><a href="#cache-storage">11. Cache &amp; Storage</a></li>
+                <li><a href="#browser-requirements">12. Browser Requirements</a></li>
+            </ul>
+        </nav>
+        
+        <!-- Section 1: Getting Started -->
+        <section id="getting-started">
+            <h2>1. Getting Started</h2>
+            <p>The Worship Practice App is a multitrack audio player designed to help musicians practice worship songs. It allows you to load multiple audio tracks for a song, control individual track volumes, adjust playback speed and pitch, and create practice loops.</p>
+            
+            <h3>Opening Your First Song</h3>
+            <ol>
+                <li>Click the <strong>+ button</strong> in the tab bar at the top of the screen</li>
+                <li>Select a song from the dropdown list that appears</li>
+                <li>The <strong>Track Picker</strong> modal will open automatically</li>
+                <li>Select the tracks you want to load (use "Select All" for all tracks)</li>
+                <li>Click <strong>"Add Selected"</strong> to load the tracks</li>
+            </ol>
+            
+            <div class="note">
+                <strong>Note:</strong> The first time you load a song, audio files will be downloaded and cached. Subsequent loads will be much faster as files are retrieved from local storage.
+            </div>
+        </section>
+        
+        <!-- Section 2: Interface Overview -->
+        <section id="interface-overview">
+            <h2>2. Interface Overview</h2>
+            <p>The application interface is divided into four main areas:</p>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>Tab Bar (Top)</h4>
+                    <p>Displays open songs as tabs. Click tabs to switch between songs. Use the + button to open new songs.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Track Controls (Left)</h4>
+                    <p>Shows volume, pan, solo, and mute controls for each loaded track. Includes cache usage indicator.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Waveform Panel (Right)</h4>
+                    <p>Displays the timeline and waveforms for all tracks. Includes zoom controls and playhead.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Transport Bar (Bottom)</h4>
+                    <p>Contains playback controls, time display, speed, pitch, tempo, and time signature settings.</p>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section 3: Song Management -->
+        <section id="song-management">
+            <h2>3. Song Management</h2>
+            
+            <h3>Opening Songs</h3>
+            <ol>
+                <li>Click the <strong>+</strong> button in the tab bar</li>
+                <li>A dropdown will appear with available songs</li>
+                <li>Songs already open are excluded from the list</li>
+                <li>Click a song name to open it</li>
+            </ol>
+            
+            <h3>Switching Between Songs</h3>
+            <p>Click on any tab to switch to that song. The app will:</p>
+            <ul>
+                <li>Stop any current playback</li>
+                <li>Save the current song's state (position, settings)</li>
+                <li>Load the selected song's tracks and restore its state</li>
+            </ul>
+            
+            <h3>Closing Songs</h3>
+            <ul>
+                <li>Hover over a tab to reveal the <strong>X</strong> button</li>
+                <li>Click the X to close the song</li>
+                <li>Use <kbd>Ctrl</kbd> + <kbd>W</kbd> to close the active song</li>
+            </ul>
+            
+            <h3>Renaming Songs</h3>
+            <p><strong>Double-click</strong> on a tab name to edit it inline. Press <kbd>Enter</kbd> to confirm or <kbd>Escape</kbd> to cancel.</p>
+            
+            <div class="tip">
+                <strong>Tip:</strong> Press <kbd>Ctrl</kbd> + <kbd>N</kbd> to quickly create a new song.
+            </div>
+        </section>
+        
+        <!-- Section 4: Track Management -->
+        <section id="track-management">
+            <h2>4. Track Management</h2>
+            
+            <h3>Adding Tracks</h3>
+            <ol>
+                <li>Click the <strong>+</strong> button in the track controls panel (left side)</li>
+                <li>The Track Picker modal displays available tracks for the current song</li>
+                <li>Check the tracks you want to add</li>
+                <li>Use <strong>Select All</strong> or <strong>Select None</strong> for quick selection</li>
+                <li>Already-loaded tracks appear disabled (greyed out)</li>
+                <li>Click <strong>Add Selected</strong> to load chosen tracks</li>
+            </ol>
+            
+            <h3>Track Controls</h3>
+            <table>
+                <tr>
+                    <th>Control</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><strong>Volume Slider</strong></td>
+                    <td>Adjusts track volume from 0 to 100</td>
+                </tr>
+                <tr>
+                    <td><strong>Pan Knob</strong></td>
+                    <td>Adjusts stereo position from -100 (left) to +100 (right)</td>
+                </tr>
+                <tr>
+                    <td><strong>S (Solo)</strong></td>
+                    <td>Solo this track - only soloed tracks will play (yellow when active)</td>
+                </tr>
+                <tr>
+                    <td><strong>M (Mute)</strong></td>
+                    <td>Mute this track - silences the track (red when active)</td>
+                </tr>
+                <tr>
+                    <td><strong>X (Delete)</strong></td>
+                    <td>Remove track from the song (appears on hover)</td>
+                </tr>
+            </table>
+            
+            <h3>Selecting Tracks</h3>
+            <p>Click anywhere on a track's control row (not on buttons or sliders) to select it. The selected track is highlighted with a cyan left border.</p>
+            
+            <h3>Deleting Tracks</h3>
+            <ul>
+                <li>Click the <strong>X</strong> button that appears when hovering over a track</li>
+                <li>Or select a track and press <kbd>Delete</kbd> or <kbd>Backspace</kbd></li>
+            </ul>
+            
+            <h3>Solo/Mute Logic</h3>
+            <ul>
+                <li>When no tracks are soloed, all unmuted tracks play</li>
+                <li>When any track is soloed, only soloed tracks play (mute state is ignored)</li>
+                <li>Inactive tracks (muted or not soloed) appear dimmed in the waveform display</li>
+            </ul>
+        </section>
+        
+        <!-- Section 5: Transport Controls -->
+        <section id="transport-controls">
+            <h2>5. Transport Controls</h2>
+            <p>The transport bar at the bottom of the screen contains all playback controls.</p>
+            
+            <h3>Playback Buttons</h3>
+            <table>
+                <tr>
+                    <th>Button</th>
+                    <th>Function</th>
+                    <th>Shortcut</th>
+                </tr>
+                <tr>
+                    <td><strong>Return to Beginning</strong></td>
+                    <td>Seeks to the start of the song (position 0)</td>
+                    <td><kbd>Home</kbd></td>
+                </tr>
+                <tr>
+                    <td><strong>Stop</strong></td>
+                    <td>Stops playback and returns to the last play position</td>
+                    <td><kbd>Space</kbd> (when playing)</td>
+                </tr>
+                <tr>
+                    <td><strong>Play</strong></td>
+                    <td>Starts playback from the current position</td>
+                    <td><kbd>Space</kbd> (when stopped)</td>
+                </tr>
+                <tr>
+                    <td><strong>Pause</strong></td>
+                    <td>Pauses at current position; can resume from pause</td>
+                    <td><kbd>Ctrl</kbd> + <kbd>Space</kbd></td>
+                </tr>
+                <tr>
+                    <td><strong>Loop</strong></td>
+                    <td>Toggles loop mode on/off</td>
+                    <td>-</td>
+                </tr>
+            </table>
+            
+            <h3>Playback States</h3>
+            <ul>
+                <li><strong>Stopped:</strong> Not playing, position at last play position</li>
+                <li><strong>Playing:</strong> Audio actively playing</li>
+                <li><strong>Paused:</strong> Stopped at current position, can resume</li>
+            </ul>
+            
+            <h3>Time Display</h3>
+            <p>Shows current position and total duration in <code>HH:MM:SS.mmm</code> format. Updates in real-time during playback.</p>
+        </section>
+        
+        <!-- Section 6: Timeline & Waveform -->
+        <section id="timeline-waveform">
+            <h2>6. Timeline &amp; Waveform</h2>
+            
+            <h3>Dual Timeline Display</h3>
+            <p>The timeline header shows two synchronized timelines:</p>
+            <ul>
+                <li><strong>Beats Timeline (top):</strong> Shows measure:beat notation (e.g., "4:2" = measure 4, beat 2)</li>
+                <li><strong>Time Timeline (bottom):</strong> Shows time in M:SS.m format (e.g., "1:30.5")</li>
+            </ul>
+            
+            <h3>Markers</h3>
+            <p>If the song has section markers defined (in metadata), they appear as labeled triangles on the beats timeline. Common markers include Intro, Verse, Chorus, Bridge, etc.</p>
+            
+            <h3>Timeline Interactions</h3>
+            <table>
+                <tr>
+                    <th>Action</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td>Click on timeline</td>
+                    <td>Seek to that position</td>
+                </tr>
+                <tr>
+                    <td>Click and drag on timeline</td>
+                    <td>Create a loop region</td>
+                </tr>
+                <tr>
+                    <td>Drag loop handles</td>
+                    <td>Adjust loop start/end points</td>
+                </tr>
+            </table>
+            
+            <h3>Waveform Display</h3>
+            <ul>
+                <li><strong>Active tracks:</strong> Displayed in cyan with gradient</li>
+                <li><strong>Inactive tracks:</strong> Displayed in grey, dimmed</li>
+                <li><strong>Click on waveform:</strong> Seek to that position</li>
+                <li><strong>Scroll horizontally:</strong> Navigate through the song</li>
+                <li><strong>Scroll vertically:</strong> Navigate through tracks (synced with track controls)</li>
+            </ul>
+            
+            <h3>Playhead</h3>
+            <p>The cyan vertical line with a triangle at the top indicates the current playback position. During playback, the view automatically scrolls to keep the playhead visible.</p>
+            
+            <h3>Zoom Controls</h3>
+            <table>
+                <tr>
+                    <th>Control</th>
+                    <th>Function</th>
+                </tr>
+                <tr>
+                    <td><strong>Fit</strong></td>
+                    <td>Zooms to fit the entire song in the viewport</td>
+                </tr>
+                <tr>
+                    <td><strong>- (Zoom Out)</strong></td>
+                    <td>Decreases zoom by 1.25x</td>
+                </tr>
+                <tr>
+                    <td><strong>Slider</strong></td>
+                    <td>Drag to adjust zoom level</td>
+                </tr>
+                <tr>
+                    <td><strong>+ (Zoom In)</strong></td>
+                    <td>Increases zoom by 1.25x</td>
+                </tr>
+                <tr>
+                    <td><strong>Percentage</strong></td>
+                    <td>Shows current zoom level</td>
+                </tr>
+            </table>
+        </section>
+        
+        <!-- Section 7: Loop Functionality -->
+        <section id="loop-functionality">
+            <h2>7. Loop Functionality</h2>
+            <p>Create practice loops to repeat specific sections of a song.</p>
+            
+            <h3>Creating a Loop</h3>
+            <ol>
+                <li><strong>Click and drag</strong> on the timeline from your desired start point to end point</li>
+                <li>The loop region appears as a cyan shaded area</li>
+                <li>Loop points automatically <strong>snap to the nearest beat</strong> when you release the mouse</li>
+                <li>The loop is automatically enabled when created</li>
+            </ol>
+            
+            <h3>Adjusting a Loop</h3>
+            <ul>
+                <li>Hover near the loop boundary until the cursor changes to a resize cursor</li>
+                <li><strong>Drag the handles</strong> to adjust the loop start or end point</li>
+                <li>Points snap to beats when released</li>
+            </ul>
+            
+            <h3>Loop Playback</h3>
+            <p>When loop mode is enabled and the playhead reaches the loop end point, it automatically jumps back to the loop start point.</p>
+            
+            <h3>Loop Controls</h3>
+            <table>
+                <tr>
+                    <th>Action</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td>Click Loop button</td>
+                    <td>Toggle loop mode on/off</td>
+                </tr>
+                <tr>
+                    <td>Press <kbd>Escape</kbd></td>
+                    <td>Clear the loop region entirely</td>
+                </tr>
+            </table>
+            
+            <div class="tip">
+                <strong>Tip:</strong> Loop points snap to beats for musical precision, making it easy to loop exact measures or phrases.
+            </div>
+        </section>
+        
+        <!-- Section 8: Audio Controls -->
+        <section id="audio-controls">
+            <h2>8. Audio Controls</h2>
+            
+            <h3>Speed Control (Time Stretch)</h3>
+            <ul>
+                <li><strong>Range:</strong> 0.5x to 2.0x</li>
+                <li><strong>Function:</strong> Changes playback speed without affecting pitch</li>
+                <li><strong>To edit:</strong> Click on the speed value, type a new value, press <kbd>Enter</kbd></li>
+            </ul>
+            
+            <h3>Pitch Control</h3>
+            <ul>
+                <li><strong>Range:</strong> -6 to +6 semitones</li>
+                <li><strong>Function:</strong> Shifts pitch up or down without affecting speed</li>
+                <li><strong>To adjust:</strong> Use the dropdown selector</li>
+                <li><strong>Key display:</strong> If the song has a defined key, the label shows the transposed key (e.g., "PITCH (Bb)")</li>
+            </ul>
+            
+            <h3>Tempo Display</h3>
+            <ul>
+                <li><strong>Range:</strong> 20 to 300 BPM</li>
+                <li><strong>Function:</strong> Affects timeline beat grid display</li>
+                <li><strong>Editable:</strong> Only when the song has no tempo metadata</li>
+                <li><strong>Read-only:</strong> When song has tempo metadata (updates as playhead moves through tempo changes)</li>
+            </ul>
+            
+            <h3>Time Signature</h3>
+            <ul>
+                <li><strong>Options:</strong> 4/4, 6/8, 3/4, 2/2, 2/4, 6/4, 12/4, 9/8, 12/8, 3/2</li>
+                <li><strong>Function:</strong> Affects timeline beat grid display</li>
+                <li><strong>Editable:</strong> When no time signature metadata exists</li>
+            </ul>
+            
+            <h3>Pan Knob (Track Controls)</h3>
+            <table>
+                <tr>
+                    <th>Interaction</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td>Drag up/down</td>
+                    <td>Increase/decrease pan value</td>
+                </tr>
+                <tr>
+                    <td><kbd>Shift</kbd> + Drag</td>
+                    <td>Fine adjustment (10x more precise)</td>
+                </tr>
+                <tr>
+                    <td>Double-click</td>
+                    <td>Reset to center (0)</td>
+                </tr>
+                <tr>
+                    <td>Mouse wheel</td>
+                    <td>Adjust by step</td>
+                </tr>
+                <tr>
+                    <td><kbd>Shift</kbd> + Wheel</td>
+                    <td>Fine adjustment</td>
+                </tr>
+            </table>
+        </section>
+        
+        <!-- Section 9: Keyboard Shortcuts -->
+        <section id="keyboard-shortcuts">
+            <h2>9. Keyboard Shortcuts</h2>
+            <p>Master these keyboard shortcuts to speed up your workflow.</p>
+            
+            <h3>Playback Controls</h3>
+            <table>
+                <tr>
+                    <th>Shortcut</th>
+                    <th>Action</th>
+                </tr>
+                <tr>
+                    <td><kbd>Space</kbd></td>
+                    <td>Toggle Play/Stop</td>
+                </tr>
+                <tr>
+                    <td><kbd>Ctrl</kbd> + <kbd>Space</kbd></td>
+                    <td>Pause / Resume from pause</td>
+                </tr>
+                <tr>
+                    <td><kbd>Home</kbd></td>
+                    <td>Seek to beginning</td>
+                </tr>
+            </table>
+            
+            <h3>Navigation</h3>
+            <table>
+                <tr>
+                    <th>Shortcut</th>
+                    <th>Action</th>
+                </tr>
+                <tr>
+                    <td><kbd>&#8592;</kbd> (Left Arrow)</td>
+                    <td>Seek backward 1 second</td>
+                </tr>
+                <tr>
+                    <td><kbd>Shift</kbd> + <kbd>&#8592;</kbd></td>
+                    <td>Seek backward 10 seconds</td>
+                </tr>
+                <tr>
+                    <td><kbd>&#8594;</kbd> (Right Arrow)</td>
+                    <td>Seek forward 1 second</td>
+                </tr>
+                <tr>
+                    <td><kbd>Shift</kbd> + <kbd>&#8594;</kbd></td>
+                    <td>Seek forward 10 seconds</td>
+                </tr>
+            </table>
+            
+            <h3>Song &amp; Track Management</h3>
+            <table>
+                <tr>
+                    <th>Shortcut</th>
+                    <th>Action</th>
+                </tr>
+                <tr>
+                    <td><kbd>Ctrl</kbd> + <kbd>N</kbd></td>
+                    <td>Create a new song</td>
+                </tr>
+                <tr>
+                    <td><kbd>Ctrl</kbd> + <kbd>W</kbd></td>
+                    <td>Close the current song</td>
+                </tr>
+                <tr>
+                    <td><kbd>Delete</kbd> or <kbd>Backspace</kbd></td>
+                    <td>Delete the selected track</td>
+                </tr>
+            </table>
+            
+            <h3>Other</h3>
+            <table>
+                <tr>
+                    <th>Shortcut</th>
+                    <th>Action</th>
+                </tr>
+                <tr>
+                    <td><kbd>Escape</kbd></td>
+                    <td>Clear loop region / Close modal / Cancel editing</td>
+                </tr>
+                <tr>
+                    <td><kbd>Enter</kbd></td>
+                    <td>Confirm edit / Submit modal input</td>
+                </tr>
+            </table>
+            
+            <div class="warning">
+                <strong>Note:</strong> Keyboard shortcuts are disabled when you're typing in an input field or text area.
+            </div>
+        </section>
+        
+        <!-- Section 10: Hidden Features -->
+        <section id="hidden-features">
+            <h2>10. Hidden Features</h2>
+            <p>These features aren't immediately obvious but can greatly enhance your workflow.</p>
+            
+            <h3>Shift-Modified Controls</h3>
+            <ul>
+                <li><kbd>Shift</kbd> + <kbd>Arrow Keys</kbd> - Jump 10 seconds instead of 1</li>
+                <li><kbd>Shift</kbd> + Drag pan knob - Fine adjustment (10x more precise)</li>
+                <li><kbd>Shift</kbd> + Mouse wheel on knob - Fine adjustment</li>
+            </ul>
+            
+            <h3>Double-Click Actions</h3>
+            <ul>
+                <li><strong>Double-click pan knob:</strong> Reset to center (0)</li>
+                <li><strong>Double-click tab name:</strong> Rename the song</li>
+            </ul>
+            
+            <h3>Click-to-Edit Values</h3>
+            <ul>
+                <li><strong>Speed value:</strong> Click to type a custom speed (0.5 - 2.0)</li>
+                <li><strong>Tempo value:</strong> Click to type a custom tempo (20 - 300 BPM) - only when no metadata</li>
+            </ul>
+            
+            <h3>Timeline Loop Creation</h3>
+            <ul>
+                <li><strong>Click and drag on timeline:</strong> Creates a loop region</li>
+                <li><strong>Drag loop boundaries:</strong> Resize existing loop</li>
+                <li>Loop points automatically snap to beats for musical precision</li>
+            </ul>
+            
+            <h3>Mouse Wheel on Knobs</h3>
+            <p>Instead of dragging, you can use the mouse wheel to adjust pan knobs.</p>
+            
+            <h3>Touch Support</h3>
+            <p>Pan knobs support touch gestures - touch and drag up/down to adjust.</p>
+            
+            <h3>Transposed Key Display</h3>
+            <p>When you change the pitch and the song has a defined key, the pitch label dynamically shows the resulting transposed key.</p>
+            
+            <h3>Variable Tempo Support</h3>
+            <p>Songs can have tempo changes. The timeline grid and tempo display update as the playhead moves through different tempo sections.</p>
+            
+            <h3>Waveform Auto-Scroll</h3>
+            <p>During playback, the waveform view automatically scrolls to keep the playhead visible.</p>
+            
+            <h3>Synchronized Scrolling</h3>
+            <p>The track controls panel and waveform panel scroll together vertically, keeping them aligned.</p>
+        </section>
+        
+        <!-- Section 11: Cache & Storage -->
+        <section id="cache-storage">
+            <h2>11. Cache &amp; Storage</h2>
+            
+            <h3>Cache Indicator</h3>
+            <p>The storage indicator in the track controls header shows current cache usage (e.g., "45.2 MB / 2.0 GB").</p>
+            
+            <h3>How Caching Works</h3>
+            <ul>
+                <li><strong>First load:</strong> Audio files are downloaded from the server and cached locally</li>
+                <li><strong>Subsequent loads:</strong> Files are retrieved from local storage (much faster)</li>
+                <li><strong>Waveform peaks:</strong> Pre-calculated and cached for fast waveform rendering</li>
+            </ul>
+            
+            <h3>Storage Systems</h3>
+            <ul>
+                <li><strong>OPFS (Origin Private File System):</strong> Stores audio file blobs</li>
+                <li><strong>IndexedDB:</strong> Stores waveform peaks data</li>
+                <li><strong>LocalStorage:</strong> Stores application state (open songs, settings, positions)</li>
+            </ul>
+            
+            <h3>Cache Behavior</h3>
+            <ul>
+                <li>Cache persists across browser sessions</li>
+                <li>Closing a song tab clears its cached audio and peaks data</li>
+                <li>Switching songs keeps AudioBuffers in memory for fast switching back</li>
+            </ul>
+            
+            <h3>Auto-Save</h3>
+            <p>Your application state is automatically saved:</p>
+            <ul>
+                <li>On every change (with a 1-second debounce)</li>
+                <li>Immediately when closing the browser tab</li>
+                <li>State includes: open songs, track selections, playback positions, volume/pan settings</li>
+            </ul>
+            
+            <div class="note">
+                <strong>Note:</strong> When you reopen the app, it automatically restores your previous session.
+            </div>
+        </section>
+        
+        <!-- Section 12: Browser Requirements -->
+        <section id="browser-requirements">
+            <h2>12. Browser Requirements</h2>
+            <p>The Worship Practice App requires a modern browser with support for advanced Web APIs.</p>
+            
+            <h3>Supported Browsers</h3>
+            <table>
+                <tr>
+                    <th>Browser</th>
+                    <th>Minimum Version</th>
+                </tr>
+                <tr>
+                    <td>Google Chrome</td>
+                    <td>86+</td>
+                </tr>
+                <tr>
+                    <td>Microsoft Edge</td>
+                    <td>86+</td>
+                </tr>
+                <tr>
+                    <td>Mozilla Firefox</td>
+                    <td>111+</td>
+                </tr>
+                <tr>
+                    <td>Apple Safari</td>
+                    <td>15.2+</td>
+                </tr>
+            </table>
+            
+            <h3>Required Web APIs</h3>
+            <ul>
+                <li><strong>Web Audio API:</strong> For audio playback and processing</li>
+                <li><strong>AudioWorklet:</strong> For real-time time-stretching and pitch-shifting</li>
+                <li><strong>OPFS (Origin Private File System):</strong> For caching audio files</li>
+                <li><strong>IndexedDB:</strong> For storing waveform data</li>
+            </ul>
+            
+            <div class="warning">
+                <strong>Warning:</strong> The app may not function correctly in older browsers or private/incognito browsing modes where storage APIs are restricted.
+            </div>
+        </section>
+        
+        <!-- Quick Reference Card -->
+        <section id="quick-reference">
+            <h2>Quick Reference Card</h2>
+            
+            <h3>Essential Shortcuts</h3>
+            <table>
+                <tr>
+                    <td><kbd>Space</kbd></td>
+                    <td>Play / Stop</td>
+                    <td><kbd>Ctrl</kbd> + <kbd>Space</kbd></td>
+                    <td>Pause</td>
+                </tr>
+                <tr>
+                    <td><kbd>Home</kbd></td>
+                    <td>Go to start</td>
+                    <td><kbd>Escape</kbd></td>
+                    <td>Clear loop</td>
+                </tr>
+                <tr>
+                    <td><kbd>&#8592;</kbd> / <kbd>&#8594;</kbd></td>
+                    <td>Seek 1 sec</td>
+                    <td><kbd>Shift</kbd> + <kbd>&#8592;</kbd> / <kbd>&#8594;</kbd></td>
+                    <td>Seek 10 sec</td>
+                </tr>
+                <tr>
+                    <td><kbd>Ctrl</kbd> + <kbd>N</kbd></td>
+                    <td>New song</td>
+                    <td><kbd>Ctrl</kbd> + <kbd>W</kbd></td>
+                    <td>Close song</td>
+                </tr>
+                <tr>
+                    <td><kbd>Delete</kbd></td>
+                    <td>Delete track</td>
+                    <td>Double-click knob</td>
+                    <td>Reset to center</td>
+                </tr>
+            </table>
+        </section>
+    </div>
+    
+    <a href="#toc" class="back-to-top" title="Back to top">^</a>
+    
+    <footer>
+        <p>Worship Practice App User Guide</p>
+        <p><a href="index.html">Return to Application</a></p>
+    </footer>
+</body>
+</html>

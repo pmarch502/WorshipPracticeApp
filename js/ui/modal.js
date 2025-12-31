@@ -239,6 +239,34 @@ class ModalManager {
     }
 
     /**
+     * Show the user guide in a large modal with iframe
+     */
+    showHelp() {
+        return new Promise((resolve) => {
+            this.titleEl.textContent = 'User Guide';
+            this.contentEl.innerHTML = `
+                <iframe 
+                    src="user-guide.html" 
+                    class="help-iframe"
+                    title="User Guide">
+                </iframe>
+            `;
+            this.confirmBtn.textContent = 'Close';
+            this.confirmBtn.className = 'btn btn-primary';
+            this.cancelBtn.style.display = 'none';
+            
+            // Add class for larger modal
+            this.dialog.classList.add('modal-help');
+            
+            this.currentResolve = resolve;
+            this.show();
+        }).finally(() => {
+            this.cancelBtn.style.display = '';
+            this.dialog.classList.remove('modal-help');
+        });
+    }
+
+    /**
      * Show a prompt dialog with text input
      */
     prompt(options = {}) {
