@@ -8,12 +8,15 @@ import { getBeatPositionsInRange, findNearestBeat, getTempoAtTime } from './meta
 
 const BASE_PIXELS_PER_SECOND = 100;
 
-const TEXT_COLOR = '#b0b0b0';
+const TEXT_COLOR = '#dddddd';//'#b0b0b0';
 const TICK_COLOR = '#505050';
 const MAJOR_TICK_COLOR = '#707070';
 const BACKGROUND_COLOR = '#242424';
 const LOOP_REGION_COLOR = 'rgba(0, 212, 255, 0.2)';
 const LOOP_BOUNDARY_COLOR = '#00d4ff';
+const MARKER_COLOR = 'rgba(255, 255, 0, 0.1)';
+//const MARKER_OUTLINE_COLOR = 'rgba(255, 255, 255, 0.4)';
+const MARKER_TEXT_COLOR = 'rgba(255, 255, 255, 0.4)';
 
 // Minimum pixels of movement to distinguish drag from click
 const DRAG_THRESHOLD = 5;
@@ -533,6 +536,64 @@ class Timeline {
     }
 
     /**
+     * Render markers on the beats timeline
+     * Markers appear as upside-down triangles with labels
+     */
+    renderMarkers(ctx, canvas) {
+        const song = State.getActiveSong();
+        if (!song) return;
+        
+        const markers = song.metadata?.markers;
+        if (!markers || markers.length === 0) return;
+        
+        const triangleWidth = 20;
+        const triangleHeight = 20;
+        const labelPadding = 5;
+        const labelGap = 2; // Gap between triangle and label
+        
+        ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        
+        for (const marker of markers) {
+            const x = this.timeToPixel(marker.start);
+            
+            // Skip if outside visible range (with some margin for label)
+            if (x < -100 || x > canvas.width + 10) continue;
+            
+            // Draw upside-down triangle (apex pointing down, touching dividing line)
+            const triangleTop = canvas.height - triangleHeight;
+            ctx.fillStyle = MARKER_COLOR;
+            //ctx.strokeStyle = MARKER_OUTLINE_COLOR;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x - triangleWidth / 2, triangleTop); // Top-left
+            ctx.lineTo(x + triangleWidth / 2, triangleTop); // Top-right
+            ctx.lineTo(x, canvas.height);                    // Bottom center (apex) - touches dividing line
+            ctx.closePath();
+            ctx.fill();
+            //ctx.stroke();
+            
+            // Measure label text
+            const label = marker.name || '';
+            const textMetrics = ctx.measureText(label);
+            const labelWidth = textMetrics.width + labelPadding * 2;
+            const labelHeight = 15; // Approximate height for 12px font
+            
+            // Draw label background (to the right of triangle, aligned with triangle top)
+            const labelX = x + triangleWidth / 2 + labelGap;
+            const labelY = triangleTop;
+            
+            ctx.fillStyle = MARKER_COLOR;
+            ctx.fillRect(labelX, labelY, labelWidth, labelHeight);
+            
+            // Draw label text
+            ctx.fillStyle = MARKER_TEXT_COLOR;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(label, labelX + labelPadding, labelY + (labelPadding * 0.5));
+        }
+    }
+
+    /**
      * Render loop region on a canvas
      */
     renderLoopRegion(ctx, canvas) {
@@ -649,10 +710,13 @@ class Timeline {
                 ctx.fillStyle = TEXT_COLOR;
                 ctx.fillText(`${measure}:1`, x, canvas.height - tickHeight - 2);
             } else if (showSubBeats && !isMeasureStart) {
-                ctx.fillStyle = '#606060';
+                ctx.fillStyle = '#aaaaaa';//'#606060';
                 ctx.fillText(`${measure}:${beat}`, x, canvas.height - tickHeight - 2);
             }
         }
+        
+        // Render markers
+        this.renderMarkers(ctx, canvas);
         
         // Render loop region on top
         this.renderLoopRegion(ctx, canvas);
