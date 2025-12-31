@@ -1,0 +1,176 @@
+/**
+ * Song Manager
+ * Handles multi-song management with manifest-based songs
+ */
+
+import * as State from './state.js';
+import * as TrackManager from './trackManager.js';
+import { getModal } from './ui/modal.js';
+import { getAudioEngine } from './audioEngine.js';
+import * as cacheManager from './cache/cacheManager.js';
+
+/**
+ * Open a song from the manifest
+ * @param {string} songName - Song name from manifest
+ * @returns {Object} - Created song object
+ */
+export function openSong(songName) {
+    // Stop any current playback
+    const audioEngine = getAudioEngine();
+    if (State.state.playbackState === 'playing') {
+        audioEngine.stop();
+    }
+    
+    // Unload current song's tracks
+    const currentSong = State.getActiveSong();
+    if (currentSong) {
+        TrackManager.unloadTracksForSong(currentSong);
+    }
+    
+    // Create new song (no tracks loaded initially)
+    const song = State.addSong(State.createDefaultSong(songName));
+    
+    return song;
+}
+
+/**
+ * Switch to a different song
+ * @param {string} songId - Song ID to switch to
+ */
+export async function switchSong(songId) {
+    const currentSong = State.getActiveSong();
+    const targetSong = State.getSong(songId);
+    
+    if (!targetSong || (currentSong && currentSong.id === songId)) {
+        return;
+    }
+    
+    // Stop any current playback
+    const audioEngine = getAudioEngine();
+    if (State.state.playbackState === 'playing') {
+        audioEngine.stop();
+    }
+    
+    // Unload current song's tracks
+    if (currentSong) {
+        TrackManager.unloadTracksForSong(currentSong);
+    }
+    
+    // Switch to new song
+    State.switchSong(songId);
+    
+    // Load new song's tracks
+    if (targetSong.tracks.length > 0) {
+        State.setLoading(true, 'Loading tracks...');
+        try {
+            await TrackManager.loadTracksForSong(targetSong);
+        } finally {
+            State.setLoading(false);
+        }
+    }
+}
+
+/**
+ * Close a song
+ * @param {string} songId - Song ID to close
+ * @param {boolean} confirm - Whether to show confirmation (not used in new model)
+ */
+export async function closeSong(songId, confirm = false) {
+    const song = State.getSong(songId);
+    if (!song) return false;
+    
+    const audioEngine = getAudioEngine();
+    
+    // Stop playback if this is the active song
+    if (State.state.activeSongId === songId) {
+        if (State.state.playbackState === 'playing') {
+            audioEngine.stop();
+        }
+        TrackManager.unloadTracksForSong(song);
+    }
+    
+    // Clear caches for this song (OPFS audio blobs, IndexedDB peaks, memory AudioBuffers)
+    const trackIds = song.tracks.map(t => t.id);
+    const trackFileNames = song.tracks.map(t => {
+        // Extract filename from path
+        const parts = t.filePath.split('/');
+        return decodeURIComponent(parts[parts.length - 1]);
+    });
+    
+    // Clear in-memory AudioBuffer cache
+    audioEngine.clearAudioBuffers(trackIds);
+    
+    // Clear OPFS and IndexedDB caches (in background, don't wait)
+    cacheManager.invalidateSong(song.songName, trackFileNames)
+        .catch(err => console.warn('Failed to invalidate song cache:', err));
+    
+    // Remove song from state
+    State.removeSong(songId);
+    
+    // If there's a new active song, load its tracks
+    const newActiveSong = State.getActiveSong();
+    if (newActiveSong && newActiveSong.tracks.length > 0) {
+        State.setLoading(true, 'Loading tracks...');
+        try {
+            await TrackManager.loadTracksForSong(newActiveSong);
+        } finally {
+            State.setLoading(false);
+        }
+    }
+    
+    return true;
+}
+
+/**
+ * Rename a song
+ * @param {string} songId - Song ID
+ * @param {string} newName - New name
+ */
+export function renameSong(songId, newName) {
+    if (!newName || newName.trim() === '') return false;
+    return State.renameSong(songId, newName.trim());
+}
+
+/**
+ * Prompt user to rename a song
+ * @param {string} songId - Song ID
+ */
+export async function promptRenameSong(songId) {
+    const song = State.getSong(songId);
+    if (!song) return;
+    
+    const modal = getModal();
+    const newName = await modal.prompt({
+        title: 'Rename Song',
+        message: 'Enter a new name for this song:',
+        defaultValue: song.name,
+        confirmText: 'Rename'
+    });
+    
+    if (newName && newName.trim() !== '' && newName !== song.name) {
+        renameSong(songId, newName.trim());
+    }
+}
+
+/**
+ * Check if a song is already open
+ * @param {string} songName - Song name from manifest
+ * @returns {boolean}
+ */
+export function isSongOpen(songName) {
+    return State.state.songs.some(s => s.songName === songName);
+}
+
+/**
+ * Get song count
+ */
+export function getSongCount() {
+    return State.state.songs.length;
+}
+
+/**
+ * Get all songs
+ */
+export function getAllSongs() {
+    return State.state.songs;
+}

@@ -1,0 +1,453 @@
+/**
+ * Track Panel UI
+ * Left panel showing track controls with manifest-based track selection
+ */
+
+import * as State from '../state.js';
+import * as TrackManager from '../trackManager.js';
+import * as Manifest from '../manifest.js';
+import { Knob } from './knob.js';
+import { getModal } from './modal.js';
+
+class TrackPanel {
+    constructor() {
+        this.container = document.getElementById('track-controls-list');
+        this.emptyState = document.getElementById('track-controls-empty');
+        this.addTrackBtn = document.getElementById('add-track-btn');
+        this.addTrackContainer = document.getElementById('add-track-container');
+        this.trackElements = new Map(); // trackId -> element
+        this.knobs = new Map(); // trackId -> { pan: Knob }
+        
+        this.init();
+        this.attachStateListeners();
+        this.setupScrollSync();
+    }
+
+    init() {
+        // Add track button
+        if (this.addTrackBtn) {
+            this.addTrackBtn.addEventListener('click', () => {
+                this.showTrackPicker();
+            });
+        }
+    }
+
+    /**
+     * Show track picker modal for selecting tracks to add
+     */
+    async showTrackPicker() {
+        const song = State.getActiveSong();
+        if (!song || !song.songName) {
+            const modal = getModal();
+            await modal.alert({
+                title: 'No Song Selected',
+                message: 'Please select a song first before adding tracks.'
+            });
+            return;
+        }
+
+        // Ensure manifest is loaded
+        await Manifest.loadManifest();
+
+        // Get available tracks from manifest
+        const availableTracks = Manifest.getSongTracks(song.songName);
+        if (!availableTracks || availableTracks.length === 0) {
+            const modal = getModal();
+            await modal.alert({
+                title: 'No Tracks Available',
+                message: 'No tracks found for this song in the manifest.'
+            });
+            return;
+        }
+
+        // Get already loaded tracks
+        const loadedTracks = TrackManager.getLoadedTrackFileNames();
+
+        // Build modal content
+        const modal = getModal();
+        const content = this.buildTrackPickerContent(availableTracks, loadedTracks);
+        
+        const result = await modal.custom({
+            title: 'Add Tracks',
+            content,
+            confirmText: 'Add Selected',
+            onConfirm: () => {
+                const checkboxes = document.querySelectorAll('.track-picker-item input[type="checkbox"]:checked:not(:disabled)');
+                return Array.from(checkboxes).map(cb => cb.value);
+            }
+        });
+
+        if (result && result.length > 0) {
+            await TrackManager.addTracksFromManifest(song.songName, result);
+        }
+    }
+
+    /**
+     * Build the track picker modal content HTML
+     */
+    buildTrackPickerContent(availableTracks, loadedTracks) {
+        const allLoaded = availableTracks.every(t => loadedTracks.includes(t));
+        const noneLoaded = loadedTracks.length === 0;
+
+        let html = `
+            <div class="file-select-header">
+                <button class="btn btn-secondary btn-small" id="track-select-all" ${allLoaded ? 'disabled' : ''}>Select All</button>
+                <button class="btn btn-secondary btn-small" id="track-select-none">Select None</button>
+                <span class="file-count">${availableTracks.length} tracks available</span>
+            </div>
+            <div class="file-select-list">
+        `;
+
+        for (const trackFileName of availableTracks) {
+            const isLoaded = loadedTracks.includes(trackFileName);
+            const displayName = Manifest.getTrackDisplayName(trackFileName);
+            
+            html += `
+                <label class="file-select-item track-picker-item ${isLoaded ? 'disabled' : ''}">
+                    <input type="checkbox" value="${trackFileName}" ${isLoaded ? 'disabled checked' : ''}>
+                    <span class="file-name">${displayName}</span>
+                    ${isLoaded ? '<span class="file-size">Already loaded</span>' : ''}
+                </label>
+            `;
+        }
+
+        html += '</div>';
+
+        // Add event listener setup after render
+        setTimeout(() => {
+            const selectAllBtn = document.getElementById('track-select-all');
+            const selectNoneBtn = document.getElementById('track-select-none');
+            
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', () => {
+                    document.querySelectorAll('.track-picker-item input[type="checkbox"]:not(:disabled)').forEach(cb => {
+                        cb.checked = true;
+                    });
+                });
+            }
+            
+            if (selectNoneBtn) {
+                selectNoneBtn.addEventListener('click', () => {
+                    document.querySelectorAll('.track-picker-item input[type="checkbox"]:not(:disabled)').forEach(cb => {
+                        cb.checked = false;
+                    });
+                });
+            }
+        }, 0);
+
+        return html;
+    }
+
+    /**
+     * Set up scroll synchronization with waveform panel
+     */
+    setupScrollSync() {
+        // Listen for vertical scroll from waveform panel
+        State.subscribe('waveformScrollVertical', (scrollTop) => {
+            if (this.container.scrollTop !== scrollTop) {
+                this.container.scrollTop = scrollTop;
+            }
+        });
+
+        // Also sync in the other direction (track panel -> waveform)
+        this.container.addEventListener('scroll', () => {
+            State.emit('trackPanelScrollVertical', this.container.scrollTop);
+        });
+    }
+
+    attachStateListeners() {
+        State.subscribe(State.Events.TRACK_ADDED, ({ track }) => {
+            this.addTrackElement(track);
+            this.updateEmptyState();
+        });
+
+        State.subscribe(State.Events.TRACK_REMOVED, ({ track }) => {
+            this.removeTrackElement(track.id);
+            this.updateEmptyState();
+        });
+
+        State.subscribe(State.Events.TRACK_UPDATED, ({ track, updates }) => {
+            this.updateTrackElement(track.id, updates);
+        });
+
+        State.subscribe(State.Events.TRACK_SELECTED, (trackId) => {
+            this.updateSelection(trackId);
+        });
+
+        State.subscribe(State.Events.SONG_SWITCHED, (song) => {
+            this.renderTracks(song);
+        });
+
+        State.subscribe(State.Events.STATE_LOADED, () => {
+            const song = State.getActiveSong();
+            if (song) {
+                this.renderTracks(song);
+            }
+        });
+    }
+
+    /**
+     * Render all tracks for a song
+     */
+    renderTracks(song) {
+        this.clear();
+        
+        if (song && song.tracks) {
+            song.tracks.forEach(track => {
+                this.addTrackElement(track);
+            });
+        }
+        
+        this.updateEmptyState();
+    }
+
+    /**
+     * Add a track element
+     */
+    addTrackElement(track) {
+        const element = document.createElement('div');
+        element.className = 'track-control';
+        element.dataset.trackId = track.id;
+        
+        // Check if track is active
+        const isAudible = State.isTrackAudible(track.id);
+        if (!isAudible) {
+            element.classList.add('inactive');
+        }
+
+        element.innerHTML = `
+            <div class="track-control-header">
+                <span class="track-name" title="${track.name}">${track.name}</span>
+                <button class="track-delete-btn" title="Delete track">
+                    <svg viewBox="0 0 24 24" width="14" height="14">
+                        <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="track-control-row">
+                <label>Vol</label>
+                <div class="volume-slider-container">
+                    <input type="range" class="volume-slider" min="0" max="100" value="${track.volume}">
+                    <span class="volume-value">${track.volume}</span>
+                </div>
+            </div>
+            <div class="track-control-row">
+                <label>Pan</label>
+                <div class="pan-container">
+                    <div class="pan-knob-container knob-small"></div>
+                    <span class="pan-value">${this.formatPan(track.pan)}</span>
+                </div>
+            </div>
+            <div class="track-buttons">
+                <button class="track-btn solo ${track.solo ? 'active' : ''}" title="Solo">S</button>
+                <button class="track-btn mute ${track.mute ? 'active' : ''}" title="Mute">M</button>
+            </div>
+        `;
+
+        // Create pan knob
+        const panContainer = element.querySelector('.pan-knob-container');
+        const panKnob = new Knob(panContainer, {
+            min: -100,
+            max: 100,
+            value: track.pan,
+            step: 1,
+            size: 28,
+            bipolar: true,
+            onChange: (value) => {
+                TrackManager.setTrackPan(track.id, value);
+            }
+        });
+        this.knobs.set(track.id, { pan: panKnob });
+
+        // Attach event listeners
+        this.attachTrackEvents(element, track.id);
+
+        this.container.appendChild(element);
+        this.trackElements.set(track.id, element);
+    }
+
+    /**
+     * Attach event listeners to a track element
+     */
+    attachTrackEvents(element, trackId) {
+        // Select track on click
+        element.addEventListener('click', (e) => {
+            if (!e.target.closest('button') && !e.target.closest('input') && !e.target.closest('.knob')) {
+                State.selectTrack(trackId);
+            }
+        });
+
+        // Delete button
+        const deleteBtn = element.querySelector('.track-delete-btn');
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            TrackManager.deleteTrack(trackId, false);// false = No confirmation needed
+        });
+
+        // Volume slider
+        const volumeSlider = element.querySelector('.volume-slider');
+        const volumeValue = element.querySelector('.volume-value');
+        
+        volumeSlider.addEventListener('input', () => {
+            const value = parseInt(volumeSlider.value);
+            volumeValue.textContent = value;
+            TrackManager.setTrackVolume(trackId, value);
+        });
+
+        // Solo button
+        const soloBtn = element.querySelector('.track-btn.solo');
+        soloBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            TrackManager.toggleSolo(trackId);
+        });
+
+        // Mute button
+        const muteBtn = element.querySelector('.track-btn.mute');
+        muteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            TrackManager.toggleMute(trackId);
+        });
+    }
+
+    /**
+     * Remove a track element
+     */
+    removeTrackElement(trackId) {
+        const element = this.trackElements.get(trackId);
+        if (element) {
+            element.remove();
+            this.trackElements.delete(trackId);
+        }
+        
+        // Cleanup knobs
+        const knobs = this.knobs.get(trackId);
+        if (knobs) {
+            if (knobs.pan) knobs.pan.destroy();
+            this.knobs.delete(trackId);
+        }
+    }
+
+    /**
+     * Update a track element based on state changes
+     */
+    updateTrackElement(trackId, updates) {
+        const element = this.trackElements.get(trackId);
+        if (!element) return;
+
+        if ('volume' in updates) {
+            const slider = element.querySelector('.volume-slider');
+            const value = element.querySelector('.volume-value');
+            slider.value = updates.volume;
+            value.textContent = updates.volume;
+        }
+
+        if ('pan' in updates) {
+            const panValue = element.querySelector('.pan-value');
+            panValue.textContent = this.formatPan(updates.pan);
+            
+            const knobs = this.knobs.get(trackId);
+            if (knobs && knobs.pan) {
+                knobs.pan.setValue(updates.pan, false);
+            }
+        }
+
+        if ('solo' in updates) {
+            const soloBtn = element.querySelector('.track-btn.solo');
+            soloBtn.classList.toggle('active', updates.solo);
+        }
+
+        if ('mute' in updates) {
+            const muteBtn = element.querySelector('.track-btn.mute');
+            muteBtn.classList.toggle('active', updates.mute);
+        }
+
+        // Update audibility
+        this.updateTrackAudibility(trackId);
+    }
+
+    /**
+     * Update track audibility visual state
+     */
+    updateTrackAudibility(trackId) {
+        const element = this.trackElements.get(trackId);
+        if (!element) return;
+
+        const isAudible = State.isTrackAudible(trackId);
+        element.classList.toggle('inactive', !isAudible);
+    }
+
+    /**
+     * Update all tracks' audibility
+     */
+    updateAllTracksAudibility() {
+        const song = State.getActiveSong();
+        if (!song) return;
+
+        song.tracks.forEach(track => {
+            this.updateTrackAudibility(track.id);
+        });
+    }
+
+    /**
+     * Update selection state
+     */
+    updateSelection(selectedTrackId) {
+        this.trackElements.forEach((element, trackId) => {
+            element.classList.toggle('selected', trackId === selectedTrackId);
+        });
+    }
+
+    /**
+     * Format pan value for display
+     */
+    formatPan(pan) {
+        if (pan === 0) return 'C';
+        if (pan < 0) return `${Math.abs(pan)}L`;
+        return `${pan}R`;
+    }
+
+    /**
+     * Update empty state visibility
+     */
+    updateEmptyState() {
+        const song = State.getActiveSong();
+        const hasTracks = song && song.tracks && song.tracks.length > 0;
+        
+        if (this.emptyState) {
+            this.emptyState.classList.toggle('hidden', hasTracks);
+        }
+    }
+
+    /**
+     * Clear all track elements
+     */
+    clear() {
+        // Cleanup knobs
+        this.knobs.forEach((knobs) => {
+            if (knobs.pan) knobs.pan.destroy();
+        });
+        this.knobs.clear();
+        
+        this.container.innerHTML = '';
+        this.trackElements.clear();
+    }
+}
+
+// Singleton instance
+let trackPanelInstance = null;
+
+export function getTrackPanel() {
+    if (!trackPanelInstance) {
+        trackPanelInstance = new TrackPanel();
+    }
+    return trackPanelInstance;
+}
+
+// Subscribe to track updates for audibility changes
+State.subscribe(State.Events.TRACK_UPDATED, () => {
+    if (trackPanelInstance) {
+        trackPanelInstance.updateAllTracksAudibility();
+    }
+});
+
+export default TrackPanel;
