@@ -5,6 +5,7 @@
 
 import * as State from '../state.js';
 import { getTransport } from '../transport.js';
+import { getTempoAtTime } from '../metadata.js';
 
 // Key names in chromatic order starting from A
 const KEYS = ['A', 'Bb', 'B', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab'];
@@ -124,7 +125,8 @@ class TransportBar {
      */
     setupEditableValue(element, paramName, { parse, format, validate, apply }) {
         element.addEventListener('click', () => {
-            // Don't allow editing if already editing
+            // Don't allow editing if read-only or already editing
+            if (element.classList.contains('read-only')) return;
             if (element.querySelector('input')) return;
 
             const currentText = element.textContent;
@@ -180,6 +182,7 @@ class TransportBar {
         // Update time display on position change
         State.subscribe(State.Events.POSITION_CHANGED, (position) => {
             this.updateTimeDisplay(position);
+            this.updateTempoFromPosition(position);
         });
 
         // Update total time when tracks change
@@ -214,10 +217,11 @@ class TransportBar {
             this.updateLoopButton(enabled);
         });
 
-        // Update pitch label when metadata is loaded
+        // Update pitch label and tempo editability when metadata is loaded
         State.subscribe(State.Events.SONG_METADATA_UPDATED, ({ song }) => {
             if (song.id === State.state.activeSongId) {
                 this.updatePitchLabel(song);
+                this.updateFromSong(song);
             }
         });
     }
@@ -247,10 +251,21 @@ class TransportBar {
         if (!song) return;
 
         const { transport } = song;
+        const hasTempoMetadata = song.metadata?.tempos?.length > 0;
 
         // Update value displays
         this.speedValueEl.textContent = this.transport.formatSpeed(transport.speed);
-        this.tempoValueEl.textContent = this.transport.formatTempo(transport.tempo);
+        
+        // For tempo: use metadata if available, otherwise use transport value
+        if (hasTempoMetadata) {
+            const tempo = getTempoAtTime(transport.position, song.metadata.tempos);
+            this.tempoValueEl.textContent = this.transport.formatTempo(tempo);
+        } else {
+            this.tempoValueEl.textContent = this.transport.formatTempo(transport.tempo);
+        }
+        
+        // Update tempo editability based on metadata presence
+        this.updateTempoEditability(hasTempoMetadata);
 
         // Update selects
         this.pitchSelect.value = transport.pitch;
@@ -265,6 +280,35 @@ class TransportBar {
 
         // Update pitch label with transposed key
         this.updatePitchLabel(song);
+    }
+
+    /**
+     * Update tempo display based on current playhead position
+     * Only updates display if song has tempo metadata
+     * @param {number} position - Current position in seconds
+     */
+    updateTempoFromPosition(position) {
+        const song = State.getActiveSong();
+        const tempos = song?.metadata?.tempos;
+        
+        if (tempos && tempos.length > 0) {
+            const tempo = getTempoAtTime(position, tempos);
+            this.tempoValueEl.textContent = this.transport.formatTempo(tempo);
+        }
+    }
+
+    /**
+     * Enable/disable tempo editing based on whether metadata exists
+     * @param {boolean} hasTempoMetadata - Whether song has tempo metadata
+     */
+    updateTempoEditability(hasTempoMetadata) {
+        if (hasTempoMetadata) {
+            this.tempoValueEl.classList.add('read-only');
+            this.tempoValueEl.style.cursor = 'default';
+        } else {
+            this.tempoValueEl.classList.remove('read-only');
+            this.tempoValueEl.style.cursor = 'pointer';
+        }
     }
 
     /**

@@ -4,6 +4,7 @@
  */
 
 import * as State from './state.js';
+import { getBeatPositionsInRange, findNearestBeat, getTempoAtTime } from './metadata.js';
 
 const BASE_PIXELS_PER_SECOND = 100;
 
@@ -222,16 +223,17 @@ class Timeline {
     }
 
     /**
-     * Snap time to nearest beat
+     * Snap time to nearest beat (accounts for variable tempo)
      */
     snapToBeat(time) {
         const song = State.getActiveSong();
         if (!song) return time;
         
-        const tempo = song.transport?.tempo || 120;
-        const secondsPerBeat = 60 / tempo;
+        const tempos = song.metadata?.tempos;
+        const timeSignature = song.transport?.timeSignature || '4/4';
+        const [beatsPerMeasure] = timeSignature.split('/').map(Number);
         
-        return Math.round(time / secondsPerBeat) * secondsPerBeat;
+        return findNearestBeat(time, tempos, beatsPerMeasure);
     }
 
     /**
@@ -387,7 +389,8 @@ class Timeline {
             
             // Ensure they don't end up at the same position after snapping
             if (start >= end) {
-                const tempo = song.transport?.tempo || 120;
+                const tempos = song.metadata?.tempos;
+                const tempo = getTempoAtTime(start, tempos);
                 const secondsPerBeat = 60 / tempo;
                 end = start + secondsPerBeat;
             }
@@ -478,8 +481,11 @@ class Timeline {
     calculateZoomLimits() {
         const maxDuration = State.getMaxDuration();
         const song = State.getActiveSong();
-        const tempo = song?.transport?.tempo || 120;
         const timeSignature = song?.transport?.timeSignature || '4/4';
+        
+        // Use first tempo from metadata, or fall back to transport tempo
+        const tempos = song?.metadata?.tempos;
+        const tempo = (tempos && tempos.length > 0) ? tempos[0].tempo : (song?.transport?.tempo || 120);
         
         // Get viewport width
         const waveformScrollArea = document.getElementById('waveform-scroll-area');
@@ -573,6 +579,7 @@ class Timeline {
     /**
      * Render the beats timeline (M:B format)
      * Shows measure:beat labels (e.g., "1:1", "4:2", "8:3")
+     * Accounts for variable tempo changes from metadata
      */
     renderBeatsTimeline() {
         const canvas = this.beatsCanvas;
@@ -587,71 +594,63 @@ class Timeline {
         
         const zoom = song.timeline?.zoom || 1;
         const offset = song.timeline?.offset || 0;
-        const tempo = song.transport?.tempo || 120;
         const timeSignature = song.transport?.timeSignature || '4/4';
+        const tempos = song.metadata?.tempos;
         
         const [beatsPerMeasure] = timeSignature.split('/').map(Number);
-        const secondsPerBeat = 60 / tempo;
-        const secondsPerMeasure = secondsPerBeat * beatsPerMeasure;
-        
         const pixelsPerSecond = BASE_PIXELS_PER_SECOND * zoom;
-        const pixelsPerBeat = pixelsPerSecond * secondsPerBeat;
-        const pixelsPerMeasure = pixelsPerSecond * secondsPerMeasure;
         
-        // Calculate visible range
-        const startTime = this.scrollOffset / pixelsPerSecond - offset;
+        // Calculate visible time range
+        const startTime = Math.max(0, this.scrollOffset / pixelsPerSecond - offset);
         const endTime = (this.scrollOffset + canvas.width) / pixelsPerSecond - offset;
         
-        // Determine what to show based on zoom level
+        // Get beat positions for visible range (accounts for variable tempo)
+        const beatPositions = getBeatPositionsInRange(startTime, endTime, tempos, beatsPerMeasure);
+        
+        // Determine labeling density based on zoom level
+        // Use the tempo at the center of the view to estimate spacing
+        const centerTime = (startTime + endTime) / 2;
+        const centerTempo = getTempoAtTime(centerTime, tempos);
+        const pixelsPerBeat = pixelsPerSecond * (60 / centerTempo);
+        const pixelsPerMeasure = pixelsPerBeat * beatsPerMeasure;
+        
         let showSubBeats = pixelsPerBeat >= 40;
         let labelEveryNMeasures = 1;
         if (pixelsPerMeasure < 40) {
             labelEveryNMeasures = Math.ceil(40 / pixelsPerMeasure);
         }
         
-        // Convert to measures
-        const startMeasure = Math.max(1, Math.floor(startTime / secondsPerMeasure));
-        const endMeasure = Math.ceil(endTime / secondsPerMeasure) + 1;
-        
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         
-        for (let measure = startMeasure; measure <= endMeasure; measure++) {
-            const measureStartTime = (measure - 1) * secondsPerMeasure;
+        for (const { time, measure, beat, isMeasureStart } of beatPositions) {
+            const x = (time + offset) * pixelsPerSecond - this.scrollOffset;
             
-            for (let beat = 1; beat <= beatsPerMeasure; beat++) {
-                const beatTime = measureStartTime + (beat - 1) * secondsPerBeat;
-                if (beatTime < 0) continue;
-                
-                const x = (beatTime + offset) * pixelsPerSecond - this.scrollOffset;
-                if (x < -50 || x > canvas.width + 50) continue;
-                
-                const isMeasureStart = beat === 1;
-                
-                // Draw tick
-                let tickHeight;
-                if (isMeasureStart) {
-                    tickHeight = canvas.height * 0.6;
-                    ctx.strokeStyle = MAJOR_TICK_COLOR;
-                } else {
-                    tickHeight = canvas.height * 0.3;
-                    ctx.strokeStyle = TICK_COLOR;
-                }
-                
-                ctx.beginPath();
-                ctx.moveTo(x, canvas.height);
-                ctx.lineTo(x, canvas.height - tickHeight);
-                ctx.stroke();
-                
-                // Draw label
-                if (isMeasureStart && (measure % labelEveryNMeasures === 0 || measure === 1)) {
-                    ctx.fillStyle = TEXT_COLOR;
-                    ctx.fillText(`${measure}:1`, x, canvas.height - tickHeight - 2);
-                } else if (showSubBeats && !isMeasureStart) {
-                    ctx.fillStyle = '#606060';
-                    ctx.fillText(`${measure}:${beat}`, x, canvas.height - tickHeight - 2);
-                }
+            if (x < -50 || x > canvas.width + 50) continue;
+            
+            // Draw tick
+            let tickHeight;
+            if (isMeasureStart) {
+                tickHeight = canvas.height * 0.6;
+                ctx.strokeStyle = MAJOR_TICK_COLOR;
+            } else {
+                tickHeight = canvas.height * 0.3;
+                ctx.strokeStyle = TICK_COLOR;
+            }
+            
+            ctx.beginPath();
+            ctx.moveTo(x, canvas.height);
+            ctx.lineTo(x, canvas.height - tickHeight);
+            ctx.stroke();
+            
+            // Draw label
+            if (isMeasureStart && (measure % labelEveryNMeasures === 0 || measure === 1)) {
+                ctx.fillStyle = TEXT_COLOR;
+                ctx.fillText(`${measure}:1`, x, canvas.height - tickHeight - 2);
+            } else if (showSubBeats && !isMeasureStart) {
+                ctx.fillStyle = '#606060';
+                ctx.fillText(`${measure}:${beat}`, x, canvas.height - tickHeight - 2);
             }
         }
         
@@ -749,6 +748,7 @@ class Timeline {
 
     /**
      * Legacy single timeline renderer (fallback)
+     * Accounts for variable tempo changes from metadata
      */
     renderLegacyTimeline() {
         const canvas = this.legacyCanvas;
@@ -762,28 +762,27 @@ class Timeline {
         if (!song) return;
         
         const zoom = song.timeline?.zoom || 1;
-        const tempo = song.transport?.tempo || 120;
         const timeSignature = song.transport?.timeSignature || '4/4';
+        const tempos = song.metadata?.tempos;
         
         const [beatsPerMeasure] = timeSignature.split('/').map(Number);
-        const secondsPerBeat = 60 / tempo;
-        const secondsPerMeasure = secondsPerBeat * beatsPerMeasure;
-        
         const pixelsPerSecond = BASE_PIXELS_PER_SECOND * zoom;
         
-        const startTime = this.scrollOffset / pixelsPerSecond;
+        const startTime = Math.max(0, this.scrollOffset / pixelsPerSecond);
         const endTime = (this.scrollOffset + canvas.width) / pixelsPerSecond;
         
-        const startMeasure = Math.max(1, Math.floor(startTime / secondsPerMeasure));
-        const endMeasure = Math.ceil(endTime / secondsPerMeasure) + 1;
+        // Get beat positions for visible range (accounts for variable tempo)
+        const beatPositions = getBeatPositionsInRange(startTime, endTime, tempos, beatsPerMeasure);
         
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         
-        for (let measure = startMeasure; measure <= endMeasure; measure++) {
-            const measureStartTime = (measure - 1) * secondsPerMeasure;
-            const x = measureStartTime * pixelsPerSecond - this.scrollOffset;
+        for (const { time, measure, isMeasureStart } of beatPositions) {
+            // Only render measure starts in legacy mode
+            if (!isMeasureStart) continue;
+            
+            const x = time * pixelsPerSecond - this.scrollOffset;
             
             if (x < -50 || x > canvas.width + 50) continue;
             
