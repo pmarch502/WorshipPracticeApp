@@ -234,7 +234,6 @@ body {
     font-size: 12px;
     font-weight: 600;
     color: var(--text-muted);
-    text-transform: uppercase;
     letter-spacing: 0.5px;
     border-bottom: 1px solid var(--border-color);
 }
@@ -308,7 +307,6 @@ body {
     color: var(--text-secondary);
     border-bottom: 1px solid var(--border-color);
     font-size: 12px;
-    text-transform: uppercase;
     letter-spacing: 0.5px;
     display: flex;
     flex-direction: column;
@@ -905,7 +903,6 @@ body {
 .transport-knob-group label {
     font-size: 12px;
     color: var(--text-muted);
-    text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
@@ -962,7 +959,6 @@ body {
 .transport-select-group label {
     font-size: 12px;
     color: var(--text-muted);
-    text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 

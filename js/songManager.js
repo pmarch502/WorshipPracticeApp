@@ -8,6 +8,7 @@ import * as TrackManager from './trackManager.js';
 import { getModal } from './ui/modal.js';
 import { getAudioEngine } from './audioEngine.js';
 import * as cacheManager from './cache/cacheManager.js';
+import * as Metadata from './metadata.js';
 
 /**
  * Open a song from the manifest
@@ -29,6 +30,13 @@ export function openSong(songName) {
     
     // Create new song (no tracks loaded initially)
     const song = State.addSong(State.createDefaultSong(songName));
+    
+    // Load metadata (fire-and-forget)
+    Metadata.loadMetadata(songName).then(metadata => {
+        if (metadata) {
+            State.updateSongMetadata(song.id, metadata);
+        }
+    });
     
     return song;
 }

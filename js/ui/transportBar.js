@@ -6,6 +6,21 @@
 import * as State from '../state.js';
 import { getTransport } from '../transport.js';
 
+// Key names in chromatic order starting from A
+const KEYS = ['A', 'Bb', 'B', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab'];
+
+/**
+ * Transpose a key by semitones
+ * @param {string} originalKey - Original key (e.g., 'C', 'Bb')
+ * @param {number} semitones - Number of semitones to transpose
+ * @returns {string|null} Transposed key or null if invalid
+ */
+function transposeKey(originalKey, semitones) {
+    const index = KEYS.indexOf(originalKey);
+    if (index === -1) return null;
+    return KEYS[((index + semitones) % 12 + 12) % 12];
+}
+
 class TransportBar {
     constructor() {
         // Buttons
@@ -26,6 +41,9 @@ class TransportBar {
         // Selects
         this.pitchSelect = document.getElementById('pitch-select');
         this.timeSignatureSelect = document.getElementById('time-signature');
+        
+        // Labels
+        this.pitchLabel = document.getElementById('pitch-label');
         
         // Transport reference
         this.transport = null;
@@ -195,6 +213,13 @@ class TransportBar {
         State.subscribe(State.Events.LOOP_UPDATED, ({ enabled }) => {
             this.updateLoopButton(enabled);
         });
+
+        // Update pitch label when metadata is loaded
+        State.subscribe(State.Events.SONG_METADATA_UPDATED, ({ song }) => {
+            if (song.id === State.state.activeSongId) {
+                this.updatePitchLabel(song);
+            }
+        });
     }
 
     updateButtonStates(playbackState) {
@@ -237,6 +262,25 @@ class TransportBar {
 
         // Update loop button
         this.updateLoopButton(transport.loopEnabled);
+
+        // Update pitch label with transposed key
+        this.updatePitchLabel(song);
+    }
+
+    /**
+     * Update the pitch label to show the transposed key
+     * @param {Object} song - Song object
+     */
+    updatePitchLabel(song) {
+        const originalKey = song?.metadata?.key;
+        const pitch = song?.transport?.pitch ?? 0;
+        
+        if (originalKey && KEYS.includes(originalKey)) {
+            const transposedKey = transposeKey(originalKey, pitch);
+            this.pitchLabel.textContent = `PITCH (${transposedKey})`;
+        } else {
+            this.pitchLabel.textContent = 'PITCH';
+        }
     }
 
     /**

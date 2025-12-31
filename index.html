@@ -24,7 +24,7 @@
             </button>
             <!-- Song picker dropdown (hidden by default) -->
             <div id="song-picker" class="picker-dropdown hidden">
-                <div class="picker-header">Select a Song</div>
+                <div class="picker-header">SELECT A SONG</div>
                 <div id="song-picker-list" class="picker-list">
                     <!-- Song options will be inserted here -->
                 </div>
@@ -50,7 +50,7 @@
                         </svg>
                         <span id="cache-usage">0%</span>
                     </span>
-                    <span>Tracks</span>
+                    <span>TRACKS</span>
                 </div>
                 <div id="track-controls-list">
                     <!-- Track controls will be dynamically inserted here -->
@@ -119,6 +119,13 @@
         <!-- Transport Bar -->
         <footer id="transport-bar">
             <div id="transport-controls">
+                <!-- Time Display -->
+                <div id="time-display">
+                    <span id="current-time">00:00:00.000</span>
+                    <span class="time-separator">/</span>
+                    <span id="total-time">00:00:00.000</span>
+                </div>
+
                 <!-- Playback Controls -->
                 <div id="playback-controls">
                     <button id="btn-beginning" class="transport-btn" title="Return to Beginning">
@@ -148,22 +155,15 @@
                     </button>
                 </div>
 
-                <!-- Time Display -->
-                <div id="time-display">
-                    <span id="current-time">00:00:00.000</span>
-                    <span class="time-separator">/</span>
-                    <span id="total-time">00:00:00.000</span>
-                </div>
-
                 <!-- Speed Control -->
                 <div class="transport-knob-group">
-                    <label>Speed</label>
+                    <label>SPEED</label>
                     <span class="knob-value editable" id="speed-value" data-param="speed" title="Click to edit">1.00x</span>
                 </div>
 
                 <!-- Pitch Control -->
                 <div class="transport-select-group">
-                    <label for="pitch-select">Pitch</label>
+                    <label id="pitch-label" for="pitch-select">PITCH</label>
                     <select id="pitch-select">
                         <option value="6">+6</option>
                         <option value="5">+5</option>
@@ -183,13 +183,13 @@
 
                 <!-- Tempo Control -->
                 <div class="transport-knob-group">
-                    <label>Tempo</label>
+                    <label>TEMPO</label>
                     <span class="knob-value editable" id="tempo-value" data-param="tempo" title="Click to edit">120 BPM</span>
                 </div>
 
                 <!-- Time Signature -->
                 <div class="transport-select-group">
-                    <label for="time-signature">Time Sig</label>
+                    <label for="time-signature">TIME SIG</label>
                     <select id="time-signature">
                         <option value="4/4" selected>4/4</option>
                         <option value="6/8">6/8</option>

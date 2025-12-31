@@ -16,6 +16,7 @@ export function createDefaultSong(songName) {
         songName: songName, // Links to manifest
         name: songName, // Display name (same as songName initially)
         tracks: [],
+        metadata: null, // Will hold parsed metadata.json contents
         transport: {
             position: 0,
             lastPlayPosition: 0,
@@ -116,6 +117,7 @@ export const Events = {
     SONG_REMOVED: 'songRemoved',
     SONG_RENAMED: 'songRenamed',
     SONG_SWITCHED: 'songSwitched',
+    SONG_METADATA_UPDATED: 'songMetadataUpdated',
     
     // Track events
     TRACK_ADDED: 'trackAdded',
@@ -222,6 +224,20 @@ export function switchSong(songId) {
     
     state.activeSongId = songId;
     emit(Events.SONG_SWITCHED, song);
+    return true;
+}
+
+/**
+ * Update metadata for a song
+ * @param {string} songId - Song ID
+ * @param {Object} metadata - Metadata object from metadata.json
+ */
+export function updateSongMetadata(songId, metadata) {
+    const song = getSong(songId);
+    if (!song) return false;
+    
+    song.metadata = metadata;
+    emit(Events.SONG_METADATA_UPDATED, { song, metadata });
     return true;
 }
 
