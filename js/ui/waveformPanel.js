@@ -362,7 +362,9 @@ class WaveformPanel {
      * Clear all waveforms
      */
     clear() {
-        this.container.innerHTML = '';
+        // Remove only track elements, preserving the playhead
+        const tracks = this.container.querySelectorAll('.waveform-track');
+        tracks.forEach(track => track.remove());
         this.trackCanvases.clear();
     }
 
