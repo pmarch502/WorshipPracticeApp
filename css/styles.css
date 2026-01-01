@@ -30,7 +30,7 @@
     
     /* Sizing */
     --track-control-width: 200px;
-    --track-height: 125px;
+    --track-height: 100px;
     --transport-height: 80px;
     --tab-height: 36px;
     --timeline-header-height: 100px;
@@ -519,6 +519,7 @@ body {
     display: flex;
     align-items: center;
     gap: 4px;
+    flex: 1;
 }
 
 .pan-value {
@@ -531,12 +532,14 @@ body {
 /* Solo/Mute Buttons */
 .track-buttons {
     display: flex;
-    gap: 6px;
+    gap: 4px;
+    margin-left: auto;
 }
 
 .track-btn {
-    flex: 1;
-    padding: 4px 8px;
+    width: 28px;
+    height: 24px;
+    padding: 0;
     border: 1px solid var(--border-color);
     background-color: var(--bg-tertiary);
     color: var(--text-secondary);
@@ -545,6 +548,9 @@ body {
     cursor: pointer;
     border-radius: 3px;
     transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .track-btn:hover {

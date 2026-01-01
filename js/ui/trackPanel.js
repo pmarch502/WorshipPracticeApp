@@ -237,10 +237,10 @@ class TrackPanel {
                     <div class="pan-knob-container knob-small"></div>
                     <span class="pan-value">${this.formatPan(track.pan)}</span>
                 </div>
-            </div>
-            <div class="track-buttons">
-                <button class="track-btn solo ${track.solo ? 'active' : ''}" title="Solo">S</button>
-                <button class="track-btn mute ${track.mute ? 'active' : ''}" title="Mute">M</button>
+                <div class="track-buttons">
+                    <button class="track-btn solo ${track.solo ? 'active' : ''}" title="Solo">S</button>
+                    <button class="track-btn mute ${track.mute ? 'active' : ''}" title="Mute">M</button>
+                </div>
             </div>
         `;
 
