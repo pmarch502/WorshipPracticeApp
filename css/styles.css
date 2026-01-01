@@ -371,13 +371,12 @@ body {
     scrollbar-width: none;
 }
 
-/* Add Track Container */
-#add-track-container {
-    padding: 12px;
+/* Track Header Bottom Row */
+#track-header-bottom-row {
     display: flex;
-    justify-content: center;
-    border-top: 1px solid var(--border-color);
-    background-color: var(--bg-secondary);
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
 }
 
 /* Track Control Item */
