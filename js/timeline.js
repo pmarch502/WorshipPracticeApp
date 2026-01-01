@@ -150,26 +150,46 @@ class Timeline {
                 State.updateTimeline({ zoom });
                 this.updateZoomDisplay(zoom);
             });
+
+            // Mouse wheel with shift for fine control
+            this.zoomSlider.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const song = State.getActiveSong();
+                if (!song) return;
+
+                const { minZoom, maxZoom } = this.calculateZoomLimits();
+                const currentZoom = song.timeline.zoom || 1;
+                const baseStep = (maxZoom - minZoom) / 100;
+                const step = e.shiftKey ? baseStep * 0.1 : baseStep; // 10x finer with shift
+                const direction = e.deltaY > 0 ? -1 : 1;
+                const newZoom = Math.max(minZoom, Math.min(maxZoom, currentZoom + step * direction));
+
+                State.updateTimeline({ zoom: newZoom });
+                this.zoomSlider.value = newZoom;
+                this.updateZoomDisplay(newZoom);
+            });
         }
 
         if (this.zoomInBtn) {
-            this.zoomInBtn.addEventListener('click', () => {
+            this.zoomInBtn.addEventListener('click', (e) => {
                 const song = State.getActiveSong();
                 if (!song) return;
                 const currentZoom = song.timeline.zoom || 1;
                 const { maxZoom } = this.calculateZoomLimits();
-                const newZoom = Math.min(maxZoom, currentZoom * 1.25);
+                const multiplier = e.shiftKey ? 1.05 : 1.25; // Finer with shift
+                const newZoom = Math.min(maxZoom, currentZoom * multiplier);
                 State.updateTimeline({ zoom: newZoom });
             });
         }
 
         if (this.zoomOutBtn) {
-            this.zoomOutBtn.addEventListener('click', () => {
+            this.zoomOutBtn.addEventListener('click', (e) => {
                 const song = State.getActiveSong();
                 if (!song) return;
                 const currentZoom = song.timeline.zoom || 1;
                 const { minZoom } = this.calculateZoomLimits();
-                const newZoom = Math.max(minZoom, currentZoom / 1.25);
+                const multiplier = e.shiftKey ? 1.05 : 1.25; // Finer with shift
+                const newZoom = Math.max(minZoom, currentZoom / multiplier);
                 State.updateTimeline({ zoom: newZoom });
             });
         }
