@@ -98,14 +98,6 @@ class Transport {
     }
 
     /**
-     * Set time signature
-     * @param {string} timeSignature - Time signature (e.g., "4/4")
-     */
-    setTimeSignature(timeSignature) {
-        State.updateTransport({ timeSignature });
-    }
-
-    /**
      * Get current position in seconds
      */
     getCurrentPosition() {

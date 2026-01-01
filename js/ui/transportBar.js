@@ -41,7 +41,9 @@ class TransportBar {
         
         // Selects
         this.pitchSelect = document.getElementById('pitch-select');
-        this.timeSignatureSelect = document.getElementById('time-signature');
+        
+        // Time signature display (read-only)
+        this.timeSignatureEl = document.getElementById('time-signature');
         
         // Labels
         this.pitchLabel = document.getElementById('pitch-label');
@@ -88,11 +90,6 @@ class TransportBar {
         // Pitch select
         this.pitchSelect.addEventListener('change', () => {
             this.transport.setPitch(parseInt(this.pitchSelect.value));
-        });
-
-        // Time signature select
-        this.timeSignatureSelect.addEventListener('change', () => {
-            this.transport.setTimeSignature(this.timeSignatureSelect.value);
         });
 
         // Editable value fields - click to edit
@@ -273,16 +270,13 @@ class TransportBar {
         // Update selects
         this.pitchSelect.value = transport.pitch;
         
-        // For time signature: use metadata if available, otherwise use transport value
+        // For time signature: use metadata if available, otherwise use default 4/4
         if (hasTimeSigMetadata) {
             const timeSig = getTimeSigAtTime(transport.position, song.metadata['time-sigs']);
-            this.timeSignatureSelect.value = timeSig;
+            this.timeSignatureEl.textContent = timeSig;
         } else {
-            this.timeSignatureSelect.value = transport.timeSignature;
+            this.timeSignatureEl.textContent = '4/4';
         }
-
-        // Update time signature editability based on metadata presence
-        this.updateTimeSigEditability(hasTimeSigMetadata);
 
         // Update time display
         this.updateTimeDisplay(transport.position);
@@ -321,7 +315,7 @@ class TransportBar {
         
         if (timeSigs && timeSigs.length > 0) {
             const timeSig = getTimeSigAtTime(position, timeSigs);
-            this.timeSignatureSelect.value = timeSig;
+            this.timeSignatureEl.textContent = timeSig;
         }
     }
 
@@ -336,20 +330,6 @@ class TransportBar {
         } else {
             this.tempoValueEl.classList.remove('read-only');
             this.tempoValueEl.style.cursor = 'pointer';
-        }
-    }
-
-    /**
-     * Enable/disable time signature editing based on whether metadata exists
-     * @param {boolean} hasTimeSigMetadata - Whether song has time signature metadata
-     */
-    updateTimeSigEditability(hasTimeSigMetadata) {
-        if (hasTimeSigMetadata) {
-            this.timeSignatureSelect.disabled = true;
-            this.timeSignatureSelect.style.cursor = 'default';
-        } else {
-            this.timeSignatureSelect.disabled = false;
-            this.timeSignatureSelect.style.cursor = 'pointer';
         }
     }
 
