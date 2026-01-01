@@ -22,7 +22,6 @@ export function createDefaultSong(songName) {
             lastPlayPosition: 0,
             speed: 1.0,
             pitch: 0,
-            tempo: 120,
             timeSignature: '4/4',
             loopEnabled: false,
             loopStart: null,  // seconds (null = no loop set)

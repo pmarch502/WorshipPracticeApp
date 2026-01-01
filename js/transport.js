@@ -89,15 +89,6 @@ class Transport {
     }
 
     /**
-     * Set tempo (affects timeline only, not playback)
-     * @param {number} bpm - Tempo in BPM (20 to 300)
-     */
-    setTempo(bpm) {
-        const clampedTempo = Math.max(20, Math.min(300, bpm));
-        State.updateTransport({ tempo: clampedTempo });
-    }
-
-    /**
      * Get current position in seconds
      */
     getCurrentPosition() {

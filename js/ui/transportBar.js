@@ -103,18 +103,6 @@ class TransportBar {
                 return clamped;
             }
         });
-
-        this.setupEditableValue(this.tempoValueEl, 'tempo', {
-            parse: (text) => parseFloat(text.replace(' BPM', '').replace('BPM', '')),
-            format: (val) => this.transport.formatTempo(val),
-            validate: (val) => Number.isFinite(val),
-            apply: (val) => {
-                const rounded = Number(val.toFixed(2));
-                const clamped = Math.max(20, Math.min(300, rounded));
-                this.transport.setTempo(clamped);
-                return clamped;
-            }
-        });
     }
 
     /**
@@ -249,21 +237,13 @@ class TransportBar {
         if (!song) return;
 
         const { transport } = song;
-        const hasTempoMetadata = song.metadata?.tempos?.length > 0;
 
         // Update value displays
         this.speedValueEl.textContent = this.transport.formatSpeed(transport.speed);
         
-        // For tempo: use metadata if available, otherwise use transport value
-        if (hasTempoMetadata) {
-            const tempo = getTempoAtTime(transport.position, song.metadata.tempos);
-            this.tempoValueEl.textContent = this.transport.formatTempo(tempo);
-        } else {
-            this.tempoValueEl.textContent = this.transport.formatTempo(transport.tempo);
-        }
-        
-        // Update tempo editability based on metadata presence
-        this.updateTempoEditability(hasTempoMetadata);
+        // Tempo always comes from metadata or defaults to 120 BPM
+        const tempo = getTempoAtTime(transport.position, song.metadata?.tempos);
+        this.tempoValueEl.textContent = this.transport.formatTempo(tempo);
 
         const hasTimeSigMetadata = song.metadata?.['time-sigs']?.length > 0;
 
@@ -291,17 +271,13 @@ class TransportBar {
 
     /**
      * Update tempo display based on current playhead position
-     * Only updates display if song has tempo metadata
+     * Uses metadata tempo or falls back to 120 BPM
      * @param {number} position - Current position in seconds
      */
     updateTempoFromPosition(position) {
         const song = State.getActiveSong();
-        const tempos = song?.metadata?.tempos;
-        
-        if (tempos && tempos.length > 0) {
-            const tempo = getTempoAtTime(position, tempos);
-            this.tempoValueEl.textContent = this.transport.formatTempo(tempo);
-        }
+        const tempo = getTempoAtTime(position, song?.metadata?.tempos);
+        this.tempoValueEl.textContent = this.transport.formatTempo(tempo);
     }
 
     /**
@@ -316,20 +292,6 @@ class TransportBar {
         if (timeSigs && timeSigs.length > 0) {
             const timeSig = getTimeSigAtTime(position, timeSigs);
             this.timeSignatureEl.textContent = timeSig;
-        }
-    }
-
-    /**
-     * Enable/disable tempo editing based on whether metadata exists
-     * @param {boolean} hasTempoMetadata - Whether song has tempo metadata
-     */
-    updateTempoEditability(hasTempoMetadata) {
-        if (hasTempoMetadata) {
-            this.tempoValueEl.classList.add('read-only');
-            this.tempoValueEl.style.cursor = 'default';
-        } else {
-            this.tempoValueEl.classList.remove('read-only');
-            this.tempoValueEl.style.cursor = 'pointer';
         }
     }
 
