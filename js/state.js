@@ -115,7 +115,6 @@ export const Events = {
     // Song events
     SONG_ADDED: 'songAdded',
     SONG_REMOVED: 'songRemoved',
-    SONG_RENAMED: 'songRenamed',
     SONG_SWITCHED: 'songSwitched',
     SONG_METADATA_UPDATED: 'songMetadataUpdated',
     
@@ -200,18 +199,6 @@ export function removeSong(songId) {
     }
     
     emit(Events.SONG_REMOVED, removed);
-    return true;
-}
-
-/**
- * Rename a song
- */
-export function renameSong(songId, newName) {
-    const song = getSong(songId);
-    if (!song) return false;
-    
-    song.name = newName;
-    emit(Events.SONG_RENAMED, song);
     return true;
 }
 

@@ -130,37 +130,6 @@ export async function closeSong(songId, confirm = false) {
 }
 
 /**
- * Rename a song
- * @param {string} songId - Song ID
- * @param {string} newName - New name
- */
-export function renameSong(songId, newName) {
-    if (!newName || newName.trim() === '') return false;
-    return State.renameSong(songId, newName.trim());
-}
-
-/**
- * Prompt user to rename a song
- * @param {string} songId - Song ID
- */
-export async function promptRenameSong(songId) {
-    const song = State.getSong(songId);
-    if (!song) return;
-    
-    const modal = getModal();
-    const newName = await modal.prompt({
-        title: 'Rename Song',
-        message: 'Enter a new name for this song:',
-        defaultValue: song.name,
-        confirmText: 'Rename'
-    });
-    
-    if (newName && newName.trim() !== '' && newName !== song.name) {
-        renameSong(songId, newName.trim());
-    }
-}
-
-/**
  * Check if a song is already open
  * @param {string} songName - Song name from manifest
  * @returns {boolean}

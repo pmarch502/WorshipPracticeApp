@@ -58,10 +58,6 @@ class TabsUI {
             this.updateEmptyState();
         });
 
-        State.subscribe(State.Events.SONG_RENAMED, (song) => {
-            this.updateTabName(song.id, song.name);
-        });
-
         State.subscribe(State.Events.SONG_SWITCHED, () => {
             this.updateActiveTab();
         });
@@ -201,13 +197,6 @@ class TabsUI {
             SongManager.closeSong(song.id, false); // No confirmation needed for new model
         });
         
-        // Double-click to rename
-        const nameSpan = tab.querySelector('.song-tab-name');
-        nameSpan.addEventListener('dblclick', (e) => {
-            e.stopPropagation();
-            this.startEditing(song.id);
-        });
-        
         this.container.appendChild(tab);
         this.tabElements.set(song.id, tab);
     }
@@ -224,71 +213,11 @@ class TabsUI {
     }
 
     /**
-     * Update tab name
-     */
-    updateTabName(songId, name) {
-        const tab = this.tabElements.get(songId);
-        if (tab) {
-            const nameSpan = tab.querySelector('.song-tab-name');
-            nameSpan.textContent = name;
-            nameSpan.title = name;
-        }
-    }
-
-    /**
      * Update active tab styling
      */
     updateActiveTab() {
         this.tabElements.forEach((tab, songId) => {
             tab.classList.toggle('active', songId === State.state.activeSongId);
-        });
-    }
-
-    /**
-     * Start inline editing of tab name
-     */
-    startEditing(songId) {
-        const tab = this.tabElements.get(songId);
-        if (!tab) return;
-        
-        const nameSpan = tab.querySelector('.song-tab-name');
-        const currentName = nameSpan.textContent;
-        
-        // Make editable
-        nameSpan.contentEditable = true;
-        nameSpan.focus();
-        
-        // Select all text
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(nameSpan);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        
-        const finishEditing = () => {
-            nameSpan.contentEditable = false;
-            const newName = nameSpan.textContent.trim();
-            
-            if (newName && newName !== currentName) {
-                SongManager.renameSong(songId, newName);
-            } else {
-                nameSpan.textContent = currentName;
-            }
-        };
-        
-        // Handle blur
-        nameSpan.addEventListener('blur', finishEditing, { once: true });
-        
-        // Handle Enter key
-        nameSpan.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                nameSpan.blur();
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
-                nameSpan.textContent = currentName;
-                nameSpan.blur();
-            }
         });
     }
 
