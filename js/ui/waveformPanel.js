@@ -98,6 +98,11 @@ class WaveformPanel {
                 this.redrawAllWaveforms();
             }
         });
+        
+        // Redraw waveforms when sections are updated (to show section dividers)
+        State.subscribe(State.Events.SECTIONS_UPDATED, () => {
+            this.redrawAllWaveforms();
+        });
     }
 
     /**
@@ -242,6 +247,18 @@ class WaveformPanel {
             pixelsPerSecond: BASE_PIXELS_PER_SECOND,
             offset
         });
+        
+        // Render section dividers
+        const sections = song?.sections;
+        if (sections && sections.length > 1) {
+            const ctx = canvas.getContext('2d');
+            Waveform.renderSectionDividers(ctx, canvas.width, canvas.height, sections, {
+                zoom,
+                scrollOffset: this.scrollArea.scrollLeft,
+                pixelsPerSecond: BASE_PIXELS_PER_SECOND,
+                offset
+            });
+        }
     }
 
     /**

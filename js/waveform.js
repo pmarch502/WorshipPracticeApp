@@ -6,6 +6,7 @@
 const ACTIVE_COLOR = '#00d4ff';
 const INACTIVE_COLOR = '#4a4a4a';
 const BACKGROUND_COLOR = '#1a1a1a';
+const SECTION_DIVIDER_COLOR = 'rgba(255, 255, 0, 0.4)'; // Matches marker color
 
 /**
  * Render waveform to a canvas
@@ -291,4 +292,52 @@ export function getPixelsPerSecond(basePixelsPerSecond, zoom) {
     return basePixelsPerSecond * zoom;
 }
 
-export { ACTIVE_COLOR, INACTIVE_COLOR, BACKGROUND_COLOR };
+/**
+ * Render section divider lines on waveform
+ * Draws vertical lines at section boundaries (except at position 0)
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} canvasWidth - Canvas width
+ * @param {number} canvasHeight - Canvas height  
+ * @param {Array} sections - Derived sections array from State
+ * @param {Object} options - Rendering options
+ */
+export function renderSectionDividers(ctx, canvasWidth, canvasHeight, sections, options = {}) {
+    if (!sections || sections.length <= 1) {
+        return; // No dividers needed for 0 or 1 sections
+    }
+    
+    const {
+        zoom = 1,
+        scrollOffset = 0,
+        pixelsPerSecond = 100,
+        offset = 0
+    } = options;
+    
+    const pixelsPerSecondZoomed = pixelsPerSecond * zoom;
+    
+    ctx.strokeStyle = SECTION_DIVIDER_COLOR;
+    ctx.lineWidth = 1;
+    
+    // Draw divider at the start of each section (except the first one at time 0)
+    for (let i = 1; i < sections.length; i++) {
+        const section = sections[i];
+        
+        // Convert section start time to screen X position
+        // Account for timeline offset and scroll position
+        const worldX = (section.start + offset) * pixelsPerSecondZoomed;
+        const screenX = worldX - scrollOffset;
+        
+        // Skip if outside visible range
+        if (screenX < 0 || screenX > canvasWidth) {
+            continue;
+        }
+        
+        // Draw vertical line
+        ctx.beginPath();
+        ctx.moveTo(screenX, 0);
+        ctx.lineTo(screenX, canvasHeight);
+        ctx.stroke();
+    }
+}
+
+export { ACTIVE_COLOR, INACTIVE_COLOR, BACKGROUND_COLOR, SECTION_DIVIDER_COLOR };

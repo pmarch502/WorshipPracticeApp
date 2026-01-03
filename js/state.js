@@ -3,6 +3,8 @@
  * Central state store with event-based updates
  */
 
+import { deriveSections } from './sections.js';
+
 // Generate unique IDs
 export function generateId() {
     return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
@@ -17,6 +19,7 @@ export function createDefaultSong(songName) {
         name: songName, // Display name (same as songName initially)
         tracks: [],
         metadata: null, // Will hold parsed metadata.json contents
+        sections: [], // Derived from markers - array of {index, name, start, end, duration}
         transport: {
             position: 0,
             lastPlayPosition: 0,
@@ -116,6 +119,7 @@ export const Events = {
     SONG_REMOVED: 'songRemoved',
     SONG_SWITCHED: 'songSwitched',
     SONG_METADATA_UPDATED: 'songMetadataUpdated',
+    SECTIONS_UPDATED: 'sectionsUpdated',
     
     // Track events
     TRACK_ADDED: 'trackAdded',
@@ -224,6 +228,45 @@ export function updateSongMetadata(songId, metadata) {
     
     song.metadata = metadata;
     emit(Events.SONG_METADATA_UPDATED, { song, metadata });
+    
+    // Re-derive sections now that we have metadata
+    updateSongSections(songId);
+    
+    return true;
+}
+
+/**
+ * Update derived sections for a song
+ * Call this when metadata or track durations change
+ * @param {string} songId - Song ID
+ */
+export function updateSongSections(songId) {
+    const song = getSong(songId);
+    if (!song) return false;
+    
+    const markers = song.metadata?.markers;
+    if (!markers || markers.length === 0) {
+        song.sections = [];
+        return true;
+    }
+    
+    // Get max duration from tracks
+    const maxDuration = song.tracks.length > 0 
+        ? Math.max(...song.tracks.map(t => t.duration || 0))
+        : 0;
+    
+    // If we don't have duration yet, we can't properly derive sections
+    // (the last section wouldn't have a valid end time)
+    if (maxDuration <= 0) {
+        song.sections = [];
+        return true;
+    }
+    
+    song.sections = deriveSections(markers, maxDuration);
+    
+    // Emit event so UI can update (e.g., waveform section dividers)
+    emit(Events.SECTIONS_UPDATED, { song, sections: song.sections });
+    
     return true;
 }
 
@@ -236,6 +279,7 @@ export function addTrack(track) {
     
     song.tracks.push(track);
     emit(Events.TRACK_ADDED, { song, track });
+    
     return track;
 }
 

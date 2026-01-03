@@ -127,6 +127,12 @@ export async function addTracksFromManifest(songName, trackFileNames) {
         }
     }
 
+    // Derive sections now that all tracks are loaded (need duration from tracks)
+    const song = State.getActiveSong();
+    if (song) {
+        State.updateSongSections(song.id);
+    }
+
     if (errors.length > 0) {
         const modal = getModal();
         const errorList = errors.map(e => `<li><strong>${e.file}</strong>: ${e.error}</li>`).join('');
@@ -279,6 +285,9 @@ export async function loadTracksForSong(song) {
             console.error(`Failed to load track ${track.name}:`, error);
         }
     }
+    
+    // Derive sections now that all tracks are loaded
+    State.updateSongSections(song.id);
 }
 
 /**

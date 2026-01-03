@@ -7,6 +7,7 @@ import * as State from './state.js';
 import * as Storage from './storage.js';
 import * as TrackManager from './trackManager.js';
 import * as SongManager from './songManager.js';
+import * as Metadata from './metadata.js';
 import { getAudioEngine } from './audioEngine.js';
 import { getTransport } from './transport.js';
 import { getTrackPanel } from './ui/trackPanel.js';
@@ -112,6 +113,15 @@ class App {
             try {
                 // Load state
                 State.loadState(savedState);
+                
+                // Load metadata for all restored songs (needed for sections, timeline markers, etc.)
+                // Do this before loading tracks so sections can be derived properly
+                for (const song of State.state.songs) {
+                    const metadata = await Metadata.loadMetadata(song.songName);
+                    if (metadata) {
+                        State.updateSongMetadata(song.id, metadata);
+                    }
+                }
                 
                 // Load tracks for active song
                 const activeSong = State.getActiveSong();
