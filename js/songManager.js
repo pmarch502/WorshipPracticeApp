@@ -7,6 +7,7 @@ import * as State from './state.js';
 import * as TrackManager from './trackManager.js';
 import { getModal } from './ui/modal.js';
 import { getAudioEngine } from './audioEngine.js';
+import { getTransport } from './transport.js';
 import * as cacheManager from './cache/cacheManager.js';
 import * as Metadata from './metadata.js';
 
@@ -66,6 +67,11 @@ export async function switchSong(songId) {
     
     // Switch to new song
     State.switchSong(songId);
+    
+    // Apply the target song's pitch and speed to the audio engine
+    const transport = getTransport();
+    transport.setSpeed(targetSong.transport.speed);
+    transport.setPitch(targetSong.transport.pitch);
     
     // Load new song's tracks
     if (targetSong.tracks.length > 0) {
