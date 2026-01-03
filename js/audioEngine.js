@@ -5,6 +5,7 @@
  */
 
 import * as State from './state.js';
+import { getSectionAtTime } from './sections.js';
 import { BASE_PIXELS_PER_SECOND } from './ui/waveformPanel.js';
 import { getWaveformPanel } from './ui/waveformPanel.js';
 
@@ -25,6 +26,10 @@ class AudioEngine {
         // Pitch/speed settings (applied globally via SoundTouch)
         this._pitch = 0; // semitones (-6 to +6)
         this._speed = 1.0; // tempo (0.5 to 2.0)
+        
+        // Track section mute state for smooth transitions
+        // trackId -> { currentSectionIndex: number, isSectionMuted: boolean }
+        this.trackSectionState = new Map();
     }
 
     /**
@@ -222,7 +227,17 @@ class AudioEngine {
         if (!nodes || !nodes.audioBuffer) return;
 
         // Check if track should be audible
-        const isAudible = State.isTrackAudible(trackId);
+        const isTrackAudible = State.isTrackAudible(trackId);
+        
+        // Check if current section is muted
+        const song = State.getActiveSong();
+        let isSectionMuted = false;
+        if (song && song.sections && song.sections.length > 0) {
+            const currentSection = getSectionAtTime(song.sections, position);
+            if (currentSection) {
+                isSectionMuted = State.isSectionMuted(trackId, currentSection.index);
+            }
+        }
 
         // Stop existing source
         if (nodes.source) {
@@ -242,8 +257,9 @@ class AudioEngine {
         source.connect(nodes.gainNode);
         nodes.source = source;
 
-        // Set gain based on audibility
-        nodes.gainNode.gain.value = isAudible ? track.volume / 100 : 0;
+        // Set gain based on track audibility AND section mute state
+        const shouldBeMuted = !isTrackAudible || isSectionMuted;
+        nodes.gainNode.gain.value = shouldBeMuted ? 0 : track.volume / 100;
 
         // Calculate offset, clamped to valid range
         const offset = Math.max(0, Math.min(position, nodes.audioBuffer.duration));
@@ -285,6 +301,9 @@ class AudioEngine {
             this.pitchShifter.clear();
         }
 
+        // Clear section mute tracking state
+        this.trackSectionState.clear();
+
         // Return to last play position
         State.setPosition(song.transport.lastPlayPosition);
         State.setPlaybackState('stopped');
@@ -315,6 +334,9 @@ class AudioEngine {
         if (this.pitchShifter) {
             this.pitchShifter.clear();
         }
+
+        // Clear section mute tracking state
+        this.trackSectionState.clear();
 
         // Keep position where we stopped
         State.setPosition(currentPos);
@@ -409,6 +431,9 @@ class AudioEngine {
                 }
             }
             
+            // Update section mutes for all tracks
+            this.updateAllSectionMutes(position);
+            
             State.setPosition(position);
             
             // Check if we've reached the end
@@ -475,8 +500,23 @@ class AudioEngine {
         const nodes = this.trackNodes.get(trackId);
         
         if (track && nodes && nodes.gainNode) {
-            const isAudible = State.isTrackAudible(trackId);
-            nodes.gainNode.gain.value = isAudible ? track.volume / 100 : 0;
+            const isTrackAudible = State.isTrackAudible(trackId);
+            
+            // Also check section mute if playing
+            let isSectionMuted = false;
+            if (this.isPlaying) {
+                const song = State.getActiveSong();
+                if (song && song.sections && song.sections.length > 0) {
+                    const position = this.getCurrentPosition();
+                    const currentSection = getSectionAtTime(song.sections, position);
+                    if (currentSection) {
+                        isSectionMuted = State.isSectionMuted(trackId, currentSection.index);
+                    }
+                }
+            }
+            
+            const shouldBeMuted = !isTrackAudible || isSectionMuted;
+            nodes.gainNode.gain.value = shouldBeMuted ? 0 : track.volume / 100;
         }
     }
 
@@ -490,6 +530,85 @@ class AudioEngine {
         song.tracks.forEach(track => {
             this.updateTrackAudibility(track.id);
         });
+    }
+
+    /**
+     * Update section mute state for a track based on current position
+     * Uses smooth gain ramps to avoid audio clicks
+     * @param {string} trackId - Track ID
+     * @param {number} currentTime - Current playback position in seconds
+     */
+    updateSectionMuteForTrack(trackId, currentTime) {
+        const song = State.getActiveSong();
+        if (!song || !song.sections || song.sections.length === 0) return;
+        
+        const track = State.getTrack(trackId);
+        const nodes = this.trackNodes.get(trackId);
+        if (!track || !nodes || !nodes.gainNode) return;
+        
+        // Get current section
+        const currentSection = getSectionAtTime(song.sections, currentTime);
+        if (!currentSection) return;
+        
+        const sectionIndex = currentSection.index;
+        const isSectionMuted = State.isSectionMuted(trackId, sectionIndex);
+        
+        // Get previous state
+        let prevState = this.trackSectionState.get(trackId);
+        if (!prevState) {
+            prevState = { currentSectionIndex: -1, isSectionMuted: false };
+            this.trackSectionState.set(trackId, prevState);
+        }
+        
+        // Check if section mute state has changed
+        const stateChanged = prevState.currentSectionIndex !== sectionIndex || 
+                            prevState.isSectionMuted !== isSectionMuted;
+        
+        if (stateChanged) {
+            // Update stored state
+            prevState.currentSectionIndex = sectionIndex;
+            prevState.isSectionMuted = isSectionMuted;
+            
+            // Calculate target gain
+            const isTrackAudible = State.isTrackAudible(trackId);
+            const shouldBeMuted = !isTrackAudible || isSectionMuted;
+            const targetGain = shouldBeMuted ? 0 : track.volume / 100;
+            
+            // Apply smooth gain ramp (~50ms)
+            // setTargetAtTime with timeConstant of 0.015 reaches ~95% in 50ms
+            const now = this.audioContext.currentTime;
+            nodes.gainNode.gain.cancelScheduledValues(now);
+            nodes.gainNode.gain.setTargetAtTime(targetGain, now, 0.015);
+        }
+    }
+
+    /**
+     * Update section mutes for all tracks
+     * @param {number} currentTime - Current playback position in seconds
+     */
+    updateAllSectionMutes(currentTime) {
+        const song = State.getActiveSong();
+        if (!song) return;
+        
+        song.tracks.forEach(track => {
+            this.updateSectionMuteForTrack(track.id, currentTime);
+        });
+    }
+
+    /**
+     * Force update section mute for a specific track (e.g., when user toggles mute)
+     * @param {string} trackId - Track ID
+     */
+    applySectionMuteChange(trackId) {
+        if (!this.isPlaying) return;
+        
+        const position = this.getCurrentPosition();
+        
+        // Reset the tracked state so it will be recalculated
+        this.trackSectionState.delete(trackId);
+        
+        // Update immediately
+        this.updateSectionMuteForTrack(trackId, position);
     }
 
     /**
@@ -611,5 +730,12 @@ export function getAudioEngine() {
     }
     return audioEngineInstance;
 }
+
+// Subscribe to section mute changes to update audio in real-time
+State.subscribe(State.Events.SECTION_MUTE_UPDATED, ({ trackId, sectionIndex, muted }) => {
+    if (audioEngineInstance) {
+        audioEngineInstance.applySectionMuteChange(trackId);
+    }
+});
 
 export default AudioEngine;

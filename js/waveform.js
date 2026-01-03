@@ -80,7 +80,9 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
         scrollOffset = 0,
         duration = 0,
         pixelsPerSecond = 100,
-        offset = 0  // Timeline offset for beat alignment
+        offset = 0,  // Timeline offset for beat alignment
+        sections = null,  // Array of section objects for muted section rendering
+        sectionMutes = null  // Object { sectionIndex: true } for muted sections
     } = options;
 
     const ctx = canvas.getContext('2d');
@@ -176,12 +178,50 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
     const peaksPerPixel = secondsPerPixel * peaksPerSecond;
     const useSmoothing = peaksPerPixel < 2;
     
-    if (useSmoothing) {
-        // Zoomed in: use smooth curve rendering with interpolation
-        renderSmoothWaveform(ctx, canvasWidth, height, centerY, amplitude, getPeakAtSmooth, zoom, gradient);
+    // Check if we need to render section-aware (with muted sections)
+    const hasSectionMutes = sections && sectionMutes && 
+        sections.length > 0 && Object.keys(sectionMutes).length > 0;
+    
+    if (hasSectionMutes) {
+        // Create inactive gradient for muted sections
+        const inactiveGradient = ctx.createLinearGradient(0, 0, 0, height);
+        inactiveGradient.addColorStop(0, adjustColorAlpha(INACTIVE_COLOR, 0.3));
+        inactiveGradient.addColorStop(0.5, INACTIVE_COLOR);
+        inactiveGradient.addColorStop(1, adjustColorAlpha(INACTIVE_COLOR, 0.3));
+        
+        // Helper to get time from pixel X
+        const getTimeAtPixel = (pixelX) => {
+            const screenPixel = scrollOffset + pixelX;
+            return (screenPixel / pixelsPerSecondZoomed) - offset;
+        };
+        
+        // Helper to check if a time is in a muted section
+        const isTimeInMutedSection = (time) => {
+            for (const section of sections) {
+                if (time >= section.start && time < section.end) {
+                    return !!sectionMutes[section.index];
+                }
+            }
+            return false;
+        };
+        
+        // Render with section-aware coloring
+        if (useSmoothing) {
+            renderSmoothWaveformWithSections(ctx, canvasWidth, height, centerY, amplitude, 
+                getPeakAtSmooth, zoom, gradient, inactiveGradient, getTimeAtPixel, isTimeInMutedSection);
+        } else {
+            renderBarWaveformWithSections(ctx, canvasWidth, height, centerY, amplitude, 
+                getPeakAt, gradient, inactiveGradient, getTimeAtPixel, isTimeInMutedSection);
+        }
     } else {
-        // Zoomed out: use bar rendering with max-pooling (preserves transients)
-        renderBarWaveform(ctx, canvasWidth, height, centerY, amplitude, getPeakAt, gradient);
+        // Standard rendering without section mutes
+        if (useSmoothing) {
+            // Zoomed in: use smooth curve rendering with interpolation
+            renderSmoothWaveform(ctx, canvasWidth, height, centerY, amplitude, getPeakAtSmooth, zoom, gradient);
+        } else {
+            // Zoomed out: use bar rendering with max-pooling (preserves transients)
+            renderBarWaveform(ctx, canvasWidth, height, centerY, amplitude, getPeakAt, gradient);
+        }
     }
     
     // Draw center line
@@ -262,6 +302,139 @@ function renderBarWaveform(ctx, width, height, centerY, amplitude, getPeakAt, gr
             ctx.fillRect(x, centerY - 0.5, 1, 1);
         }
     }
+}
+
+/**
+ * Render waveform as vertical bars with section-aware coloring
+ * Muted sections are rendered with inactive color
+ */
+function renderBarWaveformWithSections(ctx, width, height, centerY, amplitude, getPeakAt, 
+    activeGradient, inactiveGradient, getTimeAtPixel, isTimeInMutedSection) {
+    
+    let currentMuted = null;
+    let segmentStart = 0;
+    
+    // Render in segments to minimize fill style changes
+    for (let x = 0; x <= width; x++) {
+        const time = getTimeAtPixel(x);
+        const isMuted = isTimeInMutedSection(time);
+        
+        // Check if mute state changed or we're at the end
+        if (isMuted !== currentMuted || x === width) {
+            // Render the previous segment if there is one
+            if (currentMuted !== null && x > segmentStart) {
+                ctx.fillStyle = currentMuted ? inactiveGradient : activeGradient;
+                
+                for (let sx = segmentStart; sx < x; sx++) {
+                    const peak = getPeakAt(sx);
+                    const barHeight = peak * amplitude;
+                    
+                    if (barHeight > 0.5) {
+                        ctx.fillRect(sx, centerY - barHeight, 1, barHeight * 2);
+                    } else {
+                        ctx.fillRect(sx, centerY - 0.5, 1, 1);
+                    }
+                }
+            }
+            
+            // Start new segment
+            segmentStart = x;
+            currentMuted = isMuted;
+        }
+    }
+}
+
+/**
+ * Render smooth waveform with section-aware coloring
+ * Muted sections are rendered with inactive color
+ */
+function renderSmoothWaveformWithSections(ctx, width, height, centerY, amplitude, getPeakAt, 
+    zoom, activeGradient, inactiveGradient, getTimeAtPixel, isTimeInMutedSection) {
+    
+    // For smooth waveforms, we'll render the entire waveform first with active color,
+    // then overlay muted sections. This is simpler than trying to split the bezier curves.
+    
+    // First, render the full waveform
+    renderSmoothWaveform(ctx, width, height, centerY, amplitude, getPeakAt, zoom, activeGradient);
+    
+    // Now, render muted sections on top with inactive color
+    // We need to find contiguous muted regions and re-render them
+    let inMutedRegion = false;
+    let regionStart = 0;
+    
+    const step = Math.max(1, Math.floor(1 / zoom));
+    
+    for (let x = 0; x <= width; x += step) {
+        const time = getTimeAtPixel(x);
+        const isMuted = isTimeInMutedSection(time);
+        
+        if (isMuted && !inMutedRegion) {
+            // Starting a muted region
+            regionStart = x;
+            inMutedRegion = true;
+        } else if (!isMuted && inMutedRegion) {
+            // Ending a muted region - render it
+            renderSmoothWaveformRegion(ctx, regionStart, x, height, centerY, amplitude, 
+                getPeakAt, zoom, inactiveGradient);
+            inMutedRegion = false;
+        }
+    }
+    
+    // Handle region that extends to the end
+    if (inMutedRegion) {
+        renderSmoothWaveformRegion(ctx, regionStart, width, height, centerY, amplitude, 
+            getPeakAt, zoom, inactiveGradient);
+    }
+}
+
+/**
+ * Render a region of smooth waveform (for muted section overlay)
+ */
+function renderSmoothWaveformRegion(ctx, startX, endX, height, centerY, amplitude, getPeakAt, zoom, gradient) {
+    const topPoints = [];
+    const bottomPoints = [];
+    
+    const step = Math.max(1, Math.floor(1 / zoom));
+    
+    for (let x = startX; x <= endX; x += step) {
+        const peak = getPeakAt(x);
+        topPoints.push({ x, y: centerY - peak * amplitude });
+        bottomPoints.push({ x, y: centerY + peak * amplitude });
+    }
+    
+    // Ensure we have the last point
+    if (topPoints.length === 0 || topPoints[topPoints.length - 1].x !== endX) {
+        const peak = getPeakAt(endX);
+        topPoints.push({ x: endX, y: centerY - peak * amplitude });
+        bottomPoints.push({ x: endX, y: centerY + peak * amplitude });
+    }
+    
+    if (topPoints.length < 2) return;
+    
+    // Draw smooth waveform using quadratic curves
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    
+    ctx.moveTo(topPoints[0].x, topPoints[0].y);
+    
+    // Draw top half with smooth curves
+    for (let i = 1; i < topPoints.length - 1; i++) {
+        const xc = (topPoints[i].x + topPoints[i + 1].x) / 2;
+        const yc = (topPoints[i].y + topPoints[i + 1].y) / 2;
+        ctx.quadraticCurveTo(topPoints[i].x, topPoints[i].y, xc, yc);
+    }
+    ctx.lineTo(topPoints[topPoints.length - 1].x, topPoints[topPoints.length - 1].y);
+    
+    // Draw bottom half (reversed) with smooth curves
+    for (let i = bottomPoints.length - 1; i > 0; i--) {
+        const xc = (bottomPoints[i].x + bottomPoints[i - 1].x) / 2;
+        const yc = (bottomPoints[i].y + bottomPoints[i - 1].y) / 2;
+        ctx.quadraticCurveTo(bottomPoints[i].x, bottomPoints[i].y, xc, yc);
+    }
+    ctx.lineTo(bottomPoints[0].x, bottomPoints[0].y);
+    
+    ctx.closePath();
+    ctx.fill();
 }
 
 /**

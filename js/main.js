@@ -106,6 +106,53 @@ class App {
     async loadSavedState() {
         const savedState = Storage.loadState();
         
+        // Migrate section mutes to top-level state.sectionMutes structure
+        if (savedState) {
+            // Ensure top-level sectionMutes exists
+            if (!savedState.sectionMutes) {
+                savedState.sectionMutes = {};
+            }
+            
+            // Migrate from old song.trackSectionMutes to top-level sectionMutes
+            savedState.songs?.forEach(song => {
+                const songName = song.songName;
+                
+                // Migrate song.trackSectionMutes if present
+                if (song.trackSectionMutes && Object.keys(song.trackSectionMutes).length > 0) {
+                    if (!savedState.sectionMutes[songName]) {
+                        savedState.sectionMutes[songName] = {};
+                    }
+                    // Merge song-level mutes into top-level (song-level takes precedence)
+                    Object.entries(song.trackSectionMutes).forEach(([trackFileName, mutes]) => {
+                        savedState.sectionMutes[songName][trackFileName] = {
+                            ...savedState.sectionMutes[songName][trackFileName],
+                            ...mutes
+                        };
+                    });
+                    delete song.trackSectionMutes;
+                }
+                
+                // Also migrate old track.sectionMutes if present (legacy format)
+                song.tracks?.forEach(track => {
+                    if (track.sectionMutes && Object.keys(track.sectionMutes).length > 0) {
+                        const parts = track.filePath?.split('/');
+                        const trackFileName = parts ? decodeURIComponent(parts[parts.length - 1]) : null;
+                        
+                        if (trackFileName && songName) {
+                            if (!savedState.sectionMutes[songName]) {
+                                savedState.sectionMutes[songName] = {};
+                            }
+                            savedState.sectionMutes[songName][trackFileName] = {
+                                ...savedState.sectionMutes[songName][trackFileName],
+                                ...track.sectionMutes
+                            };
+                        }
+                        delete track.sectionMutes;
+                    }
+                });
+            });
+        }
+        
         if (savedState && savedState.songs && savedState.songs.length > 0) {
             console.log('Restoring saved state...');
             State.setLoading(true, 'Restoring session...');

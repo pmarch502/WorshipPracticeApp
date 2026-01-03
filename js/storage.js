@@ -45,7 +45,6 @@ export function saveState(state) {
         const stateWithoutPeaks = prepareStateForStorage(state);
         const stateToSave = JSON.stringify(stateWithoutPeaks);
         localStorage.setItem(STATE_KEY, stateToSave);
-        console.log('State saved to LocalStorage (peaks excluded)');
     } catch (error) {
         console.error('Failed to save state:', error);
         

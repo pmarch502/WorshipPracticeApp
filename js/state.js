@@ -20,6 +20,7 @@ export function createDefaultSong(songName) {
         tracks: [],
         metadata: null, // Will hold parsed metadata.json contents
         sections: [], // Derived from markers - array of {index, name, start, end, duration}
+        // Note: Section mutes are stored at top-level state.sectionMutes keyed by songName
         transport: {
             position: 0,
             lastPlayPosition: 0,
@@ -60,6 +61,9 @@ const initialState = {
     songs: [],
     activeSongId: null,
     playbackState: 'stopped', // 'stopped', 'playing', 'paused'
+    // Section mutes stored by songName (persists across song close/reopen)
+    // Structure: { "songName": { "trackFileName": { sectionIndex: true } } }
+    sectionMutes: {},
     ui: {
         selectedTrackId: null,
         isLoading: false,
@@ -126,6 +130,7 @@ export const Events = {
     TRACK_REMOVED: 'trackRemoved',
     TRACK_UPDATED: 'trackUpdated',
     TRACK_SELECTED: 'trackSelected',
+    SECTION_MUTE_UPDATED: 'sectionMuteUpdated',
     
     // Transport events
     TRANSPORT_UPDATED: 'transportUpdated',
@@ -427,7 +432,8 @@ export function loadState(savedState) {
 export function getSerializableState() {
     return {
         songs: state.songs,
-        activeSongId: state.activeSongId
+        activeSongId: state.activeSongId,
+        sectionMutes: state.sectionMutes
     };
 }
 
@@ -496,4 +502,102 @@ export function toggleLoop() {
     if (!song) return false;
     
     return updateLoop({ enabled: !song.transport.loopEnabled });
+}
+
+/**
+ * Get track filename from track's filePath
+ * @param {Object} track - Track object
+ * @returns {string} Track filename (e.g., "Click Track.mp3")
+ */
+function getTrackFileName(track) {
+    if (!track || !track.filePath) return null;
+    const parts = track.filePath.split('/');
+    return decodeURIComponent(parts[parts.length - 1]);
+}
+
+/**
+ * Toggle section mute for a track
+ * Stores mutes at top-level state.sectionMutes keyed by songName and track filename
+ * This ensures mutes persist across song close/reopen cycles
+ * @param {string} trackId - Track ID
+ * @param {number} sectionIndex - Section index (from original marker order)
+ * @returns {boolean} New mute state
+ */
+export function toggleSectionMute(trackId, sectionIndex) {
+    const song = getActiveSong();
+    const track = getTrack(trackId);
+    if (!song || !track) return false;
+    
+    const songName = song.songName;
+    const trackFileName = getTrackFileName(track);
+    if (!songName || !trackFileName) return false;
+    
+    // Initialize sectionMutes structure if needed
+    if (!state.sectionMutes) {
+        state.sectionMutes = {};
+    }
+    if (!state.sectionMutes[songName]) {
+        state.sectionMutes[songName] = {};
+    }
+    if (!state.sectionMutes[songName][trackFileName]) {
+        state.sectionMutes[songName][trackFileName] = {};
+    }
+    
+    // Toggle the mute state
+    const currentMutes = state.sectionMutes[songName][trackFileName];
+    const newMuteState = !currentMutes[sectionIndex];
+    
+    if (newMuteState) {
+        currentMutes[sectionIndex] = true;
+    } else {
+        delete currentMutes[sectionIndex];
+    }
+    
+    // Clean up empty objects
+    if (Object.keys(currentMutes).length === 0) {
+        delete state.sectionMutes[songName][trackFileName];
+    }
+    if (Object.keys(state.sectionMutes[songName]).length === 0) {
+        delete state.sectionMutes[songName];
+    }
+    
+    emit(Events.SECTION_MUTE_UPDATED, { trackId, sectionIndex, muted: newMuteState });
+    
+    return newMuteState;
+}
+
+/**
+ * Check if a section is muted for a track
+ * @param {string} trackId - Track ID
+ * @param {number} sectionIndex - Section index
+ * @returns {boolean} True if muted
+ */
+export function isSectionMuted(trackId, sectionIndex) {
+    const song = getActiveSong();
+    const track = getTrack(trackId);
+    if (!song || !track) return false;
+    
+    const songName = song.songName;
+    const trackFileName = getTrackFileName(track);
+    if (!songName || !trackFileName) return false;
+    
+    const trackMutes = state.sectionMutes?.[songName]?.[trackFileName];
+    return !!trackMutes?.[sectionIndex];
+}
+
+/**
+ * Get all section mutes for a track
+ * @param {string} trackId - Track ID
+ * @returns {Object} Section mutes object { sectionIndex: true }
+ */
+export function getSectionMutesForTrack(trackId) {
+    const song = getActiveSong();
+    const track = getTrack(trackId);
+    if (!song || !track) return {};
+    
+    const songName = song.songName;
+    const trackFileName = getTrackFileName(track);
+    if (!songName || !trackFileName) return {};
+    
+    return state.sectionMutes?.[songName]?.[trackFileName] || {};
 }
