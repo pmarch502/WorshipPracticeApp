@@ -22,6 +22,12 @@
             <div id="tabs-container">
                 <!-- Tabs will be dynamically inserted here -->
             </div>
+            <!-- Arrangement Selector (shown when song is open) -->
+            <div id="arrangement-selector" class="hidden">
+                <select id="arrangement-select">
+                    <option value="Default">Default</option>
+                </select>
+            </div>
             <!-- Song picker dropdown (hidden by default) -->
             <div id="song-picker" class="picker-dropdown hidden">
                 <div class="picker-header">SELECT A SONG</div>
@@ -200,6 +206,7 @@
                     <label>TIME SIG</label>
                     <span id="time-signature" class="knob-value">4/4</span>
                 </div>
+
             </div>
         </footer>
 

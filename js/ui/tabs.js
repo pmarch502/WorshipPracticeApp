@@ -15,6 +15,10 @@ class TabsUI {
         this.songPicker = document.getElementById('song-picker');
         this.songPickerList = document.getElementById('song-picker-list');
         
+        // Arrangement selector
+        this.arrangementSelector = document.getElementById('arrangement-selector');
+        this.arrangementSelect = document.getElementById('arrangement-select');
+        
         this.tabElements = new Map(); // songId -> element
         this.isPickerOpen = false;
         
@@ -44,6 +48,16 @@ class TabsUI {
                 this.closeSongPicker();
             }
         });
+        
+        // Arrangement select change handler
+        if (this.arrangementSelect) {
+            this.arrangementSelect.addEventListener('change', () => {
+                const song = State.getActiveSong();
+                if (song) {
+                    State.setArrangement(song.id, this.arrangementSelect.value);
+                }
+            });
+        }
     }
 
     attachStateListeners() {
@@ -58,13 +72,30 @@ class TabsUI {
             this.updateEmptyState();
         });
 
-        State.subscribe(State.Events.SONG_SWITCHED, () => {
+        State.subscribe(State.Events.SONG_SWITCHED, (song) => {
             this.updateActiveTab();
+            this.updateArrangementSelector(song);
         });
 
         State.subscribe(State.Events.STATE_LOADED, () => {
             this.renderTabs();
             this.updateEmptyState();
+            const song = State.getActiveSong();
+            this.updateArrangementSelector(song);
+        });
+        
+        // Update arrangement dropdown when metadata loads (arrangements come from metadata)
+        State.subscribe(State.Events.SONG_METADATA_UPDATED, ({ song }) => {
+            if (song.id === State.state.activeSongId) {
+                this.updateArrangementOptions(song);
+            }
+        });
+        
+        // Update arrangement dropdown selection when arrangement changes
+        State.subscribe(State.Events.ARRANGEMENT_CHANGED, ({ song, arrangementName }) => {
+            if (song.id === State.state.activeSongId && this.arrangementSelect) {
+                this.arrangementSelect.value = arrangementName;
+            }
         });
     }
 
@@ -141,15 +172,17 @@ class TabsUI {
         const waveformPanel = document.getElementById('waveform-panel');
         
         if (State.state.songs.length === 0) {
-            // No songs open - show empty state
+            // No songs open - show empty state, hide arrangement selector
             if (noSongEmptyState) noSongEmptyState.classList.remove('hidden');
             if (trackControlsPanel) trackControlsPanel.classList.add('hidden');
             if (waveformPanel) waveformPanel.classList.add('hidden');
+            if (this.arrangementSelector) this.arrangementSelector.classList.add('hidden');
         } else {
             // Songs open - hide empty state
             if (noSongEmptyState) noSongEmptyState.classList.add('hidden');
             if (trackControlsPanel) trackControlsPanel.classList.remove('hidden');
             if (waveformPanel) waveformPanel.classList.remove('hidden');
+            // Arrangement selector visibility handled by updateArrangementSelector
         }
     }
 
@@ -227,6 +260,49 @@ class TabsUI {
     clear() {
         this.container.innerHTML = '';
         this.tabElements.clear();
+    }
+
+    /**
+     * Update arrangement selector visibility and options
+     * @param {Object|null} song - Active song or null
+     */
+    updateArrangementSelector(song) {
+        if (!this.arrangementSelector) return;
+        
+        if (song) {
+            // Show selector when a song is open
+            this.arrangementSelector.classList.remove('hidden');
+            this.updateArrangementOptions(song);
+        } else {
+            // Hide selector when no song is open
+            this.arrangementSelector.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Update arrangement dropdown options for a song
+     * @param {Object} song - Song object
+     */
+    updateArrangementOptions(song) {
+        if (!this.arrangementSelect) return;
+        
+        // Get available arrangements
+        const arrangements = State.getAvailableArrangements(song?.id);
+        const currentArrangement = song?.arrangement?.name || 'Default';
+        
+        // Clear existing options
+        this.arrangementSelect.innerHTML = '';
+        
+        // Add options
+        arrangements.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            if (name === currentArrangement) {
+                option.selected = true;
+            }
+            this.arrangementSelect.appendChild(option);
+        });
     }
 }
 

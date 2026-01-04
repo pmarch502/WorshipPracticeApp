@@ -210,6 +210,17 @@ class TransportBar {
                 this.updateFromSong(song);
             }
         });
+        
+        // Update total time when arrangement changes (virtual duration changes)
+        State.subscribe(State.Events.ARRANGEMENT_CHANGED, () => {
+            this.updateTotalTime();
+        });
+        
+        // Update total time when sections are updated (includes virtual sections recalculation)
+        // This ensures total time is correct on initial load when arrangement is restored from saved state
+        State.subscribe(State.Events.SECTIONS_UPDATED, () => {
+            this.updateTotalTime();
+        });
     }
 
     updateButtonStates(playbackState) {

@@ -181,6 +181,36 @@ body {
     position: relative;
 }
 
+/* Arrangement Selector in Tab Bar */
+#arrangement-selector {
+    flex-shrink: 0;
+    margin-left: auto; /* Push to the right */
+    padding-right: 8px;
+}
+
+#arrangement-selector select {
+    padding: 6px 24px 6px 8px;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%23b0b0b0' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+}
+
+#arrangement-selector select:hover {
+    border-color: var(--accent-primary);
+}
+
+#arrangement-selector select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
 /* ========================================
    Circular Add Buttons
    ======================================== */

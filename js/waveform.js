@@ -513,4 +513,152 @@ export function renderSectionDividers(ctx, canvasWidth, canvasHeight, sections, 
     }
 }
 
+/**
+ * Render waveform for virtual sections (arrangement mode)
+ * Draws slices of the source waveform at virtual timeline positions
+ * 
+ * @param {HTMLCanvasElement} canvas - Target canvas
+ * @param {Float32Array|Array} peaks - Source peak values (0-1)
+ * @param {Array} virtualSections - Array of virtual section objects
+ * @param {Object} options - Rendering options
+ */
+export function renderVirtualWaveform(canvas, peaks, virtualSections, options = {}) {
+    const {
+        color = ACTIVE_COLOR,
+        backgroundColor = BACKGROUND_COLOR,
+        zoom = 1,
+        scrollOffset = 0,
+        sourceDuration = 0,  // Duration of source audio
+        virtualDuration = 0, // Duration of virtual timeline
+        pixelsPerSecond = 100,
+        offset = 0,
+        sectionMutes = null  // Object { sourceIndex: true } for muted sections
+    } = options;
+
+    const ctx = canvas.getContext('2d');
+    const { width: canvasWidth, height } = canvas;
+    
+    // Clear canvas
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvasWidth, height);
+    
+    if (!peaks || peaks.length === 0 || sourceDuration <= 0 || !virtualSections || virtualSections.length === 0) {
+        return;
+    }
+
+    const pixelsPerSecondZoomed = pixelsPerSecond * zoom;
+    const centerY = height / 2;
+    const amplitude = height / 2 - 2;
+
+    // Create gradients
+    const activeGradient = ctx.createLinearGradient(0, 0, 0, height);
+    activeGradient.addColorStop(0, adjustColorAlpha(color, 0.3));
+    activeGradient.addColorStop(0.5, color);
+    activeGradient.addColorStop(1, adjustColorAlpha(color, 0.3));
+    
+    const inactiveGradient = ctx.createLinearGradient(0, 0, 0, height);
+    inactiveGradient.addColorStop(0, adjustColorAlpha(INACTIVE_COLOR, 0.3));
+    inactiveGradient.addColorStop(0.5, INACTIVE_COLOR);
+    inactiveGradient.addColorStop(1, adjustColorAlpha(INACTIVE_COLOR, 0.3));
+
+    /**
+     * Get peak value from source audio at a given source time
+     */
+    const getPeakAtSourceTime = (sourceTime) => {
+        if (sourceTime < 0 || sourceTime >= sourceDuration) return 0;
+        const index = Math.floor((sourceTime / sourceDuration) * peaks.length);
+        return peaks[Math.min(index, peaks.length - 1)] || 0;
+    };
+
+    // Render each virtual section
+    for (const section of virtualSections) {
+        // Calculate screen X positions for this section
+        const sectionStartX = (section.virtualStart + offset) * pixelsPerSecondZoomed - scrollOffset;
+        const sectionEndX = (section.virtualEnd + offset) * pixelsPerSecondZoomed - scrollOffset;
+        
+        // Skip if section is completely outside visible range
+        if (sectionEndX < 0 || sectionStartX > canvasWidth) {
+            continue;
+        }
+        
+        // Clamp to visible range
+        const visibleStartX = Math.max(0, sectionStartX);
+        const visibleEndX = Math.min(canvasWidth, sectionEndX);
+        
+        // Check if this section is muted
+        const isMuted = sectionMutes && sectionMutes[section.sourceIndex];
+        ctx.fillStyle = isMuted ? inactiveGradient : activeGradient;
+        
+        // Draw peaks for this section
+        for (let x = Math.floor(visibleStartX); x < visibleEndX; x++) {
+            // Convert screen X to virtual time
+            const virtualTime = ((x + scrollOffset) / pixelsPerSecondZoomed) - offset;
+            
+            // Convert virtual time to source time for this section
+            const offsetInSection = virtualTime - section.virtualStart;
+            const sourceTime = section.sourceStart + offsetInSection;
+            
+            // Get peak at source time
+            const peak = getPeakAtSourceTime(sourceTime);
+            const barHeight = peak * amplitude;
+            
+            if (barHeight > 0.5) {
+                ctx.fillRect(x, centerY - barHeight, 1, barHeight * 2);
+            } else {
+                ctx.fillRect(x, centerY - 0.5, 1, 1);
+            }
+        }
+    }
+    
+    // Draw center line
+    ctx.strokeStyle = adjustColorAlpha(color, 0.5);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(canvasWidth, centerY);
+    ctx.stroke();
+}
+
+/**
+ * Render section dividers for virtual sections
+ * Draws vertical lines at the start of each virtual section (except the first)
+ */
+export function renderVirtualSectionDividers(ctx, canvasWidth, canvasHeight, virtualSections, options = {}) {
+    if (!virtualSections || virtualSections.length <= 1) {
+        return;
+    }
+    
+    const {
+        zoom = 1,
+        scrollOffset = 0,
+        pixelsPerSecond = 100,
+        offset = 0
+    } = options;
+    
+    const pixelsPerSecondZoomed = pixelsPerSecond * zoom;
+    
+    ctx.strokeStyle = SECTION_DIVIDER_COLOR;
+    ctx.lineWidth = 1;
+    
+    // Draw divider at the start of each section (except the first)
+    for (let i = 1; i < virtualSections.length; i++) {
+        const section = virtualSections[i];
+        
+        // Convert virtual time to screen X position
+        const worldX = (section.virtualStart + offset) * pixelsPerSecondZoomed;
+        const screenX = worldX - scrollOffset;
+        
+        // Skip if outside visible range
+        if (screenX < 0 || screenX > canvasWidth) {
+            continue;
+        }
+        
+        // Draw vertical line
+        ctx.beginPath();
+        ctx.moveTo(screenX, 0);
+        ctx.lineTo(screenX, canvasHeight);
+        ctx.stroke();
+    }
+}
+
 export { ACTIVE_COLOR, INACTIVE_COLOR, BACKGROUND_COLOR, SECTION_DIVIDER_COLOR };

@@ -5,6 +5,7 @@
 
 import * as State from './state.js';
 import { getBeatPositionsInRange, findNearestBeat, getTempoAtTime, getTimeSigAtTime } from './metadata.js';
+import { virtualToSourcePosition } from './sections.js';
 
 const BASE_PIXELS_PER_SECOND = 100;
 
@@ -138,6 +139,12 @@ class Timeline {
 
         // Re-render when loop state changes
         State.subscribe(State.Events.LOOP_UPDATED, () => {
+            this.render();
+        });
+        
+        // Re-render when arrangement changes
+        State.subscribe(State.Events.ARRANGEMENT_CHANGED, () => {
+            this.updateZoomSlider();
             this.render();
         });
     }
@@ -560,13 +567,29 @@ class Timeline {
     /**
      * Render markers on the beats timeline
      * Markers appear as upside-down triangles with labels
+     * Uses virtual sections when an arrangement is active
      */
     renderMarkers(ctx, canvas) {
         const song = State.getActiveSong();
         if (!song) return;
         
-        const markers = song.metadata?.markers;
-        if (!markers || markers.length === 0) return;
+        // Determine which sections to use (virtual or original markers)
+        const virtualSections = song.virtualSections;
+        const useVirtualSections = virtualSections && virtualSections.length > 0;
+        
+        // If using virtual sections, render a marker at the start of each virtual section
+        // Otherwise, use original markers
+        let markersToRender;
+        if (useVirtualSections) {
+            markersToRender = virtualSections.map(section => ({
+                start: section.virtualStart,
+                name: section.name
+            }));
+        } else {
+            const markers = song.metadata?.markers;
+            if (!markers || markers.length === 0) return;
+            markersToRender = markers;
+        }
         
         const triangleWidth = 20;
         const triangleHeight = 20;
@@ -575,7 +598,7 @@ class Timeline {
         
         ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         
-        for (const marker of markers) {
+        for (const marker of markersToRender) {
             const x = this.timeToPixel(marker.start);
             
             // Skip if outside visible range (with some margin for label)
@@ -663,6 +686,7 @@ class Timeline {
      * Render the beats timeline (M:B format)
      * Shows measure:beat labels (e.g., "1:1", "4:2", "8:3")
      * Accounts for variable tempo and time signature changes from metadata
+     * Uses virtual timeline when an arrangement is active
      */
     renderBeatsTimeline() {
         const canvas = this.beatsCanvas;
@@ -682,18 +706,38 @@ class Timeline {
         
         const pixelsPerSecond = BASE_PIXELS_PER_SECOND * zoom;
         
-        // Calculate visible time range
+        // Calculate visible time range (in virtual time for arrangements)
         const startTime = Math.max(0, this.scrollOffset / pixelsPerSecond - offset);
         const endTime = (this.scrollOffset + canvas.width) / pixelsPerSecond - offset;
         
-        // Get beat positions for visible range (accounts for variable tempo and time signature)
-        const beatPositions = getBeatPositionsInRange(startTime, endTime, tempos, timeSigs);
+        // Check if using virtual timeline (arrangement mode)
+        const virtualSections = song.virtualSections;
+        const useVirtualTimeline = virtualSections && virtualSections.length > 0;
+        
+        // Get beat positions - use virtual or standard method
+        let beatPositions;
+        if (useVirtualTimeline) {
+            beatPositions = this.getVirtualBeatPositions(startTime, endTime, virtualSections, tempos, timeSigs);
+        } else {
+            beatPositions = getBeatPositionsInRange(startTime, endTime, tempos, timeSigs);
+        }
         
         // Determine labeling density based on zoom level
         // Use the tempo and time signature at the center of the view to estimate spacing
-        const centerTime = (startTime + endTime) / 2;
-        const centerTempo = getTempoAtTime(centerTime, tempos);
-        const centerTimeSig = getTimeSigAtTime(centerTime, timeSigs);
+        let centerTempo, centerTimeSig;
+        if (useVirtualTimeline) {
+            // For virtual timeline, get tempo from the source position of center
+            const centerTime = (startTime + endTime) / 2;
+            const sourcePos = virtualToSourcePosition(centerTime, virtualSections);
+            const sourceTime = sourcePos?.sourceTime || 0;
+            centerTempo = getTempoAtTime(sourceTime, tempos);
+            centerTimeSig = getTimeSigAtTime(sourceTime, timeSigs);
+        } else {
+            const centerTime = (startTime + endTime) / 2;
+            centerTempo = getTempoAtTime(centerTime, tempos);
+            centerTimeSig = getTimeSigAtTime(centerTime, timeSigs);
+        }
+        
         const [beatsPerMeasure] = centerTimeSig.split('/').map(Number);
         const pixelsPerBeat = pixelsPerSecond * (60 / centerTempo);
         const pixelsPerMeasure = pixelsPerBeat * beatsPerMeasure;
@@ -892,6 +936,93 @@ class Timeline {
         const tenths = Math.floor((seconds % 1) * 10);
         
         return `${minutes}:${secs.toString().padStart(2, '0')}.${tenths}`;
+    }
+
+    /**
+     * Get beat positions for virtual timeline
+     * Walks through virtual sections and generates beats based on source tempo/time-sig
+     * Measure numbers continue incrementing across sections (no restart)
+     */
+    getVirtualBeatPositions(startTime, endTime, virtualSections, tempos, timeSigs) {
+        const beats = [];
+        
+        if (!virtualSections || virtualSections.length === 0) {
+            return beats;
+        }
+        
+        // Parse time signature helper
+        const parseTimeSig = (sig) => {
+            const [num] = sig.split('/').map(Number);
+            return num || 4;
+        };
+        
+        // Track continuous measure count across all sections
+        let currentMeasure = 1;
+        let currentBeat = 1;
+        
+        // Process each virtual section
+        for (const section of virtualSections) {
+            // Skip sections that are completely before or after visible range
+            if (section.virtualEnd < startTime) {
+                // Count measures in this section to continue measure numbering
+                const tempo = getTempoAtTime(section.sourceStart, tempos);
+                const timeSig = getTimeSigAtTime(section.sourceStart, timeSigs);
+                const beatsPerMeasure = parseTimeSig(timeSig);
+                const secondsPerBeat = 60 / tempo;
+                const beatsInSection = Math.floor(section.duration / secondsPerBeat);
+                
+                // Update measure/beat count
+                for (let i = 0; i < beatsInSection; i++) {
+                    currentBeat++;
+                    if (currentBeat > beatsPerMeasure) {
+                        currentBeat = 1;
+                        currentMeasure++;
+                    }
+                }
+                continue;
+            }
+            
+            if (section.virtualStart > endTime) {
+                break; // No more visible sections
+            }
+            
+            // Get tempo/time-sig for this section from source position
+            const tempo = getTempoAtTime(section.sourceStart, tempos);
+            const timeSig = getTimeSigAtTime(section.sourceStart, timeSigs);
+            const beatsPerMeasure = parseTimeSig(timeSig);
+            const secondsPerBeat = 60 / tempo;
+            
+            // Generate beats within this section
+            let virtualTime = section.virtualStart;
+            let beat = currentBeat;
+            let measure = currentMeasure;
+            
+            // Start at the first beat >= startTime within this section
+            while (virtualTime < section.virtualEnd && virtualTime < endTime) {
+                if (virtualTime >= startTime) {
+                    beats.push({
+                        time: virtualTime,
+                        measure,
+                        beat,
+                        isMeasureStart: beat === 1,
+                        tempo
+                    });
+                }
+                
+                virtualTime += secondsPerBeat;
+                beat++;
+                if (beat > beatsPerMeasure) {
+                    beat = 1;
+                    measure++;
+                }
+            }
+            
+            // Update continuous counters for next section
+            currentMeasure = measure;
+            currentBeat = beat;
+        }
+        
+        return beats;
     }
 
     setScrollOffset(offset) {

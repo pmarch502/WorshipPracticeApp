@@ -6,7 +6,7 @@ Adding section-based features to the Worship Practice App:
 2. **Phase 2**: Per-section muting (per track, per user - stored in localStorage)
 3. **Phase 3**: Arrangements (reorder sections, defined in metadata.json)
 
-## Current Phase: Phase 2 - Per-Section Muting (COMPLETE)
+## Current Phase: Phase 3 - Arrangements (COMPLETE)
 
 ### Data Model
 
@@ -30,23 +30,26 @@ state.sectionMutes = {
 }
 ```
 
-**Future - Arrangements** (in metadata.json):
+**Arrangements** (in metadata.json):
 ```javascript
-arrangements: [
-  {
-    name: "Default",
-    sections: null  // use markers in order
-  },
-  {
-    name: "Short Version",
-    sections: [
-      { marker: 0 },  // Count
-      { marker: 1 },  // Intro
-      { marker: 3 },  // Chorus 1 (skip Verse 1)
-      // ...
-    ]
-  }
+// "Default" is always available (plays all sections in order)
+// Only define arrangements for custom orderings
+"arrangements": [
+  {"name": "Shortened", "sections": [0,1,2,3,4,5,6,7,8,9,10,11,12,13,22,23,24]}
 ]
+// Sections can repeat: [0,1,2,3,2,3,14,15] plays sections 2 and 3 twice
+```
+
+**Virtual Sections** (derived at runtime from arrangement):
+```javascript
+song.virtualSections = [
+  { virtualIndex: 0, sourceIndex: 0, virtualStart: 0, virtualEnd: 4.5, sourceStart: 0, sourceEnd: 4.5, name: "Count", duration: 4.5 },
+  { virtualIndex: 1, sourceIndex: 1, virtualStart: 4.5, virtualEnd: 12.3, sourceStart: 4.5, sourceEnd: 12.3, name: "Intro", duration: 7.8 },
+  // If sections repeat, they appear as separate virtual sections
+  { virtualIndex: 4, sourceIndex: 2, virtualStart: 25.0, virtualEnd: 35.5, sourceStart: 10.0, sourceEnd: 20.5, name: "Verse 1", duration: 10.5 },
+  // ...
+]
+song.virtualDuration = 180.5; // Total duration of virtual timeline
 ```
 
 ---
@@ -141,6 +144,73 @@ arrangements: [
 
 ---
 
+### Phase 3 Tasks
+
+- [x] **Task 1**: State & Data Model
+  - Added `arrangement: { name: 'Default' }` to `createDefaultSong()`
+  - Added `virtualSections: []` and `virtualDuration: 0` to song object
+  - Added `ARRANGEMENT_CHANGED` event
+  - Added functions: `setArrangement()`, `getAvailableArrangements()`, `updateVirtualSections()`, `getCurrentArrangement()`
+  - `updateSongSections()` now also calls `updateVirtualSections()`
+
+- [x] **Task 2**: Position Mapping Utilities (in sections.js)
+  - `deriveVirtualSections(sections, arrangementIndices)` - creates virtual timeline mapping
+  - `getVirtualDuration(virtualSections)` - total virtual timeline length
+  - `getVirtualSectionAtTime(virtualSections, virtualTime)` - find section at time
+  - `virtualToSourcePosition(virtualTime, virtualSections)` - convert virtual to source time
+  - `sourceToVirtualPosition(sourceTime, virtualSections, hint)` - convert source to virtual time
+  - `getNextVirtualSection(virtualSections, index)` - get next section for transitions
+  - `requiresSeekTransition(fromSection, toSection)` - check if crossfade needed
+
+- [x] **Task 3**: Arrangement Dropdown UI
+  - Added `<select id="arrangement-select">` in transport bar (far right)
+  - Always shows "Default" option + any arrangements from metadata
+  - Dropdown updates when song switches or metadata loads
+  - On change: calls `State.setArrangement()`
+
+- [x] **Task 4**: Waveform Rendering
+  - Added `renderVirtualWaveform()` - draws slices of source waveform at virtual positions
+  - Added `renderVirtualSectionDividers()` - draws dividers between virtual sections
+  - `drawWaveform()` uses virtual rendering when arrangement active
+  - Section mute buttons positioned at virtual section starts
+
+- [x] **Task 5**: Timeline Rendering
+  - Added `getVirtualBeatPositions()` - generates beats for virtual timeline with continuous measure numbers
+  - `renderBeatsTimeline()` uses virtual beat positions when arrangement active
+  - `renderMarkers()` shows markers at virtual section positions (repeated sections show multiple markers)
+  - Subscribed to `ARRANGEMENT_CHANGED` to re-render
+
+- [x] **Task 6**: Playhead & Seeking
+  - Playhead positioned using virtual time (already works via state.position)
+  - Click-to-seek converts to virtual time (audio engine handles conversion to source)
+
+- [x] **Task 7**: Audio Engine
+  - Tracks `currentVirtualSectionIndex` during playback
+  - `play()` converts virtual position to source position
+  - `getCurrentPosition()` returns virtual time (for UI)
+  - `getCurrentSourcePosition()` returns source time (for audio operations)
+  - `seek()` accepts virtual position, converts internally
+  - `seekWithCrossfade()` for smooth transitions between non-consecutive sections
+  - Position update loop detects section boundaries and triggers crossfade when needed
+  - Section mute checking uses `virtualSection.sourceIndex`
+
+- [x] **Task 8**: Loop Behavior
+  - Loop start/end are in virtual time
+  - Looping triggers seek (with crossfade if needed)
+  - Loop clears when arrangement changes
+
+- [x] **Task 9**: Section Mutes Integration
+  - Mutes still keyed by source section index
+  - All instances of a muted section appear muted in arrangement
+  - Buttons show per virtual instance but toggle source section
+
+- [x] **Task 10**: Persistence
+  - `arrangement.name` included in serialized state
+  - Migration adds `arrangement` property to old saved states
+  - Virtual sections recalculated when metadata loads
+
+---
+
 ## Design Decisions
 
 1. **Section divider style**: Simple vertical line, no gaps, no rounded corners (keep it simple for now)
@@ -153,6 +223,11 @@ arrangements: [
 8. **Section mute button visibility**: Visible on hover over track row, always visible when active (muted)
 9. **Audio fade**: 50ms smooth fade for section mute transitions to avoid clicks
 10. **Section mutes at top-level state**: Stored at `state.sectionMutes[songName][trackFileName]` to survive song close/reopen cycles
+11. **Virtual timeline for arrangements**: UI always shows virtual time; audio engine converts to source time internally
+12. **Crossfade on non-consecutive sections**: 50ms crossfade when transitioning between sections that aren't contiguous in source audio
+13. **Measure numbers continue across sections**: No restart when sections repeat; measure 1, 2, 3... continues incrementally
+14. **Arrangement dropdown always visible**: Shows "Default" even when no custom arrangements defined
+15. **No gaps between sections**: Virtual timeline is seamless edge-to-edge
 
 ---
 
@@ -169,6 +244,9 @@ arrangements: [
 | `js/main.js` | Modified | Load metadata for all songs during state restoration, migration code |
 | `js/storage.js` | Modified | No changes needed (sectionMutes serialized via getSerializableState) |
 | `css/styles.css` | Modified | Section mute button styles |
+| `js/ui/transportBar.js` | Modified | Arrangement dropdown UI |
+| `js/timeline.js` | Modified | Virtual beat positions, arrangement-aware markers |
+| `index.html` | Modified | Added arrangement dropdown |
 
 ---
 
@@ -222,3 +300,17 @@ arrangements: [
 - Section mutes are tied to original marker index, not arrangement position
 - Audio gain uses `setTargetAtTime` with timeConstant 0.015 for ~50ms fade
 - **Section mutes stored at top-level state** (`state.sectionMutes[songName][trackFileName]`) - this ensures mutes survive song close/reopen since they're not tied to the song object lifecycle
+
+### Session 4 (Phase 3)
+- Implemented Arrangements feature (virtual timeline)
+- Key architecture: **Two position spaces**
+  - Virtual position: Time in the arrangement timeline (0 to virtualDuration)
+  - Source position: Time in the actual audio file (0 to track duration)
+  - UI shows virtual position; audio engine manages source position internally
+- Arrangement format in metadata.json: `{"name": "Shortened", "sections": [0,1,2,3,22,23,24]}`
+  - "Default" is implicit (all sections in order)
+  - Sections can repeat: `[0,1,2,3,2,3,14]` plays sections 2 and 3 twice
+- Virtual waveform rendering: Each virtual section shows its portion of source peaks
+- Beat positions generated per-section with tempo from source positions
+- Crossfade seeks (50ms) between non-consecutive sections
+- Section mutes work with source index (muting a section mutes all its instances)

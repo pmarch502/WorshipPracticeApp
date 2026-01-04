@@ -111,6 +111,14 @@ class WaveformPanel {
             this.updateAllSectionMuteButtons();
         });
         
+        // Redraw everything when arrangement changes
+        State.subscribe(State.Events.ARRANGEMENT_CHANGED, () => {
+            this.updateContainerWidth();
+            this.redrawAllWaveforms();
+            this.updateAllSectionMuteButtons();
+            this.updateLoopRegion();
+        });
+        
         // Handle section mute changes
         State.subscribe(State.Events.SECTION_MUTE_UPDATED, ({ trackId, sectionIndex, muted }) => {
             // Update button state
@@ -240,6 +248,7 @@ class WaveformPanel {
 
     /**
      * Draw waveform for a track
+     * Uses virtual waveform rendering when an arrangement is active
      */
     drawWaveform(trackId) {
         const canvas = this.trackCanvases.get(trackId);
@@ -264,30 +273,61 @@ class WaveformPanel {
         const isAudible = State.isTrackAudible(trackId);
         const color = Waveform.getTrackColor(isAudible);
         
-        // Get sections and section mutes for this track
-        const sections = song?.sections || null;
+        // Get section mutes for this track
         const sectionMutes = State.getSectionMutesForTrack(trackId);
         
-        Waveform.renderWaveformGradient(canvas, track.peaks, {
-            color,
-            zoom,
-            scrollOffset: this.scrollArea.scrollLeft,
-            duration: track.duration,
-            pixelsPerSecond: BASE_PIXELS_PER_SECOND,
-            offset,
-            sections,
-            sectionMutes
-        });
+        // Check if we should use virtual sections (arrangement mode)
+        const virtualSections = song?.virtualSections;
+        const useVirtualSections = virtualSections && virtualSections.length > 0;
         
-        // Render section dividers
-        if (sections && sections.length > 1) {
-            const ctx = canvas.getContext('2d');
-            Waveform.renderSectionDividers(ctx, canvas.width, canvas.height, sections, {
+        if (useVirtualSections) {
+            // Use virtual waveform rendering for arrangements
+            Waveform.renderVirtualWaveform(canvas, track.peaks, virtualSections, {
+                color,
                 zoom,
                 scrollOffset: this.scrollArea.scrollLeft,
+                sourceDuration: track.duration,
+                virtualDuration: song.virtualDuration,
                 pixelsPerSecond: BASE_PIXELS_PER_SECOND,
-                offset
+                offset,
+                sectionMutes
             });
+            
+            // Render section dividers for virtual sections
+            if (virtualSections.length > 1) {
+                const ctx = canvas.getContext('2d');
+                Waveform.renderVirtualSectionDividers(ctx, canvas.width, canvas.height, virtualSections, {
+                    zoom,
+                    scrollOffset: this.scrollArea.scrollLeft,
+                    pixelsPerSecond: BASE_PIXELS_PER_SECOND,
+                    offset
+                });
+            }
+        } else {
+            // Standard rendering (no arrangement or Default arrangement with all sections)
+            const sections = song?.sections || null;
+            
+            Waveform.renderWaveformGradient(canvas, track.peaks, {
+                color,
+                zoom,
+                scrollOffset: this.scrollArea.scrollLeft,
+                duration: track.duration,
+                pixelsPerSecond: BASE_PIXELS_PER_SECOND,
+                offset,
+                sections,
+                sectionMutes
+            });
+            
+            // Render section dividers
+            if (sections && sections.length > 1) {
+                const ctx = canvas.getContext('2d');
+                Waveform.renderSectionDividers(ctx, canvas.width, canvas.height, sections, {
+                    zoom,
+                    scrollOffset: this.scrollArea.scrollLeft,
+                    pixelsPerSecond: BASE_PIXELS_PER_SECOND,
+                    offset
+                });
+            }
         }
     }
 
@@ -419,6 +459,7 @@ class WaveformPanel {
 
     /**
      * Render section mute buttons for a track
+     * Uses virtual sections when an arrangement is active
      */
     renderSectionMuteButtons(trackId) {
         const container = this.sectionMuteContainers.get(trackId);
@@ -428,31 +469,38 @@ class WaveformPanel {
         container.innerHTML = '';
         
         const song = State.getActiveSong();
-        const sections = song?.sections;
-        if (!sections || sections.length === 0) return;
-        
         const track = State.getTrack(trackId);
         if (!track) return;
         
         // Get section mutes from top-level state (keyed by songName/trackFileName)
         const sectionMutes = State.getSectionMutesForTrack(trackId);
         
-        sections.forEach((section, index) => {
+        // Determine which sections to use (virtual or original)
+        const virtualSections = song?.virtualSections;
+        const useVirtualSections = virtualSections && virtualSections.length > 0;
+        const sectionsToRender = useVirtualSections ? virtualSections : (song?.sections || []);
+        
+        if (sectionsToRender.length === 0) return;
+        
+        sectionsToRender.forEach((section, index) => {
             const btn = document.createElement('button');
             btn.className = 'section-mute-btn';
-            btn.dataset.sectionIndex = index;
+            // Store both virtual index and source index for proper handling
+            btn.dataset.virtualIndex = index;
+            btn.dataset.sourceIndex = useVirtualSections ? section.sourceIndex : index;
             btn.textContent = 'M';
             btn.title = `Mute ${section.name}`;
             
-            // Check if muted
-            if (sectionMutes[index]) {
+            // Check if muted - always keyed by SOURCE index
+            const sourceIndex = useVirtualSections ? section.sourceIndex : index;
+            if (sectionMutes[sourceIndex]) {
                 btn.classList.add('active');
             }
             
-            // Click handler
+            // Click handler - toggles by SOURCE index (so all instances of a section get muted)
             btn.addEventListener('click', (e) => {
                 e.stopPropagation(); // Prevent waveform seek
-                State.toggleSectionMute(trackId, index);
+                State.toggleSectionMute(trackId, sourceIndex);
             });
             
             container.appendChild(btn);
@@ -464,14 +512,20 @@ class WaveformPanel {
 
     /**
      * Update positions of section mute buttons based on zoom and scroll
+     * Uses virtual section positions when an arrangement is active
      */
     updateSectionMuteButtonPositions(trackId) {
         const container = this.sectionMuteContainers.get(trackId);
         if (!container) return;
         
         const song = State.getActiveSong();
-        const sections = song?.sections;
-        if (!sections || sections.length === 0) return;
+        
+        // Determine which sections to use (virtual or original)
+        const virtualSections = song?.virtualSections;
+        const useVirtualSections = virtualSections && virtualSections.length > 0;
+        const sections = useVirtualSections ? virtualSections : (song?.sections || []);
+        
+        if (sections.length === 0) return;
         
         const zoom = this.getEffectiveZoom();
         const offset = song?.timeline?.offset || 0;
@@ -483,8 +537,11 @@ class WaveformPanel {
             const section = sections[index];
             if (!section) return;
             
+            // Use virtual start for arrangements, source start for original
+            const sectionStart = useVirtualSections ? section.virtualStart : section.start;
+            
             // Calculate position: section start time to pixels, accounting for offset
-            const worldX = (section.start + offset) * pixelsPerSecondZoomed;
+            const worldX = (sectionStart + offset) * pixelsPerSecondZoomed;
             const screenX = worldX - scrollLeft;
             
             // Position button with small padding from left edge of section
@@ -514,16 +571,18 @@ class WaveformPanel {
     }
 
     /**
-     * Update a single section mute button's active state
+     * Update section mute button's active state
+     * Updates all buttons with matching source index (for repeated sections in arrangements)
      */
     updateSectionMuteButtonState(trackId, sectionIndex, muted) {
         const container = this.sectionMuteContainers.get(trackId);
         if (!container) return;
         
-        const btn = container.querySelector(`[data-section-index="${sectionIndex}"]`);
-        if (btn) {
+        // Update all buttons with this source index (handles repeated sections)
+        const buttons = container.querySelectorAll(`[data-source-index="${sectionIndex}"]`);
+        buttons.forEach(btn => {
             btn.classList.toggle('active', muted);
-        }
+        });
     }
 
     /**

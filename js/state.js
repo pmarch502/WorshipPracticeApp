@@ -3,7 +3,7 @@
  * Central state store with event-based updates
  */
 
-import { deriveSections } from './sections.js';
+import { deriveSections, deriveVirtualSections, getVirtualDuration } from './sections.js';
 
 // Generate unique IDs
 export function generateId() {
@@ -20,6 +20,12 @@ export function createDefaultSong(songName) {
         tracks: [],
         metadata: null, // Will hold parsed metadata.json contents
         sections: [], // Derived from markers - array of {index, name, start, end, duration}
+        // Arrangement support
+        arrangement: {
+            name: 'Default' // Selected arrangement name ('Default' = all sections in order)
+        },
+        virtualSections: [], // Derived from arrangement - maps virtual timeline to source sections
+        virtualDuration: 0,  // Total duration of virtual timeline
         // Note: Section mutes are stored at top-level state.sectionMutes keyed by songName
         transport: {
             position: 0,
@@ -131,6 +137,9 @@ export const Events = {
     TRACK_UPDATED: 'trackUpdated',
     TRACK_SELECTED: 'trackSelected',
     SECTION_MUTE_UPDATED: 'sectionMuteUpdated',
+    
+    // Arrangement events
+    ARRANGEMENT_CHANGED: 'arrangementChanged',
     
     // Transport events
     TRANSPORT_UPDATED: 'transportUpdated',
@@ -269,10 +278,123 @@ export function updateSongSections(songId) {
     
     song.sections = deriveSections(markers, maxDuration);
     
+    // Also update virtual sections based on current arrangement
+    updateVirtualSections(songId);
+    
     // Emit event so UI can update (e.g., waveform section dividers)
     emit(Events.SECTIONS_UPDATED, { song, sections: song.sections });
     
     return true;
+}
+
+/**
+ * Update virtual sections for a song based on current arrangement
+ * Call this when sections change or arrangement changes
+ * @param {string} songId - Song ID
+ */
+export function updateVirtualSections(songId) {
+    const song = getSong(songId);
+    if (!song) return false;
+    
+    // Get arrangement definition
+    const arrangementName = song.arrangement?.name || 'Default';
+    const arrangementDef = getArrangementDefinition(song, arrangementName);
+    
+    // Derive virtual sections
+    song.virtualSections = deriveVirtualSections(song.sections, arrangementDef);
+    song.virtualDuration = getVirtualDuration(song.virtualSections);
+    
+    return true;
+}
+
+/**
+ * Get arrangement definition (section indices array) for a given arrangement name
+ * @param {Object} song - Song object
+ * @param {string} arrangementName - Arrangement name
+ * @returns {Array<number>|null} Array of section indices, or null for default
+ */
+function getArrangementDefinition(song, arrangementName) {
+    if (arrangementName === 'Default' || !arrangementName) {
+        return null; // Default = all sections in order
+    }
+    
+    const arrangements = song.metadata?.arrangements;
+    if (!arrangements) return null;
+    
+    const arrangement = arrangements.find(a => a.name === arrangementName);
+    return arrangement?.sections || null;
+}
+
+/**
+ * Get available arrangements for a song
+ * @param {string} songId - Song ID
+ * @returns {Array<string>} Array of arrangement names (always includes 'Default')
+ */
+export function getAvailableArrangements(songId) {
+    const song = getSong(songId);
+    if (!song) return ['Default'];
+    
+    const arrangements = song.metadata?.arrangements || [];
+    const names = arrangements.map(a => a.name).filter(Boolean);
+    
+    // Always include Default first
+    return ['Default', ...names];
+}
+
+/**
+ * Set the active arrangement for a song
+ * @param {string} songId - Song ID
+ * @param {string} arrangementName - Arrangement name
+ * @returns {boolean} Success
+ */
+export function setArrangement(songId, arrangementName) {
+    const song = getSong(songId);
+    if (!song) return false;
+    
+    const previousName = song.arrangement?.name || 'Default';
+    
+    // Validate arrangement exists
+    const available = getAvailableArrangements(songId);
+    if (!available.includes(arrangementName)) {
+        console.warn(`Arrangement "${arrangementName}" not found, using Default`);
+        arrangementName = 'Default';
+    }
+    
+    // Update arrangement
+    if (!song.arrangement) {
+        song.arrangement = {};
+    }
+    song.arrangement.name = arrangementName;
+    
+    // Recalculate virtual sections
+    updateVirtualSections(songId);
+    
+    // Clear loop points when arrangement changes (they're in virtual time)
+    if (previousName !== arrangementName) {
+        song.transport.loopStart = null;
+        song.transport.loopEnd = null;
+        song.transport.loopEnabled = false;
+    }
+    
+    // Emit event
+    emit(Events.ARRANGEMENT_CHANGED, { 
+        song, 
+        arrangementName,
+        virtualSections: song.virtualSections,
+        virtualDuration: song.virtualDuration
+    });
+    
+    return true;
+}
+
+/**
+ * Get the current arrangement name for a song
+ * @param {string} songId - Song ID
+ * @returns {string} Arrangement name
+ */
+export function getCurrentArrangement(songId) {
+    const song = getSong(songId);
+    return song?.arrangement?.name || 'Default';
 }
 
 /**
@@ -410,8 +532,25 @@ export function isTrackAudible(trackId) {
 
 /**
  * Get the maximum duration of all tracks in the active song
+ * Returns virtual duration if an arrangement is active with virtual sections
  */
 export function getMaxDuration() {
+    const song = getActiveSong();
+    if (!song || song.tracks.length === 0) return 0;
+    
+    // If we have virtual sections, use virtual duration
+    if (song.virtualSections && song.virtualSections.length > 0) {
+        return song.virtualDuration;
+    }
+    
+    return Math.max(...song.tracks.map(t => t.duration));
+}
+
+/**
+ * Get the raw source duration (ignoring arrangements)
+ * Use this when you need the actual audio file duration
+ */
+export function getSourceDuration() {
     const song = getActiveSong();
     if (!song || song.tracks.length === 0) return 0;
     
@@ -420,18 +559,39 @@ export function getMaxDuration() {
 
 /**
  * Load state from storage
+ * Includes migration for arrangement property added in Phase 3
  */
 export function loadState(savedState) {
+    // Migrate songs to include arrangement property if missing
+    if (savedState.songs) {
+        savedState.songs.forEach(song => {
+            // Add arrangement property if missing (for backward compatibility)
+            if (!song.arrangement) {
+                song.arrangement = { name: 'Default' };
+            }
+            // Initialize derived properties (will be recalculated when metadata loads)
+            song.virtualSections = song.virtualSections || [];
+            song.virtualDuration = song.virtualDuration || 0;
+        });
+    }
+    
     Object.assign(state, savedState);
     emit(Events.STATE_LOADED, state);
 }
 
 /**
  * Get serializable state (for storage)
+ * Note: virtualSections and virtualDuration are derived and will be recalculated on load
  */
 export function getSerializableState() {
+    // Create a copy of songs without derived properties
+    const serializableSongs = state.songs.map(song => {
+        const { virtualSections, virtualDuration, ...rest } = song;
+        return rest;
+    });
+    
     return {
-        songs: state.songs,
+        songs: serializableSongs,
         activeSongId: state.activeSongId,
         sectionMutes: state.sectionMutes
     };
