@@ -224,6 +224,18 @@
             margin: 20px 0;
         }
         
+        .interface-layout {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            grid-template-rows: auto auto auto;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .interface-layout .feature-card.full-width {
+            grid-column: 1 / -1;
+        }
+        
         .feature-card {
             background: var(--bg-secondary);
             padding: 20px;
@@ -307,18 +319,20 @@
                 <li><a href="#transport-controls">5. Transport Controls</a></li>
                 <li><a href="#timeline-waveform">6. Timeline &amp; Waveform</a></li>
                 <li><a href="#loop-functionality">7. Loop Functionality</a></li>
-                <li><a href="#audio-controls">8. Audio Controls</a></li>
-                <li><a href="#keyboard-shortcuts">9. Keyboard Shortcuts</a></li>
-                <li><a href="#hidden-features">10. Hidden Features</a></li>
-                <li><a href="#cache-storage">11. Cache &amp; Storage</a></li>
-                <li><a href="#browser-requirements">12. Browser Requirements</a></li>
+                <li><a href="#arrangements">8. Arrangements</a></li>
+                <li><a href="#audio-controls">9. Audio Controls</a></li>
+                <li><a href="#keyboard-shortcuts">10. Keyboard Shortcuts</a></li>
+                <li><a href="#hidden-features">11. Hidden Features</a></li>
+                <li><a href="#cache-storage">12. Cache &amp; Storage</a></li>
+                <li><a href="#browser-requirements">13. Browser Requirements</a></li>
+                <li><a href="#quick-reference">Quick Reference</a></li>
             </ul>
         </nav>
         
         <!-- Section 1: Getting Started -->
         <section id="getting-started">
             <h2>1. Getting Started</h2>
-            <p>The Worship Practice App is a multitrack audio player designed to help musicians practice worship songs. It allows you to load multiple audio tracks for a song, control individual track volume, pan, mute, solo, adjust playback speed and pitch, and create practice loops.</p>
+            <p>The Worship Practice App is a multitrack audio player designed to help musicians practice worship songs. It allows you to load multiple audio tracks for a song, control individual track volume, pan, mute, solo, adjust playback speed and pitch, create practice loops, create custom arrangements, and even mute individual sections in individual tracks!</p>
             
             <h3>Opening Your First Song</h3>
             <ol>
@@ -339,22 +353,22 @@
             <h2>2. Interface Overview</h2>
             <p>The application interface is divided into four main areas:</p>
             
-            <div class="feature-grid">
-                <div class="feature-card">
+            <div class="interface-layout">
+                <div class="feature-card full-width">
                     <h4>Tab Bar (Top)</h4>
-                    <p>Displays open songs as tabs. Click tabs to switch between songs. Use the + button at the far left to open new songs.</p>
+                    <p>Spans the full width at the top. Displays open songs as tabs. Click tabs to switch between songs. Use the + button at the far left to open new songs. The arrangement selector dropdown on the far right lets you choose different arrangements for the current song.</p>
                 </div>
                 <div class="feature-card">
                     <h4>Track Controls (Left)</h4>
-                    <p>Shows volume, pan, solo, and mute controls for each loaded track. Includes cache usage indicator.</p>
+                    <p>A narrower panel on the left side. Shows track name, volume, pan, solo, and mute controls for each loaded track. The header includes a cache usage indicator, a link to this user guide, and a button to open the <strong>Track Picker</strong>.</p>
                 </div>
                 <div class="feature-card">
                     <h4>Waveform Panel (Right)</h4>
-                    <p>Displays the timeline and waveforms for all tracks. Includes zoom controls and playhead.</p>
+                    <p>A wider panel on the right side. Displays the timeline and waveforms for all tracks. Includes zoom controls and playhead. The individual track waveforms display section markers and allow for muting individual sections on individual tracks.</p>
                 </div>
-                <div class="feature-card">
+                <div class="feature-card full-width">
                     <h4>Transport Bar (Bottom)</h4>
-                    <p>Contains playback controls, time display, speed, pitch, tempo, and time signature settings.</p>
+                    <p>Spans the full width at the bottom. Contains playback controls, time display, speed, pitch, tempo, and time signature settings.</p>
                 </div>
             </div>
         </section>
@@ -376,7 +390,7 @@
             <ul>
                 <li>Stop any current playback</li>
                 <li>Save the current song's state (position, settings)</li>
-                <li>Load the selected song's tracks and restore its state</li>
+                <li>Load the selected song's tracks from local storage and restore its state</li>
             </ul>
             
             <h3>Closing Songs</h3>
@@ -384,12 +398,7 @@
                 <li>Hover over a tab to reveal the <strong>X</strong> button</li>
                 <li>Click the X to close the song</li>
                 <li>Closing a song clears all local resources. If you open the song again, resources are pulled from the web.</li>
-                <li>Use <kbd>Ctrl</kbd> + <kbd>W</kbd> to close the active song</li>
             </ul>
-            
-            <div class="tip">
-                <strong>Tip:</strong> Press <kbd>Ctrl</kbd> + <kbd>N</kbd> to quickly create a new song.
-            </div>
         </section>
         
         <!-- Section 4: Track Management -->
@@ -398,8 +407,8 @@
             
             <h3>Adding Tracks</h3>
             <ol>
-                <li>Click the <strong>+</strong> button in the track controls panel (top of left side)</li>
-                <li>The Track Picker modal displays available tracks for the current song</li>
+                <li>Click the <strong>+</strong> button in the track controls header panel</li>
+                <li>The <strong>Track Picker</strong> modal displays available tracks for the current song</li>
                 <li>Check the tracks you want to add</li>
                 <li>Use <strong>Select All</strong> or <strong>Select None</strong> for quick selection</li>
                 <li>Already-loaded tracks appear disabled (greyed out)</li>
@@ -422,7 +431,7 @@
                 </tr>
                 <tr>
                     <td><strong>S (Solo)</strong></td>
-                    <td>Solo this track - only soloed tracks will play (yellow when active)</td>
+                    <td>Solo this track - only soloed tracks will play (yellow when active) - overrides Mute</td>
                 </tr>
                 <tr>
                     <td><strong>M (Mute)</strong></td>
@@ -449,6 +458,19 @@
                 <li>When any track is soloed, only soloed tracks play (mute state is ignored)</li>
                 <li>Inactive tracks (muted or not soloed) appear dimmed in the waveform display</li>
             </ul>
+            
+            <h3>Reordering Tracks</h3>
+            <p>Tracks can be reordered by dragging them within the track controls panel.</p>
+            <ol>
+                <li><strong>Click and hold</strong> on a track's control row (not on buttons or sliders)</li>
+                <li><strong>Drag</strong> up or down to the desired position</li>
+                <li>A <strong>drop indicator</strong> shows where the track will be placed</li>
+                <li><strong>Release</strong> to drop the track in its new position</li>
+            </ol>
+            
+            <div class="note">
+                <strong>Note:</strong> Track order is reset when the song is closed and reopened.
+            </div>
         </section>
         
         <!-- Section 5: Transport Controls -->
@@ -539,6 +561,7 @@
             <ul>
                 <li><strong>Active tracks:</strong> Displayed in cyan with gradient</li>
                 <li><strong>Inactive tracks:</strong> Displayed in grey, dimmed</li>
+                <li><strong>Section dividers:</strong> Yellow vertical lines indicate section boundaries (Intro, Verse, Chorus, etc.)</li>
                 <li><strong>Click on waveform:</strong> Seek to that position</li>
                 <li><strong>Scroll horizontally:</strong> Navigate through the song</li>
                 <li><strong>Scroll vertically:</strong> Navigate through tracks (synced with track controls)</li>
@@ -574,6 +597,45 @@
                     <td>Shows current zoom level</td>
                 </tr>
             </table>
+            
+            <h3>Section Muting</h3>
+            <p>Each track's waveform displays the song's sections with small mute buttons, allowing you to mute specific sections on individual tracks. This is useful for practicing specific parts without certain instruments.</p>
+            
+            <h4>Using Section Mute</h4>
+            <ul>
+                <li><strong>Locate</strong> the small "M" buttons that appear on each section of a track's waveform</li>
+                <li><strong>Click</strong> the M button to toggle mute for that section on that track</li>
+                <li><strong>Muted sections</strong> appear grey/dimmed in the waveform display</li>
+                <li><strong>Unmuted sections</strong> remain in their normal cyan color</li>
+            </ul>
+            
+            <h4>Section Mute Behavior</h4>
+            <table>
+                <tr>
+                    <th>Feature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><strong>Per-Track</strong></td>
+                    <td>Each track has independent section mutes</td>
+                </tr>
+                <tr>
+                    <td><strong>Smooth Transitions</strong></td>
+                    <td>~50ms gain ramps prevent audio clicks when entering/leaving muted sections</td>
+                </tr>
+                <tr>
+                    <td><strong>Persistence</strong></td>
+                    <td>Section mutes are saved and persist across browser sessions</td>
+                </tr>
+                <tr>
+                    <td><strong>Arrangement-Aware</strong></td>
+                    <td>Mutes apply to the source section, affecting all instances when the section repeats in an arrangement</td>
+                </tr>
+            </table>
+            
+            <div class="tip">
+                <strong>Tip:</strong> Use section muting to focus on specific parts during practice. For example, if there are multiple electric guitar tracks, mute the sections on all tracks that you do not wish to play - effectively creating a single electric guitar track.
+            </div>
         </section>
         
         <!-- Section 7: Loop Functionality -->
@@ -620,9 +682,153 @@
             </div>
         </section>
         
-        <!-- Section 8: Audio Controls -->
+        <!-- Section 8: Arrangements -->
+        <section id="arrangements">
+            <h2>8. Arrangements</h2>
+            <p>Arrangements allow you to change the order in which sections of a song play back. This is useful when your worship team uses a different structure than the original recording—for example, adding an extra chorus, skipping a bridge, or extending the outro.</p>
+            
+            <h3>Understanding Arrangements</h3>
+            <p>Every song has <strong>source sections</strong> derived from its markers (Intro, Verse 1, Chorus, Bridge, etc.). An arrangement defines which sections play and in what order.</p>
+            
+            <ul>
+                <li><strong>Original:</strong> The default arrangement plays all sections in their original order</li>
+                <li><strong>Worship Leader Arrangements:</strong> Pre-defined variations included with the song (e.g., "Short Version", "Extended Worship")</li>
+                <li><strong>Custom Arrangements:</strong> Your own arrangements created using the Arrangement Editor</li>
+            </ul>
+            
+            <h3>Selecting an Arrangement</h3>
+            <ol>
+                <li>Locate the <strong>arrangement dropdown</strong> in the tab bar (top right in the tab bar)</li>
+                <li>Click the dropdown to see available arrangements</li>
+                <li>Select an arrangement to apply it immediately</li>
+            </ol>
+            
+            <p>The dropdown shows:</p>
+            <ul>
+                <li><strong>Original</strong> — Always available, plays sections in their natural order</li>
+                <li><strong>Worship Leader arrangements</strong> — Pre-defined by the worship leader or music director</li>
+                <li><strong>Your custom arrangements</strong> — Arrangements you've created</li>
+                <li><strong>New Custom...</strong> — Opens the Arrangement Editor to create a new arrangement</li>
+                <li><strong>Manage Custom...</strong> — Opens the editor to modify or delete existing custom arrangements (only shown if you have custom arrangements)</li>
+            </ul>
+            
+            <h3>How Arrangements Affect Playback</h3>
+            <p>When an arrangement is active:</p>
+            <ul>
+                <li>The <strong>timeline</strong> displays a "virtual" timeline showing sections in their arranged order</li>
+                <li>The <strong>waveform</strong> displays sections in the arrangement order</li>
+                <li><strong>Markers</strong> appear at their positions within the virtual timeline</li>
+                <li><strong>Loops</strong> work within the virtual timeline</li>
+                <li><strong>Seeking</strong> works within the virtual timeline</li>
+                <li><strong>Measure numbers</strong> continue sequentially across sections (they don't restart at each section)</li>
+            </ul>
+            
+            <div class="note">
+                <strong>Note:</strong> When sections are non-consecutive in the source audio, the app automatically applies a smooth ~50ms crossfade to prevent audio artifacts during transitions.
+            </div>
+            
+            <h3>Creating a Custom Arrangement</h3>
+            <ol>
+                <li>Click the arrangement dropdown and select <strong>"New Custom..."</strong></li>
+                <li>The <strong>Arrangement Editor</strong> dialog opens</li>
+            </ol>
+            
+            <h4>The Arrangement Editor</h4>
+            <p>The editor has a two-panel layout:</p>
+            
+            <table>
+                <tr>
+                    <th>Panel</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><strong>Source Sections (Left)</strong></td>
+                    <td>Lists all sections from the original song. Click the <strong>+</strong> button next to a section to add it to your arrangement.</td>
+                </tr>
+                <tr>
+                    <td><strong>Your Arrangement (Right)</strong></td>
+                    <td>Shows the sections you've added in their current order. Use the controls to reorder or remove sections.</td>
+                </tr>
+            </table>
+            
+            <h4>Editor Controls</h4>
+            <table>
+                <tr>
+                    <th>Control</th>
+                    <th>Function</th>
+                </tr>
+                <tr>
+                    <td><strong>Name field</strong></td>
+                    <td>Enter a name for your arrangement (e.g., "Sunday Version")</td>
+                </tr>
+                <tr>
+                    <td><strong>Add All</strong></td>
+                    <td>Adds all source sections to your arrangement in order</td>
+                </tr>
+                <tr>
+                    <td><strong>Remove All</strong></td>
+                    <td>Clears all sections from your arrangement</td>
+                </tr>
+                <tr>
+                    <td><strong>+ (per section)</strong></td>
+                    <td>Add that section to the end of your arrangement</td>
+                </tr>
+                <tr>
+                    <td><strong>&#9650; / &#9660; arrows</strong></td>
+                    <td>Move a section up or down in your arrangement</td>
+                </tr>
+                <tr>
+                    <td><strong>&times; (remove)</strong></td>
+                    <td>Remove a section from your arrangement</td>
+                </tr>
+                <tr>
+                    <td><strong>Save &amp; Apply</strong></td>
+                    <td>Saves the arrangement and sets it as active</td>
+                </tr>
+                <tr>
+                    <td><strong>Cancel</strong></td>
+                    <td>Closes the editor without saving changes</td>
+                </tr>
+            </table>
+            
+            <div class="tip">
+                <strong>Tip:</strong> You can add the same section multiple times. For example, add Chorus twice in a row for an extended chorus section.
+            </div>
+            
+            <h3>Editing a Custom Arrangement</h3>
+            <ol>
+                <li>Click the arrangement dropdown and select <strong>"Manage Custom..."</strong></li>
+                <li>The editor opens with your most recent custom arrangement loaded</li>
+                <li>Make your changes and click <strong>Save &amp; Apply</strong></li>
+            </ol>
+            
+            <h3>Deleting a Custom Arrangement</h3>
+            <ol>
+                <li>Open the Arrangement Editor via <strong>"Manage Custom..."</strong></li>
+                <li>Click the <strong>Delete</strong> button at the bottom of the dialog</li>
+                <li>Confirm the deletion when prompted</li>
+            </ol>
+            <p>After deletion, the song will revert to the "Original" arrangement.</p>
+            
+            <h3>Exporting an Arrangement</h3>
+            <p>If you create an arrangement that would be useful for others, you can export it as JSON to share with a worship leader or music director who can add it to the song datasource. (This clunky approach is a side effect of running as a static web sight (no server).)</p>
+            
+            <ol>
+                <li>Open the Arrangement Editor with your arrangement</li>
+                <li>Click the <strong>Export JSON</strong> button</li>
+                <li>A dialog appears with the arrangement in JSON format</li>
+                <li>Click <strong>Copy to Clipboard</strong> to copy the text</li>
+                <li>Send the copied text to an administrator</li>
+            </ol>
+            
+            <div class="note">
+                <strong>Note:</strong> Custom arrangements are stored in your browser's local storage and are specific to your device. Exporting and sharing allows arrangements to be added to the song's metadata for all users.
+            </div>
+        </section>
+        
+        <!-- Section 9: Audio Controls -->
         <section id="audio-controls">
-            <h2>8. Audio Controls</h2>
+            <h2>9. Audio Controls</h2>
             
             <h3>Speed Control (Time Stretch)</h3>
             <ul>
@@ -641,14 +847,16 @@
             
             <h3>Tempo Display</h3>
             <ul>
-                <li><strong>Function:</strong> Displays tempo at playhead position</li>
-                <li><strong>Read-only:</strong> Updates as playhead moves through tempo changes</li>
+                <li><strong>Function:</strong> Displays the song's tempo at the current playhead position</li>
+                <li><strong>Read-only:</strong> The tempo is defined in the song's metadata and cannot be edited</li>
+                <li><strong>Variable tempo:</strong> Songs can have tempo changes; the display updates as the playhead moves through different tempo sections</li>
             </ul>
             
             <h3>Time Signature</h3>
             <ul>
-                <li><strong>Function:</strong> Displays time signature at playhead position</li>
-                <li><strong>Read-only:</strong> Updates as playhead moves through time signature changes</li>
+                <li><strong>Function:</strong> Displays the time signature at the current playhead position</li>
+                <li><strong>Read-only:</strong> The time signature is defined in the song's metadata and cannot be edited</li>
+                <li><strong>Variable time signature:</strong> Songs can have time signature changes; the display updates as the playhead moves through different sections</li>
             </ul>
             
             <h3>Pan Knob (Track Controls)</h3>
@@ -680,9 +888,9 @@
             </table>
         </section>
         
-        <!-- Section 9: Keyboard Shortcuts -->
+        <!-- Section 10: Keyboard Shortcuts -->
         <section id="keyboard-shortcuts">
-            <h2>9. Keyboard Shortcuts</h2>
+            <h2>10. Keyboard Shortcuts</h2>
             <p>Master these keyboard shortcuts to speed up your workflow.</p>
             
             <h3>Playback Controls</h3>
@@ -736,14 +944,6 @@
                     <th>Action</th>
                 </tr>
                 <tr>
-                    <td><kbd>Ctrl</kbd> + <kbd>N</kbd></td>
-                    <td>Create a new song</td>
-                </tr>
-                <tr>
-                    <td><kbd>Ctrl</kbd> + <kbd>W</kbd></td>
-                    <td>Close the current song</td>
-                </tr>
-                <tr>
                     <td><kbd>Delete</kbd> or <kbd>Backspace</kbd></td>
                     <td>Delete the selected track</td>
                 </tr>
@@ -770,9 +970,9 @@
             </div>
         </section>
         
-        <!-- Section 10: Hidden Features -->
+        <!-- Section 11: Hidden Features -->
         <section id="hidden-features">
-            <h2>10. Hidden Features</h2>
+            <h2>11. Hidden Features</h2>
             <p>These features aren't immediately obvious but can greatly enhance your workflow.</p>
             
             <h3>Shift-Modified Controls</h3>
@@ -820,19 +1020,23 @@
             
             <h3>Synchronized Scrolling</h3>
             <p>The track controls panel and waveform panel scroll together vertically, keeping them aligned.</p>
+            
+            <h3>Arrangement Crossfades</h3>
+            <p>When playing through an arrangement with non-consecutive sections (e.g., jumping from Verse 1 directly to Chorus 2), the app automatically applies a smooth ~50ms crossfade to prevent audio pops or clicks during the transition.</p>
         </section>
         
-        <!-- Section 11: Cache & Storage -->
+        <!-- Section 12: Cache & Storage -->
         <section id="cache-storage">
-            <h2>11. Cache &amp; Storage</h2>
+            <h2>12. Cache &amp; Storage</h2>
             
             <h3>Cache Indicator</h3>
             <p>The storage indicator in the track controls header shows current cache usage (e.g., "45.2 MB / 2.0 GB").</p>
             
             <h3>How Caching Works</h3>
             <ul>
-                <li><strong>First load:</strong> Audio files are downloaded from the server and cached locally</li>
-                <li><strong>Subsequent loads:</strong> Files are retrieved from local storage (much faster)</li>
+                <li><strong>Open Song:</strong> Audio files are downloaded from the server and cached locally</li>
+                <li><strong>Subsequent loads (Open App, Switch Song Tab, etc.):</strong> Files are retrieved from local storage (much faster)</li>
+                <li><strong>Close Song:</strong> All local cache related to this song is deleted</li>
                 <li><strong>Waveform peaks:</strong> Pre-calculated and cached for fast waveform rendering</li>
             </ul>
             
@@ -853,7 +1057,7 @@
             <h3>Auto-Save</h3>
             <p>Your application state is automatically saved:</p>
             <ul>
-                <li>On every change (with a 1-second debounce)</li>
+                <li>On every change</li>
                 <li>Immediately when closing the browser tab</li>
                 <li>State includes: open songs, track selections, playback positions, volume/pan settings</li>
             </ul>
@@ -863,9 +1067,9 @@
             </div>
         </section>
         
-        <!-- Section 12: Browser Requirements -->
+        <!-- Section 13: Browser Requirements -->
         <section id="browser-requirements">
-            <h2>12. Browser Requirements</h2>
+            <h2>13. Browser Requirements</h2>
             <p>The Worship Practice App requires a modern browser with support for advanced Web APIs.</p>
             
             <h3>Supported Browsers</h3>
@@ -880,7 +1084,7 @@
                 </tr>
                 <tr>
                     <td>Microsoft Edge</td>
-                    <td>86+</td>
+                    <td>86+ (Edge is known for quirky mouse behavior)</td>
                 </tr>
                 <tr>
                     <td>Mozilla Firefox</td>
@@ -905,9 +1109,9 @@
             </div>
         </section>
         
-        <!-- Quick Reference Card -->
+        <!-- Quick Reference -->
         <section id="quick-reference">
-            <h2>Quick Reference Card</h2>
+            <h2>Quick Reference</h2>
             
             <h3>Essential Shortcuts</h3>
             <table>
@@ -928,12 +1132,6 @@
                     <td>Seek 1 sec</td>
                     <td><kbd>Shift</kbd> + <kbd>&#8592;</kbd> / <kbd>&#8594;</kbd></td>
                     <td>Seek 10 sec</td>
-                </tr>
-                <tr>
-                    <td><kbd>Ctrl</kbd> + <kbd>N</kbd></td>
-                    <td>New song</td>
-                    <td><kbd>Ctrl</kbd> + <kbd>W</kbd></td>
-                    <td>Close song</td>
                 </tr>
                 <tr>
                     <td><kbd>Delete</kbd></td>
