@@ -438,6 +438,30 @@ body {
     opacity: 0.5;
 }
 
+/* Drag and Drop Reordering */
+.track-control[draggable="true"] {
+    cursor: grab;
+}
+
+.track-control[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.track-control.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.track-control.drag-over-top {
+    border-top: 2px solid var(--accent-primary);
+    margin-top: -1px;
+}
+
+.track-control.drag-over-bottom {
+    border-bottom: 2px solid var(--accent-primary);
+    margin-bottom: -1px;
+}
+
 .track-control-header {
     display: flex;
     align-items: center;

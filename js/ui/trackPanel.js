@@ -18,9 +18,13 @@ class TrackPanel {
         this.trackElements = new Map(); // trackId -> element
         this.knobs = new Map(); // trackId -> { pan: Knob }
         
+        // Drag-and-drop state
+        this.draggedTrackId = null;
+        
         this.init();
         this.attachStateListeners();
         this.setupScrollSync();
+        this.initDragDrop();
     }
 
     init() {
@@ -155,6 +159,123 @@ class TrackPanel {
         });
     }
 
+    /**
+     * Initialize drag-and-drop for track reordering
+     */
+    initDragDrop() {
+        // Dragstart - initiate drag if not on interactive element
+        this.container.addEventListener('dragstart', (e) => {
+            const trackElement = e.target.closest('.track-control');
+            if (!trackElement) return;
+            
+            // Cancel drag if started on interactive elements
+            const interactiveElement = e.target.closest('button, input, .knob, .pan-knob-container');
+            if (interactiveElement) {
+                e.preventDefault();
+                return;
+            }
+            
+            this.draggedTrackId = trackElement.dataset.trackId;
+            trackElement.classList.add('dragging');
+            
+            // Required for Firefox
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', this.draggedTrackId);
+        });
+
+        // Dragover - determine drop position and show indicator
+        this.container.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            const trackElement = e.target.closest('.track-control');
+            if (!trackElement || trackElement.dataset.trackId === this.draggedTrackId) {
+                return;
+            }
+            
+            // Clear previous indicators
+            this.clearDropIndicators();
+            
+            // Determine if we're in the top or bottom half of the element
+            const rect = trackElement.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+            
+            if (e.clientY < midpoint) {
+                trackElement.classList.add('drag-over-top');
+            } else {
+                trackElement.classList.add('drag-over-bottom');
+            }
+        });
+
+        // Dragleave - clean up indicators when leaving an element
+        this.container.addEventListener('dragleave', (e) => {
+            const trackElement = e.target.closest('.track-control');
+            if (trackElement) {
+                trackElement.classList.remove('drag-over-top', 'drag-over-bottom');
+            }
+        });
+
+        // Drop - perform the reorder
+        this.container.addEventListener('drop', (e) => {
+            e.preventDefault();
+            
+            const targetElement = e.target.closest('.track-control');
+            if (!targetElement || !this.draggedTrackId) {
+                this.clearDropIndicators();
+                return;
+            }
+            
+            const targetTrackId = targetElement.dataset.trackId;
+            if (targetTrackId === this.draggedTrackId) {
+                this.clearDropIndicators();
+                return;
+            }
+            
+            // Get the target index
+            const song = State.getActiveSong();
+            if (!song) return;
+            
+            let targetIndex = song.tracks.findIndex(t => t.id === targetTrackId);
+            
+            // If dropping in bottom half, insert after the target
+            const rect = targetElement.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+            if (e.clientY >= midpoint) {
+                targetIndex++;
+            }
+            
+            // Adjust for the fact that dragged item will be removed first
+            const draggedIndex = song.tracks.findIndex(t => t.id === this.draggedTrackId);
+            if (draggedIndex < targetIndex) {
+                targetIndex--;
+            }
+            
+            // Perform the reorder
+            State.reorderTrack(this.draggedTrackId, targetIndex);
+            
+            this.clearDropIndicators();
+        });
+
+        // Dragend - clean up
+        this.container.addEventListener('dragend', (e) => {
+            const trackElement = e.target.closest('.track-control');
+            if (trackElement) {
+                trackElement.classList.remove('dragging');
+            }
+            this.draggedTrackId = null;
+            this.clearDropIndicators();
+        });
+    }
+
+    /**
+     * Clear all drop indicator classes
+     */
+    clearDropIndicators() {
+        this.container.querySelectorAll('.track-control').forEach(el => {
+            el.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+    }
+
     attachStateListeners() {
         State.subscribe(State.Events.TRACK_ADDED, ({ track }) => {
             this.addTrackElement(track);
@@ -184,6 +305,10 @@ class TrackPanel {
                 this.renderTracks(song);
             }
         });
+
+        State.subscribe(State.Events.TRACKS_REORDERED, ({ song }) => {
+            this.renderTracks(song);
+        });
     }
 
     /**
@@ -208,6 +333,7 @@ class TrackPanel {
         const element = document.createElement('div');
         element.className = 'track-control';
         element.dataset.trackId = track.id;
+        element.draggable = true;
         
         // Check if track is active
         const isAudible = State.isTrackAudible(track.id);

@@ -136,6 +136,7 @@ export const Events = {
     TRACK_REMOVED: 'trackRemoved',
     TRACK_UPDATED: 'trackUpdated',
     TRACK_SELECTED: 'trackSelected',
+    TRACKS_REORDERED: 'tracksReordered',
     SECTION_MUTE_UPDATED: 'sectionMuteUpdated',
     
     // Arrangement events
@@ -428,6 +429,35 @@ export function removeTrack(trackId) {
     }
     
     emit(Events.TRACK_REMOVED, { song, track: removed });
+    return true;
+}
+
+/**
+ * Reorder a track within the active song
+ * Note: Does NOT persist to storage - order resets when song is closed/reopened
+ * @param {string} trackId - Track ID to move
+ * @param {number} newIndex - New index position
+ */
+export function reorderTrack(trackId, newIndex) {
+    const song = getActiveSong();
+    if (!song) return false;
+    
+    const currentIndex = song.tracks.findIndex(t => t.id === trackId);
+    if (currentIndex === -1) return false;
+    
+    // Clamp newIndex to valid range
+    newIndex = Math.max(0, Math.min(newIndex, song.tracks.length - 1));
+    
+    // No change needed
+    if (currentIndex === newIndex) return false;
+    
+    // Remove from current position and insert at new position
+    const [track] = song.tracks.splice(currentIndex, 1);
+    song.tracks.splice(newIndex, 0, track);
+    
+    // Emit event but do NOT save state - order is temporary
+    emit(Events.TRACKS_REORDERED, { song, trackId, fromIndex: currentIndex, toIndex: newIndex });
+    
     return true;
 }
 

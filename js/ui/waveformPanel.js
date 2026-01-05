@@ -126,6 +126,11 @@ class WaveformPanel {
             // Redraw waveform to show muted section
             this.drawWaveform(trackId);
         });
+
+        // Handle track reordering
+        State.subscribe(State.Events.TRACKS_REORDERED, ({ song }) => {
+            this.renderTracks(song);
+        });
     }
 
     /**
