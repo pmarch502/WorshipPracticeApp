@@ -22,11 +22,13 @@ export function createDefaultSong(songName) {
         sections: [], // Derived from markers - array of {index, name, start, end, duration}
         // Arrangement support
         arrangement: {
-            name: 'Default' // Selected arrangement name ('Default' = all sections in order)
+            name: 'Default', // Selected arrangement name ('Default' = all sections in order)
+            customId: null   // If set, this is a custom arrangement ID from state.customArrangements
         },
         virtualSections: [], // Derived from arrangement - maps virtual timeline to source sections
         virtualDuration: 0,  // Total duration of virtual timeline
         // Note: Section mutes are stored at top-level state.sectionMutes keyed by songName
+        // Note: Custom arrangements are stored at top-level state.customArrangements keyed by songName
         transport: {
             position: 0,
             lastPlayPosition: 0,
@@ -70,6 +72,9 @@ const initialState = {
     // Section mutes stored by songName (persists across song close/reopen)
     // Structure: { "songName": { "trackFileName": { sectionIndex: true } } }
     sectionMutes: {},
+    // Custom arrangements stored by songName (persists across song close/reopen)
+    // Structure: { "songName": [ { id, name, sections: [sectionIndices] }, ... ] }
+    customArrangements: {},
     ui: {
         selectedTrackId: null,
         isLoading: false,
@@ -141,6 +146,7 @@ export const Events = {
     
     // Arrangement events
     ARRANGEMENT_CHANGED: 'arrangementChanged',
+    CUSTOM_ARRANGEMENTS_UPDATED: 'customArrangementsUpdated',
     
     // Transport events
     TRANSPORT_UPDATED: 'transportUpdated',
@@ -299,7 +305,8 @@ export function updateVirtualSections(songId) {
     
     // Get arrangement definition
     const arrangementName = song.arrangement?.name || 'Default';
-    const arrangementDef = getArrangementDefinition(song, arrangementName);
+    const customId = song.arrangement?.customId || null;
+    const arrangementDef = getArrangementDefinition(song, arrangementName, customId);
     
     // Derive virtual sections
     song.virtualSections = deriveVirtualSections(song.sections, arrangementDef);
@@ -312,11 +319,18 @@ export function updateVirtualSections(songId) {
  * Get arrangement definition (section indices array) for a given arrangement name
  * @param {Object} song - Song object
  * @param {string} arrangementName - Arrangement name
+ * @param {string|null} customId - Custom arrangement ID (if custom)
  * @returns {Array<number>|null} Array of section indices, or null for default
  */
-function getArrangementDefinition(song, arrangementName) {
+function getArrangementDefinition(song, arrangementName, customId = null) {
     if (arrangementName === 'Default' || !arrangementName) {
         return null; // Default = all sections in order
+    }
+    
+    // Check for custom arrangement first
+    if (customId) {
+        const customArr = getCustomArrangementById(song.songName, customId);
+        return customArr?.sections || null;
     }
     
     const arrangements = song.metadata?.arrangements;
@@ -346,19 +360,23 @@ export function getAvailableArrangements(songId) {
  * Set the active arrangement for a song
  * @param {string} songId - Song ID
  * @param {string} arrangementName - Arrangement name
+ * @param {string|null} customId - Custom arrangement ID (null for metadata arrangements)
  * @returns {boolean} Success
  */
-export function setArrangement(songId, arrangementName) {
+export function setArrangement(songId, arrangementName, customId = null) {
     const song = getSong(songId);
     if (!song) return false;
     
     const previousName = song.arrangement?.name || 'Default';
+    const previousCustomId = song.arrangement?.customId || null;
     
-    // Validate arrangement exists
-    const available = getAvailableArrangements(songId);
-    if (!available.includes(arrangementName)) {
-        console.warn(`Arrangement "${arrangementName}" not found, using Default`);
-        arrangementName = 'Default';
+    // Validate arrangement exists (unless it's a custom one we're setting)
+    if (!customId) {
+        const available = getAvailableArrangements(songId);
+        if (!available.includes(arrangementName)) {
+            console.warn(`Arrangement "${arrangementName}" not found, using Default`);
+            arrangementName = 'Default';
+        }
     }
     
     // Update arrangement
@@ -366,12 +384,13 @@ export function setArrangement(songId, arrangementName) {
         song.arrangement = {};
     }
     song.arrangement.name = arrangementName;
+    song.arrangement.customId = customId;
     
     // Recalculate virtual sections
     updateVirtualSections(songId);
     
     // Clear loop points when arrangement changes (they're in virtual time)
-    if (previousName !== arrangementName) {
+    if (previousName !== arrangementName || previousCustomId !== customId) {
         song.transport.loopStart = null;
         song.transport.loopEnd = null;
         song.transport.loopEnabled = false;
@@ -381,6 +400,7 @@ export function setArrangement(songId, arrangementName) {
     emit(Events.ARRANGEMENT_CHANGED, { 
         song, 
         arrangementName,
+        customId,
         virtualSections: song.virtualSections,
         virtualDuration: song.virtualDuration
     });
@@ -396,6 +416,143 @@ export function setArrangement(songId, arrangementName) {
 export function getCurrentArrangement(songId) {
     const song = getSong(songId);
     return song?.arrangement?.name || 'Default';
+}
+
+// ============================================================================
+// Custom Arrangements
+// ============================================================================
+
+/**
+ * Get all custom arrangements for a song
+ * @param {string} songName - Song name (from manifest)
+ * @returns {Array} Array of custom arrangement objects
+ */
+export function getCustomArrangements(songName) {
+    return state.customArrangements?.[songName] || [];
+}
+
+/**
+ * Get a custom arrangement by ID
+ * @param {string} songName - Song name
+ * @param {string} customId - Custom arrangement ID
+ * @returns {Object|null} Custom arrangement object or null
+ */
+export function getCustomArrangementById(songName, customId) {
+    const arrangements = getCustomArrangements(songName);
+    return arrangements.find(a => a.id === customId) || null;
+}
+
+/**
+ * Add a new custom arrangement for a song
+ * @param {string} songName - Song name
+ * @param {string} name - Arrangement name
+ * @param {Array<number>} sections - Array of section indices
+ * @returns {string} The new arrangement's ID
+ */
+export function addCustomArrangement(songName, name, sections) {
+    if (!state.customArrangements) {
+        state.customArrangements = {};
+    }
+    if (!state.customArrangements[songName]) {
+        state.customArrangements[songName] = [];
+    }
+    
+    const id = generateId();
+    const arrangement = { id, name, sections: [...sections] };
+    state.customArrangements[songName].push(arrangement);
+    
+    emit(Events.CUSTOM_ARRANGEMENTS_UPDATED, { songName, arrangements: state.customArrangements[songName] });
+    
+    return id;
+}
+
+/**
+ * Update an existing custom arrangement
+ * @param {string} songName - Song name
+ * @param {string} customId - Custom arrangement ID
+ * @param {string} name - New name
+ * @param {Array<number>} sections - New sections array
+ * @returns {boolean} Success
+ */
+export function updateCustomArrangement(songName, customId, name, sections) {
+    const arrangements = state.customArrangements?.[songName];
+    if (!arrangements) return false;
+    
+    const arrangement = arrangements.find(a => a.id === customId);
+    if (!arrangement) return false;
+    
+    arrangement.name = name;
+    arrangement.sections = [...sections];
+    
+    emit(Events.CUSTOM_ARRANGEMENTS_UPDATED, { songName, arrangements });
+    
+    // If this arrangement is currently active, update virtual sections
+    const song = state.songs.find(s => s.songName === songName);
+    if (song && song.arrangement?.customId === customId) {
+        updateVirtualSections(song.id);
+        emit(Events.ARRANGEMENT_CHANGED, {
+            song,
+            arrangementName: name,
+            customId,
+            virtualSections: song.virtualSections,
+            virtualDuration: song.virtualDuration
+        });
+    }
+    
+    return true;
+}
+
+/**
+ * Delete a custom arrangement
+ * @param {string} songName - Song name
+ * @param {string} customId - Custom arrangement ID
+ * @returns {boolean} Success
+ */
+export function deleteCustomArrangement(songName, customId) {
+    const arrangements = state.customArrangements?.[songName];
+    if (!arrangements) return false;
+    
+    const index = arrangements.findIndex(a => a.id === customId);
+    if (index === -1) return false;
+    
+    arrangements.splice(index, 1);
+    
+    // Clean up empty arrays
+    if (arrangements.length === 0) {
+        delete state.customArrangements[songName];
+    }
+    
+    emit(Events.CUSTOM_ARRANGEMENTS_UPDATED, { songName, arrangements: state.customArrangements[songName] || [] });
+    
+    // If this arrangement was active, switch to Default
+    const song = state.songs.find(s => s.songName === songName);
+    if (song && song.arrangement?.customId === customId) {
+        setArrangement(song.id, 'Default', null);
+    }
+    
+    return true;
+}
+
+/**
+ * Check if a custom arrangement is currently active
+ * @param {string} songId - Song ID
+ * @returns {boolean} True if a custom arrangement is active
+ */
+export function isCustomArrangementActive(songId) {
+    const song = getSong(songId);
+    return !!song?.arrangement?.customId;
+}
+
+/**
+ * Get the currently active custom arrangement object
+ * @param {string} songId - Song ID
+ * @returns {Object|null} Custom arrangement object or null
+ */
+export function getActiveCustomArrangement(songId) {
+    const song = getSong(songId);
+    if (!song?.arrangement?.customId) return null;
+    
+    return getCustomArrangementById(song.songName, song.arrangement.customId);
 }
 
 /**
@@ -597,12 +754,21 @@ export function loadState(savedState) {
         savedState.songs.forEach(song => {
             // Add arrangement property if missing (for backward compatibility)
             if (!song.arrangement) {
-                song.arrangement = { name: 'Default' };
+                song.arrangement = { name: 'Default', customId: null };
+            }
+            // Ensure customId exists (migration for older states)
+            if (song.arrangement && song.arrangement.customId === undefined) {
+                song.arrangement.customId = null;
             }
             // Initialize derived properties (will be recalculated when metadata loads)
             song.virtualSections = song.virtualSections || [];
             song.virtualDuration = song.virtualDuration || 0;
         });
+    }
+    
+    // Ensure customArrangements exists
+    if (!savedState.customArrangements) {
+        savedState.customArrangements = {};
     }
     
     Object.assign(state, savedState);
@@ -623,7 +789,8 @@ export function getSerializableState() {
     return {
         songs: serializableSongs,
         activeSongId: state.activeSongId,
-        sectionMutes: state.sectionMutes
+        sectionMutes: state.sectionMutes,
+        customArrangements: state.customArrangements
     };
 }
 

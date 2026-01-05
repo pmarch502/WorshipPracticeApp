@@ -7,6 +7,8 @@ import * as State from '../state.js';
 import * as SongManager from '../songManager.js';
 import * as Manifest from '../manifest.js';
 import { getTrackPanel } from './trackPanel.js';
+import { getArrangementEditor } from './arrangementEditor.js';
+import { getModal } from './modal.js';
 
 class TabsUI {
     constructor() {
@@ -53,8 +55,31 @@ class TabsUI {
         if (this.arrangementSelect) {
             this.arrangementSelect.addEventListener('change', () => {
                 const song = State.getActiveSong();
-                if (song) {
-                    State.setArrangement(song.id, this.arrangementSelect.value);
+                if (!song) return;
+                
+                const value = this.arrangementSelect.value;
+                
+                if (value === '__new_custom__') {
+                    // Open editor for new custom arrangement
+                    const editor = getArrangementEditor();
+                    editor.open(song.id, null);
+                    // Reset select to current value
+                    this.updateArrangementOptions(song);
+                } else if (value === '__manage_custom__') {
+                    // Open management dialog
+                    this.openManageCustomDialog(song);
+                    // Reset select to current value
+                    this.updateArrangementOptions(song);
+                } else if (value.startsWith('__custom__')) {
+                    // Custom arrangement selected
+                    const customId = value.replace('__custom__', '');
+                    const customArr = State.getCustomArrangementById(song.songName, customId);
+                    if (customArr) {
+                        State.setArrangement(song.id, customArr.name, customId);
+                    }
+                } else {
+                    // Metadata arrangement (including 'Default')
+                    State.setArrangement(song.id, value, null);
                 }
             });
         }
@@ -92,9 +117,22 @@ class TabsUI {
         });
         
         // Update arrangement dropdown selection when arrangement changes
-        State.subscribe(State.Events.ARRANGEMENT_CHANGED, ({ song, arrangementName }) => {
+        State.subscribe(State.Events.ARRANGEMENT_CHANGED, ({ song, arrangementName, customId }) => {
             if (song.id === State.state.activeSongId && this.arrangementSelect) {
-                this.arrangementSelect.value = arrangementName;
+                // Set the correct value based on whether it's custom or not
+                if (customId) {
+                    this.arrangementSelect.value = '__custom__' + customId;
+                } else {
+                    this.arrangementSelect.value = arrangementName;
+                }
+            }
+        });
+        
+        // Update arrangement dropdown when custom arrangements change
+        State.subscribe(State.Events.CUSTOM_ARRANGEMENTS_UPDATED, ({ songName }) => {
+            const song = State.getActiveSong();
+            if (song && song.songName === songName) {
+                this.updateArrangementOptions(song);
             }
         });
     }
@@ -286,23 +324,152 @@ class TabsUI {
     updateArrangementOptions(song) {
         if (!this.arrangementSelect) return;
         
-        // Get available arrangements
-        const arrangements = State.getAvailableArrangements(song?.id);
+        // Get available arrangements from metadata
+        const metadataArrangements = State.getAvailableArrangements(song?.id);
         const currentArrangement = song?.arrangement?.name || 'Default';
+        const currentCustomId = song?.arrangement?.customId || null;
+        
+        // Get custom arrangements
+        const customArrangements = song ? State.getCustomArrangements(song.songName) : [];
         
         // Clear existing options
         this.arrangementSelect.innerHTML = '';
         
-        // Add options
-        arrangements.forEach(name => {
+        // Add metadata arrangements
+        metadataArrangements.forEach(name => {
             const option = document.createElement('option');
             option.value = name;
             option.textContent = name === 'Default' ? 'Original' : name;
-            if (name === currentArrangement) {
+            if (name === currentArrangement && !currentCustomId) {
                 option.selected = true;
             }
             this.arrangementSelect.appendChild(option);
         });
+        
+        // Add custom arrangements section if there are any
+        if (customArrangements.length > 0) {
+            // Add divider
+            const divider = document.createElement('option');
+            divider.disabled = true;
+            divider.textContent = '── Custom ──';
+            this.arrangementSelect.appendChild(divider);
+            
+            // Add custom arrangements
+            customArrangements.forEach(arr => {
+                const option = document.createElement('option');
+                option.value = '__custom__' + arr.id;
+                option.textContent = arr.name;
+                if (currentCustomId === arr.id) {
+                    option.selected = true;
+                }
+                this.arrangementSelect.appendChild(option);
+            });
+        }
+        
+        // Add action divider
+        const actionDivider = document.createElement('option');
+        actionDivider.disabled = true;
+        actionDivider.textContent = '────────────';
+        this.arrangementSelect.appendChild(actionDivider);
+        
+        // Add "New Custom..." option
+        const newOption = document.createElement('option');
+        newOption.value = '__new_custom__';
+        newOption.textContent = '+ New Custom...';
+        this.arrangementSelect.appendChild(newOption);
+        
+        // Add "Manage Custom..." option (only if there are custom arrangements)
+        if (customArrangements.length > 0) {
+            const manageOption = document.createElement('option');
+            manageOption.value = '__manage_custom__';
+            manageOption.textContent = 'Manage Custom...';
+            this.arrangementSelect.appendChild(manageOption);
+        }
+    }
+    
+    /**
+     * Open the manage custom arrangements dialog
+     * @param {Object} song - Song object
+     */
+    async openManageCustomDialog(song) {
+        const customArrangements = State.getCustomArrangements(song.songName);
+        
+        if (customArrangements.length === 0) {
+            return;
+        }
+        
+        const modal = getModal();
+        const editor = getArrangementEditor();
+        
+        const listHtml = customArrangements.map(arr => `
+            <div class="manage-arrangement-item" data-id="${arr.id}">
+                <span class="manage-arrangement-name">${this.escapeHtml(arr.name)}</span>
+                <div class="manage-arrangement-actions">
+                    <button class="btn-icon edit-custom-btn" data-id="${arr.id}" title="Edit">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                        </svg>
+                    </button>
+                    <button class="btn-icon delete-custom-btn" data-id="${arr.id}" title="Delete">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+        
+        const content = `
+            <div class="manage-arrangements-list">
+                ${listHtml}
+            </div>
+        `;
+        
+        // Show modal and attach events after a tick
+        modal.show({
+            title: 'Manage Custom Arrangements',
+            content: content,
+            confirmText: 'Close',
+            showCancel: false,
+            confirmClass: 'btn-secondary'
+        });
+        
+        // Attach events
+        setTimeout(() => {
+            const list = document.querySelector('.manage-arrangements-list');
+            if (list) {
+                list.addEventListener('click', async (e) => {
+                    const editBtn = e.target.closest('.edit-custom-btn');
+                    const deleteBtn = e.target.closest('.delete-custom-btn');
+                    
+                    if (editBtn) {
+                        const customId = editBtn.dataset.id;
+                        modal.close(true);
+                        editor.open(song.id, customId);
+                    } else if (deleteBtn) {
+                        const customId = deleteBtn.dataset.id;
+                        const arr = State.getCustomArrangementById(song.songName, customId);
+                        if (arr) {
+                            const confirmed = await modal.confirmDelete(arr.name);
+                            if (confirmed) {
+                                State.deleteCustomArrangement(song.songName, customId);
+                                // Refresh the dialog
+                                this.openManageCustomDialog(song);
+                            }
+                        }
+                    }
+                });
+            }
+        }, 0);
+    }
+    
+    /**
+     * Escape HTML for safe insertion
+     */
+    escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     }
 }
 
