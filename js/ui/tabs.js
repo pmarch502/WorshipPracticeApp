@@ -297,7 +297,7 @@ class TabsUI {
         arrangements.forEach(name => {
             const option = document.createElement('option');
             option.value = name;
-            option.textContent = name;
+            option.textContent = name === 'Default' ? 'Original' : name;
             if (name === currentArrangement) {
                 option.selected = true;
             }
