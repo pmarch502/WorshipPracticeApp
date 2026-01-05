@@ -110,39 +110,70 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
     ctx.fillStyle = gradient;
     
     /**
-     * Get peak value for a pixel position using MAX-POOLING
-     * Uses time-based conversion to avoid precision loss at high zoom levels
-     * When zoomed out, takes MAX of all peaks in the range (preserves transients)
-     * When zoomed in, uses the nearest peak value
+     * Pre-calculate peak index ranges for each pixel to ensure NO GAPS.
+     * This is critical for click tracks where missing a single peak index
+     * can cause a click to disappear entirely.
+     * 
+     * The approach:
+     * 1. Calculate initial ranges based on time-to-index mapping
+     * 2. Fix gaps by ensuring each pixel's start equals previous pixel's end
+     * 3. This guarantees every peak index is included in exactly one pixel's range
      */
-    const getPeakAt = (pixelX) => {
-        // Convert screen pixel to time (accounting for offset like timeline does)
-        const screenPixel = scrollOffset + pixelX;
-        const time = (screenPixel / pixelsPerSecondZoomed) - offset;
+    const calculatePeakRanges = () => {
+        const ranges = new Array(canvasWidth);
+        let lastValidEnd = 0;
         
-        // Clamp to valid time range
-        if (time < 0 || time >= duration) return 0;
-        
-        // Convert time to peak array index
-        const timeRatio = time / duration;
-        const startIndex = Math.floor(timeRatio * peaks.length);
-        
-        // Calculate end index for the next pixel to determine if we need max-pooling
-        const nextTime = ((screenPixel + 1) / pixelsPerSecondZoomed) - offset;
-        const nextTimeRatio = Math.min(nextTime / duration, 1);
-        const endIndex = Math.floor(nextTimeRatio * peaks.length);
-        
-        // If multiple peaks map to this pixel, use MAX (preserves transients)
-        if (endIndex > startIndex) {
-            let maxPeak = 0;
-            for (let i = startIndex; i <= endIndex && i < peaks.length; i++) {
-                maxPeak = Math.max(maxPeak, peaks[i] || 0);
+        for (let x = 0; x < canvasWidth; x++) {
+            const screenPixel = scrollOffset + x;
+            const time = (screenPixel / pixelsPerSecondZoomed) - offset;
+            
+            if (time < 0 || time >= duration) {
+                ranges[x] = null; // Out of bounds
+                continue;
             }
-            return maxPeak;
+            
+            const timeRatio = time / duration;
+            let startIndex = Math.floor(timeRatio * peaks.length);
+            
+            // End index is based on the next pixel's time position
+            const nextTime = ((screenPixel + 1) / pixelsPerSecondZoomed) - offset;
+            const nextTimeRatio = Math.min(nextTime / duration, 1);
+            let endIndex = Math.floor(nextTimeRatio * peaks.length);
+            
+            // FIX GAPS: If there's a gap from the last valid pixel, extend backward
+            // This ensures no peak indices are skipped between pixels
+            if (x > 0 && ranges[x - 1] !== null && startIndex > lastValidEnd) {
+                startIndex = lastValidEnd;
+            }
+            
+            // Ensure we cover at least one index
+            if (endIndex <= startIndex) {
+                endIndex = startIndex + 1;
+            }
+            
+            ranges[x] = { start: startIndex, end: endIndex };
+            lastValidEnd = endIndex;
         }
         
-        // Single peak maps to this pixel - use it directly
-        return peaks[Math.min(startIndex, peaks.length - 1)] || 0;
+        return ranges;
+    };
+    
+    const peakRanges = calculatePeakRanges();
+    
+    /**
+     * Get peak value for a pixel position using MAX-POOLING with gap-free ranges.
+     * Uses pre-calculated ranges to ensure all peaks are represented.
+     */
+    const getPeakAt = (pixelX) => {
+        const range = peakRanges[pixelX];
+        if (!range) return 0;
+        
+        let maxPeak = 0;
+        for (let i = range.start; i < range.end && i < peaks.length; i++) {
+            const p = peaks[i] || 0;
+            if (p > maxPeak) maxPeak = p;
+        }
+        return maxPeak;
     };
     
     /**
@@ -176,7 +207,7 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
     const secondsPerPixel = 1 / pixelsPerSecondZoomed;
     const peaksPerSecond = peaks.length / duration;
     const peaksPerPixel = secondsPerPixel * peaksPerSecond;
-    const useSmoothing = peaksPerPixel < 2;
+    const useSmoothing = false; // Always use max-pooling to preserve transients (clicks, etc.)
     
     // Check if we need to render section-aware (with muted sections)
     const hasSectionMutes = sections && sectionMutes && 
@@ -562,12 +593,30 @@ export function renderVirtualWaveform(canvas, peaks, virtualSections, options = 
     inactiveGradient.addColorStop(1, adjustColorAlpha(INACTIVE_COLOR, 0.3));
 
     /**
-     * Get peak value from source audio at a given source time
+     * Get max peak value from source audio for a range of source time.
+     * Uses max-pooling to ensure transients are not missed when zoomed out.
      */
-    const getPeakAtSourceTime = (sourceTime) => {
-        if (sourceTime < 0 || sourceTime >= sourceDuration) return 0;
-        const index = Math.floor((sourceTime / sourceDuration) * peaks.length);
-        return peaks[Math.min(index, peaks.length - 1)] || 0;
+    const getMaxPeakInSourceRange = (sourceTimeStart, sourceTimeEnd) => {
+        if (sourceTimeStart >= sourceDuration || sourceTimeEnd <= 0) return 0;
+        
+        // Clamp to valid range
+        const clampedStart = Math.max(0, sourceTimeStart);
+        const clampedEnd = Math.min(sourceDuration, sourceTimeEnd);
+        
+        // Convert times to peak indices
+        const startIndex = Math.floor((clampedStart / sourceDuration) * peaks.length);
+        let endIndex = Math.floor((clampedEnd / sourceDuration) * peaks.length);
+        
+        // Ensure at least one sample
+        if (endIndex <= startIndex) endIndex = startIndex + 1;
+        
+        // Find max peak in range
+        let maxPeak = 0;
+        for (let i = startIndex; i < endIndex && i < peaks.length; i++) {
+            const p = peaks[i] || 0;
+            if (p > maxPeak) maxPeak = p;
+        }
+        return maxPeak;
     };
 
     // Render each virtual section
@@ -589,18 +638,39 @@ export function renderVirtualWaveform(canvas, peaks, virtualSections, options = 
         const isMuted = sectionMutes && sectionMutes[section.sourceIndex];
         ctx.fillStyle = isMuted ? inactiveGradient : activeGradient;
         
-        // Draw peaks for this section
+        // Track last end index within this section to ensure no gaps
+        let lastSourceEndIndex = -1;
+        
+        // Draw peaks for this section with max-pooling
         for (let x = Math.floor(visibleStartX); x < visibleEndX; x++) {
-            // Convert screen X to virtual time
+            // Convert screen X to virtual time (start of this pixel)
             const virtualTime = ((x + scrollOffset) / pixelsPerSecondZoomed) - offset;
+            // Convert screen X+1 to virtual time (start of next pixel)
+            const nextVirtualTime = ((x + 1 + scrollOffset) / pixelsPerSecondZoomed) - offset;
             
-            // Convert virtual time to source time for this section
+            // Convert virtual times to source times for this section
             const offsetInSection = virtualTime - section.virtualStart;
-            const sourceTime = section.sourceStart + offsetInSection;
+            const nextOffsetInSection = nextVirtualTime - section.virtualStart;
             
-            // Get peak at source time
-            const peak = getPeakAtSourceTime(sourceTime);
+            let sourceTimeStart = section.sourceStart + offsetInSection;
+            const sourceTimeEnd = section.sourceStart + nextOffsetInSection;
+            
+            // Fix gaps: if there's a gap from last pixel, extend backward
+            if (lastSourceEndIndex >= 0) {
+                const currentStartIndex = Math.floor((Math.max(0, sourceTimeStart) / sourceDuration) * peaks.length);
+                if (currentStartIndex > lastSourceEndIndex) {
+                    // Adjust sourceTimeStart to cover the gap
+                    sourceTimeStart = (lastSourceEndIndex / peaks.length) * sourceDuration;
+                }
+            }
+            
+            // Get max peak in the source time range
+            const peak = getMaxPeakInSourceRange(sourceTimeStart, sourceTimeEnd);
             const barHeight = peak * amplitude;
+            
+            // Update last end index for gap tracking
+            const clampedEnd = Math.min(sourceDuration, Math.max(0, sourceTimeEnd));
+            lastSourceEndIndex = Math.floor((clampedEnd / sourceDuration) * peaks.length);
             
             if (barHeight > 0.5) {
                 ctx.fillRect(x, centerY - barHeight, 1, barHeight * 2);

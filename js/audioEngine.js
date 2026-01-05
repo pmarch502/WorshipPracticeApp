@@ -871,7 +871,7 @@ class AudioEngine {
      * @param {number} samplesPerSecond - Number of peak samples per second of audio
      * @returns {Float32Array} - Peak values normalized to 0-1
      */
-    extractPeaks(audioBuffer, samplesPerSecond = 200) {
+    extractPeaks(audioBuffer, samplesPerSecond = 400) {
         const channelData = audioBuffer.getChannelData(0);
         const totalSamples = channelData.length;
         
