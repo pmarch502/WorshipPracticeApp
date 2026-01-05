@@ -30,9 +30,7 @@ class TabsUI {
 
     init() {
         // Add song button - show picker dropdown
-        // Using mousedown instead of click to avoid Edge browser event delay issues
-        this.addBtn.addEventListener('mousedown', (e) => {
-            e.preventDefault();
+        this.addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.toggleSongPicker();
         });
