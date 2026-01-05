@@ -521,7 +521,7 @@ var USE_AUTO_SEQUENCE_LEN = 0;
 var DEFAULT_SEQUENCE_MS = USE_AUTO_SEQUENCE_LEN;
 var USE_AUTO_SEEKWINDOW_LEN = 0;
 var DEFAULT_SEEKWINDOW_MS = USE_AUTO_SEEKWINDOW_LEN;
-var DEFAULT_OVERLAP_MS = 8;
+var DEFAULT_OVERLAP_MS = 12;
 var _SCAN_OFFSETS = [[124, 186, 248, 310, 372, 434, 496, 558, 620, 682, 744, 806, 868, 930, 992, 1054, 1116, 1178, 1240, 1302, 1364, 1426, 1488, 0], [-100, -75, -50, -25, 25, 50, 75, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [-20, -15, -10, -5, 5, 10, 15, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [-4, -3, -2, -1, 1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]];
 var AUTOSEQ_TEMPO_LOW = 0.25;
 var AUTOSEQ_TEMPO_TOP = 4.0;
@@ -538,14 +538,14 @@ var Stretch = function (_AbstractFifoSamplePi2) {
     var _this3;
     _classCallCheck(this, Stretch);
     _this3 = _callSuper(this, Stretch, [createBuffers]);
-    _this3._quickSeek = true;
+    _this3._quickSeek = false;
     _this3.midBufferDirty = false;
     _this3.midBuffer = null;
     _this3.overlapLength = 0;
     _this3.autoSeqSetting = true;
     _this3.autoSeekSetting = true;
     _this3._tempo = 1;
-    _this3.setParameters(44100, DEFAULT_SEQUENCE_MS, DEFAULT_SEEKWINDOW_MS, DEFAULT_OVERLAP_MS);
+    _this3.setParameters(0, DEFAULT_SEQUENCE_MS, DEFAULT_SEEKWINDOW_MS, DEFAULT_OVERLAP_MS);
     return _this3;
   }
   _inherits(Stretch, _AbstractFifoSamplePi2);
@@ -1130,6 +1130,7 @@ var SoundTouchWorklet = function (_AudioWorkletProcesso) {
     _this.bufferSize = 128;
     _this._samples = new Float32Array(_this.bufferSize * 2);
     _this._pipe = new SoundTouch();
+    _this._pipe.stretch.setParameters(sampleRate, 0, 0, 0);
     return _this;
   }
   _inherits(SoundTouchWorklet, _AudioWorkletProcesso);
