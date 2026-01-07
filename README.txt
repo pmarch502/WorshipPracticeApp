@@ -3,6 +3,8 @@ Moving to BackBlaze + CloudFlare
 
 
 
+
+
 BackBlaze B2
 ===============
 S3 Browser works
@@ -10,15 +12,22 @@ The 'audio' folder for the app is stored here
 
 
 
+
+
 CloudFlare
 ==============
 Use this URL to deploy a new version:
 https://dash.cloudflare.com/7acbdfcba4d9c3a7c99445fafdba2fe8/pages/view/worshippracticeapp
+(Or, login at https://www.cloudflare.com/ - select the application: worshippracticeapp)
+(Or, select Compute & AI | Workers & Pages - select the application: worshippracticeapp)
 
 Zip up the entire app (except for the audio dir) and deploy that - it's all or nothing (no individual files).
+(Click Create Deployment - drop the .zip - give it a minute to go live)
 
 Redirect was accomplished using a '_redirects' file in the application root. The content was:
 /audio/*  https://f005.backblazeb2.com/file/WorshipPracticeApp/audio/:splat  301
+
+
 
 
 
