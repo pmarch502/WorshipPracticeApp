@@ -1799,7 +1799,8 @@ body {
     color: var(--text-primary);
 }
 
-.manage-arrangement-actions .delete-custom-btn:hover {
+.manage-arrangement-actions .delete-custom-btn:hover,
+.manage-arrangement-actions .delete-published-btn:hover {
     background: var(--accent-danger);
     color: #fff;
 }

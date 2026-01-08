@@ -9,6 +9,8 @@ import * as Manifest from '../manifest.js';
 import { getTrackPanel } from './trackPanel.js';
 import { getArrangementEditor } from './arrangementEditor.js';
 import { getModal } from './modal.js';
+import { deleteArrangement } from '../api.js';
+import { refreshMetadata, refreshMetadataWithRetry } from '../metadata.js';
 
 class TabsUI {
     constructor() {
@@ -23,6 +25,7 @@ class TabsUI {
         
         this.tabElements = new Map(); // songId -> element
         this.isPickerOpen = false;
+        this._isRefreshing = false; // Track if metadata refresh is in progress
         
         this.init();
         this.attachStateListeners();
@@ -57,7 +60,12 @@ class TabsUI {
                 
                 const value = this.arrangementSelect.value;
                 
-                if (value === '__new_custom__') {
+                if (value === '__refresh__') {
+                    // Refresh metadata for active song
+                    this.refreshSongMetadata(song.id);
+                    // Reset select to current value
+                    this.updateArrangementOptions(song);
+                } else if (value === '__new_custom__') {
                     // Open editor for new custom arrangement
                     const editor = getArrangementEditor();
                     editor.open(song.id, null);
@@ -66,6 +74,11 @@ class TabsUI {
                 } else if (value === '__manage_custom__') {
                     // Open management dialog
                     this.openManageCustomDialog(song);
+                    // Reset select to current value
+                    this.updateArrangementOptions(song);
+                } else if (value === '__manage_published__') {
+                    // Open published arrangements management dialog
+                    this.openManagePublishedDialog(song);
                     // Reset select to current value
                     this.updateArrangementOptions(song);
                 } else if (value.startsWith('__custom__')) {
@@ -133,6 +146,19 @@ class TabsUI {
                 this.updateArrangementOptions(song);
             }
         });
+    }
+
+    /**
+     * Set the refreshing state and update the Refresh option text
+     * @param {boolean} isRefreshing - Whether a refresh is in progress
+     */
+    setRefreshingState(isRefreshing) {
+        this._isRefreshing = isRefreshing;
+        // Update the Refresh option text if it exists
+        const refreshOption = this.arrangementSelect?.querySelector('.refresh-option');
+        if (refreshOption) {
+            refreshOption.textContent = isRefreshing ? 'Refreshing...' : 'Refresh';
+        }
     }
 
     /**
@@ -282,6 +308,45 @@ class TabsUI {
     }
 
     /**
+     * Refresh metadata for a song from the server
+     * @param {string} songId - Song ID
+     */
+    async refreshSongMetadata(songId) {
+        const song = State.getSong(songId);
+        if (!song) return;
+        
+        // Get the refresh button and add spinning class for visual feedback
+        const tab = this.tabElements.get(songId);
+        const refreshBtn = tab?.querySelector('.song-tab-refresh');
+        if (refreshBtn) {
+            refreshBtn.classList.add('refreshing');
+        }
+        
+        try {
+            const newMetadata = await refreshMetadata(song.songName);
+            if (newMetadata) {
+                State.updateSongMetadata(songId, newMetadata);
+                
+                // If current arrangement no longer exists, switch to Default
+                const freshSong = State.getSong(songId);
+                const availableArrangements = State.getAvailableArrangements(songId);
+                const currentArrangement = freshSong?.arrangement?.name || 'Default';
+                const currentCustomId = freshSong?.arrangement?.customId;
+                
+                // Only check metadata arrangements (not custom)
+                if (!currentCustomId && !availableArrangements.includes(currentArrangement)) {
+                    State.setArrangement(songId, 'Default', null);
+                }
+            }
+        } finally {
+            // Remove spinning class
+            if (refreshBtn) {
+                refreshBtn.classList.remove('refreshing');
+            }
+        }
+    }
+
+    /**
      * Update active tab styling
      */
     updateActiveTab() {
@@ -330,10 +395,38 @@ class TabsUI {
         // Get custom arrangements
         const customArrangements = song ? State.getCustomArrangements(song.songName) : [];
         
+        // Get published arrangements (from metadata.arrangements, excluding Default)
+        const publishedArrangements = this.getPublishedArrangements(song);
+        
         // Clear existing options
         this.arrangementSelect.innerHTML = '';
         
-        // Add metadata arrangements
+        // ─────────────────────────────────────────────────────────────────
+        // REFRESH OPTION (at top)
+        // ─────────────────────────────────────────────────────────────────
+        
+        const refreshOption = document.createElement('option');
+        refreshOption.value = '__refresh__';
+        refreshOption.className = 'refresh-option';
+        refreshOption.textContent = this._isRefreshing ? 'Refreshing...' : 'Refresh';
+        this.arrangementSelect.appendChild(refreshOption);
+        
+        const refreshDivider = document.createElement('option');
+        refreshDivider.disabled = true;
+        refreshDivider.textContent = '────────────';
+        this.arrangementSelect.appendChild(refreshDivider);
+        
+        // ─────────────────────────────────────────────────────────────────
+        // PUBLISHED SECTION
+        // ─────────────────────────────────────────────────────────────────
+        
+        // Add "── Published ──" header
+        const publishedHeader = document.createElement('option');
+        publishedHeader.disabled = true;
+        publishedHeader.textContent = '── Published ──';
+        this.arrangementSelect.appendChild(publishedHeader);
+        
+        // Add metadata arrangements (Original + any published)
         metadataArrangements.forEach(name => {
             const option = document.createElement('option');
             option.value = name;
@@ -344,15 +437,37 @@ class TabsUI {
             this.arrangementSelect.appendChild(option);
         });
         
-        // Add custom arrangements section if there are any
-        if (customArrangements.length > 0) {
-            // Add divider
-            const divider = document.createElement('option');
-            divider.disabled = true;
-            divider.textContent = '── Custom ──';
-            this.arrangementSelect.appendChild(divider);
+        // Add "Manage Published..." option (only if there are published arrangements)
+        if (publishedArrangements.length > 0) {
+            const publishedDivider = document.createElement('option');
+            publishedDivider.disabled = true;
+            publishedDivider.textContent = '────────────';
+            this.arrangementSelect.appendChild(publishedDivider);
             
-            // Add custom arrangements
+            const managePublishedOption = document.createElement('option');
+            managePublishedOption.value = '__manage_published__';
+            managePublishedOption.textContent = 'Manage Published...';
+            this.arrangementSelect.appendChild(managePublishedOption);
+        }
+        
+        // Add blank spacer between sections (always)
+        const spacer = document.createElement('option');
+        spacer.disabled = true;
+        spacer.textContent = '';
+        this.arrangementSelect.appendChild(spacer);
+        
+        // ─────────────────────────────────────────────────────────────────
+        // CUSTOM SECTION
+        // ─────────────────────────────────────────────────────────────────
+        
+        // Add "── Custom ──" header (always)
+        const customHeader = document.createElement('option');
+        customHeader.disabled = true;
+        customHeader.textContent = '── Custom ──';
+        this.arrangementSelect.appendChild(customHeader);
+        
+        // Add custom arrangements if there are any
+        if (customArrangements.length > 0) {
             customArrangements.forEach(arr => {
                 const option = document.createElement('option');
                 option.value = '__custom__' + arr.id;
@@ -362,15 +477,15 @@ class TabsUI {
                 }
                 this.arrangementSelect.appendChild(option);
             });
+            
+            // Add divider before actions
+            const customDivider = document.createElement('option');
+            customDivider.disabled = true;
+            customDivider.textContent = '────────────';
+            this.arrangementSelect.appendChild(customDivider);
         }
         
-        // Add action divider
-        const actionDivider = document.createElement('option');
-        actionDivider.disabled = true;
-        actionDivider.textContent = '────────────';
-        this.arrangementSelect.appendChild(actionDivider);
-        
-        // Add "New Custom..." option
+        // Add "+ New Custom..." option (always)
         const newOption = document.createElement('option');
         newOption.value = '__new_custom__';
         newOption.textContent = '+ New Custom...';
@@ -378,11 +493,21 @@ class TabsUI {
         
         // Add "Manage Custom..." option (only if there are custom arrangements)
         if (customArrangements.length > 0) {
-            const manageOption = document.createElement('option');
-            manageOption.value = '__manage_custom__';
-            manageOption.textContent = 'Manage Custom...';
-            this.arrangementSelect.appendChild(manageOption);
+            const manageCustomOption = document.createElement('option');
+            manageCustomOption.value = '__manage_custom__';
+            manageCustomOption.textContent = 'Manage Custom...';
+            this.arrangementSelect.appendChild(manageCustomOption);
         }
+    }
+    
+    /**
+     * Get published arrangements (from metadata, excluding Default)
+     * @param {Object} song - Song object
+     * @returns {Array} Array of published arrangement objects
+     */
+    getPublishedArrangements(song) {
+        if (!song?.metadata?.arrangements) return [];
+        return song.metadata.arrangements;
     }
     
     /**
@@ -451,14 +576,225 @@ class TabsUI {
                             const confirmed = await modal.confirmDelete(arr.name);
                             if (confirmed) {
                                 State.deleteCustomArrangement(song.songName, customId);
-                                // Refresh the dialog
-                                this.openManageCustomDialog(song);
+                                // Dialog closes automatically, dropdown updates via CUSTOM_ARRANGEMENTS_UPDATED event
                             }
                         }
                     }
                 });
             }
         }, 0);
+    }
+    
+    /**
+     * Open the manage published arrangements dialog
+     * @param {Object} song - Song object
+     */
+    async openManagePublishedDialog(song) {
+        const publishedArrangements = this.getPublishedArrangements(song);
+        
+        if (publishedArrangements.length === 0) {
+            return;
+        }
+        
+        const modal = getModal();
+        
+        const listHtml = publishedArrangements.map(arr => `
+            <div class="manage-arrangement-item" data-name="${this.escapeHtml(arr.name)}">
+                <span class="manage-arrangement-name">${this.escapeHtml(arr.name)}</span>
+                <div class="manage-arrangement-actions">
+                    <button class="btn-icon delete-published-btn" data-name="${this.escapeHtml(arr.name)}" title="Delete">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+        
+        const content = `
+            <p style="margin-bottom: 12px; color: var(--text-secondary);">
+                Deleting a published arrangement removes it for all users.
+            </p>
+            <div class="manage-arrangements-list">
+                ${listHtml}
+            </div>
+        `;
+        
+        modal.show({
+            title: 'Manage Published Arrangements',
+            content: content,
+            confirmText: 'Close',
+            showCancel: false,
+            confirmClass: 'btn-secondary'
+        });
+        
+        // Attach events
+        setTimeout(() => {
+            const list = document.querySelector('.manage-arrangements-list');
+            if (list) {
+                list.addEventListener('click', async (e) => {
+                    const deleteBtn = e.target.closest('.delete-published-btn');
+                    
+                    if (deleteBtn) {
+                        const arrangementName = deleteBtn.dataset.name;
+                        await this.deletePublishedArrangement(song, arrangementName, modal);
+                    }
+                });
+            }
+        }, 0);
+    }
+    
+    /**
+     * Delete a published arrangement
+     * @param {Object} song - Song object
+     * @param {string} arrangementName - Name of the arrangement to delete
+     * @param {Object} modal - Modal instance
+     */
+    async deletePublishedArrangement(song, arrangementName, modal) {
+        // First, prompt for secret
+        const secret = await this.promptForSecret('Delete Published Arrangement');
+        if (!secret) {
+            // User cancelled - reopen the manage dialog
+            this.openManagePublishedDialog(song);
+            return;
+        }
+        
+        // Then confirm deletion
+        const confirmed = await modal.confirm({
+            title: 'Delete Published Arrangement',
+            message: `<p>Delete arrangement "<strong>${this.escapeHtml(arrangementName)}</strong>" from "<strong>${this.escapeHtml(song.songName)}</strong>"?</p><p>This will remove it for all users. This cannot be undone.</p>`,
+            confirmText: 'Delete',
+            confirmClass: 'btn-danger'
+        });
+        
+        if (!confirmed) {
+            // User cancelled - reopen the manage dialog
+            this.openManagePublishedDialog(song);
+            return;
+        }
+        
+        // Store song id and name for later use (song reference may become stale)
+        const songId = song.id;
+        const songName = song.songName;
+        
+        // Attempt to delete
+        try {
+            await deleteArrangement(songName, arrangementName, secret);
+            
+            // Success - refresh metadata with retry (wait for CloudFront invalidation)
+            this.setRefreshingState(true);
+            const newMetadata = await refreshMetadataWithRetry(
+                songName,
+                (meta) => !meta?.arrangements?.some(a => a.name === arrangementName)
+            );
+            this.setRefreshingState(false);
+            
+            if (newMetadata) {
+                State.updateSongMetadata(songId, newMetadata);
+            }
+            
+            // Get fresh song reference after metadata update
+            const updatedSong = State.getSong(songId);
+            
+            // If the deleted arrangement was active, switch to Default
+            if (updatedSong?.arrangement?.name === arrangementName && !updatedSong?.arrangement?.customId) {
+                State.setArrangement(songId, 'Default', null);
+            }
+            
+            // Explicitly update dropdown to reflect changes
+            this.updateArrangementOptions(State.getSong(songId));
+            
+            // TODO: Re-enable if not interfering with UI updates
+            // await modal.alert({
+            //     title: 'Deleted',
+            //     message: `Arrangement "${arrangementName}" has been deleted.`
+            // });
+            
+            // Dialog closes automatically, no re-open
+        } catch (error) {
+            this.setRefreshingState(false);
+            console.error('Delete failed:', error);
+            
+            if (error.status === 401) {
+                await modal.alert({
+                    title: 'Invalid Secret',
+                    message: 'The admin secret is incorrect. Please try again.'
+                });
+                // Re-open manage dialog so user can try again
+                this.openManagePublishedDialog(State.getSong(songId));
+            } else if (error.status === 404) {
+                await modal.alert({
+                    title: 'Not Found',
+                    message: `Arrangement "${arrangementName}" was not found. It may have already been deleted.`
+                });
+                // Refresh metadata anyway since it was already deleted
+                const newMetadata = await refreshMetadata(songName);
+                if (newMetadata) {
+                    State.updateSongMetadata(songId, newMetadata);
+                }
+                this.updateArrangementOptions(State.getSong(songId));
+                // No re-open - item is gone
+            } else {
+                await modal.alert({
+                    title: 'Delete Failed',
+                    message: `Failed to delete arrangement: ${error.message}`
+                });
+                // Re-open manage dialog so user can try again
+                this.openManagePublishedDialog(State.getSong(songId));
+            }
+        }
+    }
+    
+    /**
+     * Prompt user for admin secret
+     * @param {string} title - Dialog title
+     * @returns {Promise<string|null>} - Secret or null if cancelled
+     */
+    async promptForSecret(title) {
+        const modal = getModal();
+        
+        return new Promise((resolve) => {
+            const content = `
+                <p>Enter the admin secret to continue:</p>
+                <input type="password" 
+                       id="admin-secret-input" 
+                       placeholder="Admin secret"
+                       style="width: 100%; padding: 8px; margin-top: 8px; 
+                              background: var(--bg-tertiary); 
+                              border: 1px solid var(--border-color); 
+                              border-radius: 4px; 
+                              color: var(--text-primary);
+                              font-size: 14px;">
+            `;
+
+            modal.show({
+                title: title,
+                content: content,
+                confirmText: 'Continue',
+                cancelText: 'Cancel',
+                confirmClass: 'btn-primary',
+                showCancel: true,
+                onShow: () => {
+                    const input = document.getElementById('admin-secret-input');
+                    if (input) {
+                        setTimeout(() => input.focus(), 50);
+                        input.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                modal.close(true);
+                            }
+                        });
+                    }
+                },
+                onConfirm: () => {
+                    const input = document.getElementById('admin-secret-input');
+                    resolve(input?.value || null);
+                },
+                onCancel: () => {
+                    resolve(null);
+                }
+            });
+        });
     }
     
     /**

@@ -5,6 +5,9 @@
 
 import * as State from '../state.js';
 import { getModal } from './modal.js';
+import { publishArrangement } from '../api.js';
+import { refreshMetadataWithRetry } from '../metadata.js';
+import { getTabs } from './tabs.js';
 
 class ArrangementEditor {
     constructor() {
@@ -151,7 +154,7 @@ class ArrangementEditor {
                 </div>
                 
                 <div class="arrangement-editor-footer">
-                    <button class="btn btn-secondary" id="export-json-btn">Export JSON</button>
+                    ${this.editingId ? '<button class="btn btn-primary" id="publish-btn">Publish</button>' : ''}
                     ${this.editingId ? '<button class="btn btn-danger" id="delete-arrangement-btn">Delete</button>' : ''}
                 </div>
             </div>
@@ -242,10 +245,10 @@ class ArrangementEditor {
             });
         }
 
-        // Export JSON button
-        const exportBtn = document.getElementById('export-json-btn');
-        if (exportBtn) {
-            exportBtn.addEventListener('click', () => this.exportJSON());
+        // Publish button
+        const publishBtn = document.getElementById('publish-btn');
+        if (publishBtn) {
+            publishBtn.addEventListener('click', () => this.publish());
         }
 
         // Delete button (only shown when editing)
@@ -373,20 +376,19 @@ class ArrangementEditor {
     }
 
     /**
-     * Export the arrangement as JSON
+     * Publish the arrangement to make it permanently available
      */
-    async exportJSON() {
+    async publish() {
         const name = this.draftName.trim() || 'Custom Arrangement';
         
-        // Remove modal class before showing export dialog
+        // Remove modal class before showing dialogs
         this.removeModalClass();
         
         if (this.draftSections.length === 0) {
             await this.modal.alert({
-                title: 'Cannot Export',
-                message: 'Add at least one section to your arrangement before exporting.'
+                title: 'Cannot Publish',
+                message: 'Add at least one section to your arrangement before publishing.'
             });
-            // Re-show the editor dialog
             this.showDialog();
             return;
         }
@@ -394,6 +396,128 @@ class ArrangementEditor {
         const song = State.getSong(this.songId);
         const songName = song?.name || song?.songName || 'Unknown';
         
+        // Prompt for admin secret
+        const secret = await this.promptForSecret('Publish Arrangement');
+        if (!secret) {
+            // User cancelled
+            this.showDialog();
+            return;
+        }
+
+        // Attempt to publish
+        const tabs = getTabs();
+        try {
+            await publishArrangement(songName, {
+                name: name,
+                sections: this.draftSections
+            }, secret);
+
+            // Success - refresh metadata with retry (wait for CloudFront invalidation)
+            tabs.setRefreshingState(true);
+            const newMetadata = await refreshMetadataWithRetry(
+                songName,
+                (meta) => meta?.arrangements?.some(a => a.name === name)
+            );
+            tabs.setRefreshingState(false);
+            
+            if (newMetadata) {
+                State.updateSongMetadata(song.id, newMetadata);
+            }
+
+            // Remove the custom arrangement from local storage since it's now published
+            if (this.editingId) {
+                State.deleteCustomArrangement(song.songName, this.editingId);
+            }
+
+            // Switch to the newly published arrangement (updates dropdown, waveforms, timeline, etc.)
+            State.setArrangement(song.id, name, null);
+
+            // TODO: Re-enable if not interfering with UI updates
+            // await this.modal.alert({
+            //     title: 'Published',
+            //     message: `Arrangement "${name}" has been published and is now available to all users.`
+            // });
+
+            // Close the editor (don't re-show)
+        } catch (error) {
+            tabs.setRefreshingState(false);
+            console.error('Publish failed:', error);
+            
+            if (error.status === 401) {
+                await this.modal.alert({
+                    title: 'Invalid Secret',
+                    message: 'The admin secret is incorrect. Please try again.'
+                });
+                this.showDialog();
+            } else if (error.status === 409) {
+                await this.modal.alert({
+                    title: 'Name Already Exists',
+                    message: `An arrangement named "${name}" already exists for this song. Please choose a different name.`
+                });
+                this.showDialog();
+            } else {
+                // Unexpected error - show fallback with JSON export
+                await this.showExportFallback(songName, name);
+            }
+        }
+    }
+
+    /**
+     * Prompt user for admin secret
+     * @param {string} title - Dialog title
+     * @returns {Promise<string|null>} - Secret or null if cancelled
+     */
+    async promptForSecret(title) {
+        return new Promise((resolve) => {
+            const content = `
+                <p>Enter the admin secret to continue:</p>
+                <input type="password" 
+                       id="admin-secret-input" 
+                       placeholder="Admin secret"
+                       style="width: 100%; padding: 8px; margin-top: 8px; 
+                              background: var(--bg-tertiary); 
+                              border: 1px solid var(--border-color); 
+                              border-radius: 4px; 
+                              color: var(--text-primary);
+                              font-size: 14px;">
+            `;
+
+            this.modal.show({
+                title: title,
+                content: content,
+                confirmText: 'Continue',
+                cancelText: 'Cancel',
+                confirmClass: 'btn-primary',
+                showCancel: true,
+                onShow: () => {
+                    const input = document.getElementById('admin-secret-input');
+                    if (input) {
+                        setTimeout(() => input.focus(), 50);
+                        input.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                this.modal.close(true);
+                            }
+                        });
+                    }
+                },
+                onConfirm: () => {
+                    const input = document.getElementById('admin-secret-input');
+                    resolve(input?.value || null);
+                },
+                onCancel: () => {
+                    resolve(null);
+                }
+            });
+        });
+    }
+
+    /**
+     * Show export fallback when publish fails unexpectedly
+     * @param {string} songName - Song name
+     * @param {string} name - Arrangement name
+     */
+    async showExportFallback(songName, name) {
         // Build JSON manually to keep sections array on one line
         const sectionsStr = '[' + this.draftSections.join(', ') + ']';
         const jsonStr = `{
@@ -401,16 +525,15 @@ class ArrangementEditor {
 \t"sections": ${sectionsStr}
 }`;
         
-        // Build the full export text with song context
         const exportText = `Custom Arrangement For song: ${songName}\n\n${jsonStr}`;
 
         const content = `
-            <p>Copy this and send it to an admin to add to the song's metadata:</p>
+            <p>Publishing failed. Copy this JSON and send to an admin manually, or try again later:</p>
             <textarea id="export-json-text" readonly style="width: 100%; height: 160px; font-family: monospace; font-size: 12px; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); resize: none;">${this.escapeHtml(exportText)}</textarea>
             <button id="copy-json-btn" class="btn btn-secondary" style="margin-top: 8px;">Copy to Clipboard</button>
         `;
 
-        // Attach copy button handler before showing alert
+        // Attach copy button handler
         setTimeout(() => {
             const copyBtn = document.getElementById('copy-json-btn');
             const textArea = document.getElementById('export-json-text');
@@ -423,12 +546,10 @@ class ArrangementEditor {
                             copyBtn.textContent = 'Copy to Clipboard';
                         }, 2000);
                     } catch (err) {
-                        // Fallback - select the text
                         textArea.select();
                         textArea.setSelectionRange(0, 99999);
                     }
                 });
-                // Select text on focus
                 textArea.addEventListener('focus', () => {
                     textArea.select();
                 });
@@ -440,7 +561,6 @@ class ArrangementEditor {
             message: content
         });
 
-        // Re-show the editor dialog after export alert closes
         this.showDialog();
     }
 

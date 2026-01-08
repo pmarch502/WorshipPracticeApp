@@ -49,6 +49,63 @@ export function clearCache() {
     metadataCache.clear();
 }
 
+/**
+ * Clear cached metadata for a specific song
+ * @param {string} songName - Song name
+ */
+export function clearCacheForSong(songName) {
+    metadataCache.delete(songName);
+}
+
+/**
+ * Refresh metadata for a song (bypasses cache)
+ * @param {string} songName - Song name (directory name)
+ * @returns {Promise<Object|null>} Fresh metadata object or null if not found
+ */
+export async function refreshMetadata(songName) {
+    // Clear the cache for this song to force a fresh fetch
+    clearCacheForSong(songName);
+    
+    // Add cache-busting query parameter to bypass CDN cache
+    // (CloudFront invalidation may take a moment to propagate)
+    try {
+        const path = `audio/${encodeURIComponent(songName)}/metadata.json?_=${Date.now()}`;
+        const response = await fetch(path);
+        if (!response.ok) {
+            console.warn(`No metadata found for ${songName}`);
+            return null;
+        }
+        const metadata = await response.json();
+        metadataCache.set(songName, metadata);
+        return metadata;
+    } catch (error) {
+        console.warn(`Failed to refresh metadata for ${songName}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Refresh metadata with retry logic, waiting for expected changes to propagate
+ * Use this after publish/delete operations when CloudFront invalidation may be in progress
+ * @param {string} songName - Song name (directory name)
+ * @param {Function} expectedChange - Predicate function (metadata) => boolean, returns true when expected change is present
+ * @param {number} maxRetries - Maximum number of retry attempts (default 5)
+ * @param {number} delayMs - Delay between retries in milliseconds (default 1000)
+ * @returns {Promise<Object|null>} Fresh metadata object or null if not found
+ */
+export async function refreshMetadataWithRetry(songName, expectedChange, maxRetries = 8, delayMs = 1250) {
+    for (let i = 0; i < maxRetries; i++) {
+        const metadata = await refreshMetadata(songName);
+        if (expectedChange(metadata)) {
+            return metadata; // Success - change is present
+        }
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    // Return last fetched metadata even if change not detected
+    return await refreshMetadata(songName);
+}
+
 // ============================================================================
 // Tempo Utility Functions
 // ============================================================================
