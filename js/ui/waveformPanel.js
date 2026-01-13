@@ -438,10 +438,12 @@ class WaveformPanel {
         const song = State.getActiveSong();
         if (!song) return;
 
-        const rect = this.container.getBoundingClientRect();
+        // Use scrollArea's rect, not container's, to avoid double-counting scroll offset
+        // (container moves with scroll, but scrollArea stays fixed in viewport)
+        const rect = this.scrollArea.getBoundingClientRect();
         const clickX = e.clientX - rect.left + this.scrollArea.scrollLeft;
         
-        const zoom = song.timeline?.zoom || 1;
+        const zoom = this.getEffectiveZoom();
         const offset = song.timeline?.offset || 0;
         
         // Convert pixel position to time
