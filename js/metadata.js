@@ -93,7 +93,7 @@ export async function refreshMetadata(songName) {
  * @param {number} delayMs - Delay between retries in milliseconds (default 1000)
  * @returns {Promise<Object|null>} Fresh metadata object or null if not found
  */
-export async function refreshMetadataWithRetry(songName, expectedChange, maxRetries = 8, delayMs = 1250) {
+export async function refreshMetadataWithRetry(songName, expectedChange, maxRetries = 20, delayMs = 1500) {
     for (let i = 0; i < maxRetries; i++) {
         const metadata = await refreshMetadata(songName);
         if (expectedChange(metadata)) {
