@@ -692,7 +692,7 @@
             
             <ul>
                 <li><strong>Original:</strong> The default arrangement plays all sections in their original order</li>
-                <li><strong>Worship Leader Arrangements:</strong> Pre-defined variations included with the song (e.g., "Short Version", "Extended Worship")</li>
+                <li><strong>Published Arrangements:</strong> Pre-defined variations included with the song (e.g., "Shortened", "Christmas")</li>
                 <li><strong>Custom Arrangements:</strong> Your own arrangements created using the Arrangement Editor</li>
             </ul>
             
@@ -705,8 +705,10 @@
             
             <p>The dropdown shows:</p>
             <ul>
+                <li><strong>Refresh</strong> — If the Worship Leader has published new or changed arrangements, you may need to click this to see those changes.</li>
                 <li><strong>Original</strong> — Always available, plays sections in their natural order</li>
-                <li><strong>Worship Leader arrangements</strong> — Pre-defined by the worship leader or music director</li>
+                <li><strong>Published arrangements</strong> — Pre-defined by the worship leader or music director</li>
+                <li><strong>Manage Published...</strong> — Opens the editor to modify or delete existing custom arrangements (secret key protected)
                 <li><strong>Your custom arrangements</strong> — Arrangements you've created</li>
                 <li><strong>New Custom...</strong> — Opens the Arrangement Editor to create a new arrangement</li>
                 <li><strong>Manage Custom...</strong> — Opens the editor to modify or delete existing custom arrangements (only shown if you have custom arrangements)</li>
@@ -810,19 +812,19 @@
             </ol>
             <p>After deletion, the song will revert to the "Original" arrangement.</p>
             
-            <h3>Exporting an Arrangement</h3>
-            <p>If you create an arrangement that would be useful for others, you can export it as JSON to share with a worship leader or music director who can add it to the song datasource. (This clunky approach is a side effect of running as a static web sight (no server).)</p>
+            <h3>Publishing an Arrangement</h3>
+            <p>If you create an arrangement that would be useful for others, you can publish it (<strong>secret key protected</strong>).</p>
             
             <ol>
                 <li>Open the Arrangement Editor with your arrangement</li>
-                <li>Click the <strong>Export JSON</strong> button</li>
-                <li>A dialog appears with the arrangement in JSON format</li>
-                <li>Click <strong>Copy to Clipboard</strong> to copy the text</li>
-                <li>Send the copied text to an administrator</li>
+                <li>Click the <strong>Publish</strong> button</li>
             </ol>
             
             <div class="note">
                 <strong>Note:</strong> Custom arrangements are stored in your browser's local storage and are specific to your device. Exporting and sharing allows arrangements to be added to the song's metadata for all users.
+            </div>
+            <div class="note">
+                <strong>Note:</strong> Published arrangements may be edited and deleted in the same way as Custom arrangements (via the Manage Published... option). However, these features are protected by a secret key and only available to Worship Leader, ect...
             </div>
         </section>
         

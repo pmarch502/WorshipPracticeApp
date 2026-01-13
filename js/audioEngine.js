@@ -79,6 +79,27 @@ class AudioEngine {
     }
 
     /**
+     * Mute/unmute master output to prevent audio bursts from stale SoundTouch buffers
+     * @param {boolean} muted - Whether to mute
+     * @param {number} fadeTime - Fade duration in seconds (0 for immediate)
+     */
+    setMasterMuted(muted, fadeTime = 0) {
+        if (!this.masterGain) return;
+        const targetValue = muted ? 0 : 1;
+        if (fadeTime > 0) {
+            this.masterGain.gain.linearRampToValueAtTime(
+                targetValue,
+                this.audioContext.currentTime + fadeTime
+            );
+        } else {
+            this.masterGain.gain.setValueAtTime(
+                targetValue,
+                this.audioContext.currentTime
+            );
+        }
+    }
+
+    /**
      * Decode audio file to AudioBuffer
      * @param {Blob} blob - Audio file blob
      * @returns {Promise<AudioBuffer>}
@@ -210,6 +231,9 @@ class AudioEngine {
 
         this.resume();
 
+        // Mute master output to prevent stale SoundTouch buffer audio from playing
+        this.setMasterMuted(true, 0);
+
         // Use provided position or current position (always virtual time)
         const virtualPos = position !== null ? position : song.transport.position;
         
@@ -250,6 +274,13 @@ class AudioEngine {
 
         State.setPlaybackState('playing');
         this.startPositionUpdate();
+
+        // Unmute after short delay to let SoundTouch pipeline flush stale data
+        setTimeout(() => {
+            if (this.isPlaying) {
+                this.setMasterMuted(false, 0.01); // Small fade to avoid clicks
+            }
+        }, 50);
     }
 
     /**
@@ -331,6 +362,9 @@ class AudioEngine {
         const song = State.getActiveSong();
         if (!song) return;
 
+        // Mute master output to ensure clean stop
+        this.setMasterMuted(true, 0);
+
         this.isPlaying = false;
         this.stopPositionUpdate();
 
@@ -366,6 +400,9 @@ class AudioEngine {
      */
     pause() {
         if (!this.isPlaying) return;
+
+        // Mute master output to ensure clean pause
+        this.setMasterMuted(true, 0);
 
         const currentPos = this.getCurrentPosition(); // Virtual position
         
