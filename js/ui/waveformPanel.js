@@ -161,6 +161,17 @@ class WaveformPanel {
         this.updateEmptyState();
         this.updateContainerWidth();
         this.updateLoopRegion();
+        this.updatePlayheadPosition();
+        
+        // Scroll to show the playhead for the newly switched song
+        if (song) {
+            const zoom = this.getEffectiveZoom();
+            const offset = song.timeline?.offset || 0;
+            const playheadX = (song.transport.position + offset) * BASE_PIXELS_PER_SECOND * zoom;
+            const viewportWidth = this.scrollArea.clientWidth;
+            // Center the playhead in the viewport
+            this.scrollArea.scrollLeft = Math.max(0, playheadX - viewportWidth / 2);
+        }
     }
 
     /**
