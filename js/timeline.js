@@ -940,89 +940,21 @@ class Timeline {
 
     /**
      * Get beat positions for virtual timeline
-     * Walks through virtual sections and generates beats based on source tempo/time-sig
-     * Measure numbers continue incrementing across sections (no restart)
+     * Returns pre-calculated beats filtered to visible range
+     * Beat positions are calculated once when song loads or arrangement changes
      */
     getVirtualBeatPositions(startTime, endTime, virtualSections, tempos, timeSigs) {
-        const beats = [];
+        const song = State.getActiveSong();
         
-        if (!virtualSections || virtualSections.length === 0) {
-            return beats;
+        // Use pre-calculated beat positions if available
+        if (song?.beatPositions && song.beatPositions.length > 0) {
+            // Filter to visible range
+            // Could optimize with binary search, but filter is fast enough for typical use
+            return song.beatPositions.filter(b => b.time >= startTime && b.time <= endTime);
         }
         
-        // Parse time signature helper
-        const parseTimeSig = (sig) => {
-            const [num] = sig.split('/').map(Number);
-            return num || 4;
-        };
-        
-        // Track continuous measure count across all sections
-        let currentMeasure = 1;
-        let currentBeat = 1;
-        
-        // Process each virtual section
-        for (const section of virtualSections) {
-            // Skip sections that are completely before or after visible range
-            if (section.virtualEnd < startTime) {
-                // Count measures in this section to continue measure numbering
-                const tempo = getTempoAtTime(section.sourceStart, tempos);
-                const timeSig = getTimeSigAtTime(section.sourceStart, timeSigs);
-                const beatsPerMeasure = parseTimeSig(timeSig);
-                const secondsPerBeat = 60 / tempo;
-                const beatsInSection = Math.floor(section.duration / secondsPerBeat);
-                
-                // Update measure/beat count
-                for (let i = 0; i < beatsInSection; i++) {
-                    currentBeat++;
-                    if (currentBeat > beatsPerMeasure) {
-                        currentBeat = 1;
-                        currentMeasure++;
-                    }
-                }
-                continue;
-            }
-            
-            if (section.virtualStart > endTime) {
-                break; // No more visible sections
-            }
-            
-            // Get tempo/time-sig for this section from source position
-            const tempo = getTempoAtTime(section.sourceStart, tempos);
-            const timeSig = getTimeSigAtTime(section.sourceStart, timeSigs);
-            const beatsPerMeasure = parseTimeSig(timeSig);
-            const secondsPerBeat = 60 / tempo;
-            
-            // Generate beats within this section
-            let virtualTime = section.virtualStart;
-            let beat = currentBeat;
-            let measure = currentMeasure;
-            
-            // Start at the first beat >= startTime within this section
-            while (virtualTime < section.virtualEnd && virtualTime < endTime) {
-                if (virtualTime >= startTime) {
-                    beats.push({
-                        time: virtualTime,
-                        measure,
-                        beat,
-                        isMeasureStart: beat === 1,
-                        tempo
-                    });
-                }
-                
-                virtualTime += secondsPerBeat;
-                beat++;
-                if (beat > beatsPerMeasure) {
-                    beat = 1;
-                    measure++;
-                }
-            }
-            
-            // Update continuous counters for next section
-            currentMeasure = measure;
-            currentBeat = beat;
-        }
-        
-        return beats;
+        // Fallback: return empty array (beat positions should always be pre-calculated)
+        return [];
     }
 
     setScrollOffset(offset) {

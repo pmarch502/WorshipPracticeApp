@@ -170,10 +170,11 @@ export function getBeatPositionsInRange(startTime, endTime, tempos, timeSigs) {
     const effectiveTempos = (tempos && tempos.length > 0) ? tempos : [{ tempo: 120, start: 0 }];
     const effectiveTimeSigs = (timeSigs && timeSigs.length > 0) ? timeSigs : [{ sig: '4/4', start: 0 }];
     
-    // Parse the first time signature to get initial beatsPerMeasure
+    // Parse time signature to get beats per measure and beat unit denominator
+    // Returns { numerator, denominator } - e.g., "6/8" -> { numerator: 6, denominator: 8 }
     const parseTimeSig = (sig) => {
-        const [num] = sig.split('/').map(Number);
-        return num || 4;
+        const [num, denom] = sig.split('/').map(Number);
+        return { numerator: num || 4, denominator: denom || 4 };
     };
     
     // Start from time 0 to calculate correct measure/beat numbers
@@ -182,7 +183,7 @@ export function getBeatPositionsInRange(startTime, endTime, tempos, timeSigs) {
     let beat = 1;
     let tempoIndex = 0;
     let timeSigIndex = 0;
-    let beatsPerMeasure = parseTimeSig(effectiveTimeSigs[0].sig);
+    let { numerator: beatsPerMeasure, denominator } = parseTimeSig(effectiveTimeSigs[0].sig);
     
     // Safety limit to prevent infinite loops
     const maxIterations = 100000;
@@ -197,13 +198,16 @@ export function getBeatPositionsInRange(startTime, endTime, tempos, timeSigs) {
             tempoIndex++;
         }
         const currentTempo = effectiveTempos[tempoIndex].tempo;
-        const secondsPerBeat = 60 / currentTempo;
+        // BPM is always in quarter notes, so adjust for beat unit denominator
+        // 4/4: denominator=4, multiply by 4/4=1 (quarter note beat)
+        // 6/8: denominator=8, multiply by 4/8=0.5 (eighth note beat)
+        const secondsPerBeat = (60 / currentTempo) * (4 / denominator);
         
         // Check for time signature change - advance to next time sig if we've passed its start time
         while (timeSigIndex < effectiveTimeSigs.length - 1 && 
                effectiveTimeSigs[timeSigIndex + 1].start <= currentTime) {
             timeSigIndex++;
-            beatsPerMeasure = parseTimeSig(effectiveTimeSigs[timeSigIndex].sig);
+            ({ numerator: beatsPerMeasure, denominator } = parseTimeSig(effectiveTimeSigs[timeSigIndex].sig));
         }
         
         // Only add beats that are in the visible range
@@ -241,7 +245,11 @@ export function findNearestBeat(timeSeconds, tempos, timeSigs) {
     
     // Get beats around the target time (with some margin)
     const tempo = getTempoAtTime(timeSeconds, tempos);
-    const margin = (60 / tempo) * 2; // 2 beats worth of margin
+    const timeSig = getTimeSigAtTime(timeSeconds, timeSigs);
+    const [, denom] = timeSig.split('/').map(Number);
+    const denominator = denom || 4;
+    // Adjust margin for beat unit (e.g., eighth notes in 6/8)
+    const margin = (60 / tempo) * (4 / denominator) * 2; // 2 beats worth of margin
     
     const beats = getBeatPositionsInRange(
         Math.max(0, timeSeconds - margin),
@@ -265,4 +273,129 @@ export function findNearestBeat(timeSeconds, tempos, timeSigs) {
     }
     
     return closest.time;
+}
+
+/**
+ * Pre-calculate all beat positions for a virtual timeline
+ * Iterates sequentially from time=0, properly tracking measure/beat numbers
+ * through time signature changes.
+ * 
+ * @param {number} duration - Total duration in seconds (virtual duration for arrangements)
+ * @param {Array} virtualSections - Virtual sections array (maps virtual time to source time)
+ * @param {Array} tempos - Tempo array [{tempo, start}, ...] in source time
+ * @param {Array} timeSigs - Time signature array [{sig, start}, ...] in source time
+ * @returns {Array} Array of {time, measure, beat, isMeasureStart, tempo}
+ */
+export function calculateAllBeatPositions(duration, virtualSections, tempos, timeSigs) {
+    const beats = [];
+    
+    if (!virtualSections || virtualSections.length === 0 || duration <= 0) {
+        return beats;
+    }
+    
+    const effectiveTempos = (tempos && tempos.length > 0) ? tempos : [{ tempo: 120, start: 0 }];
+    const effectiveTimeSigs = (timeSigs && timeSigs.length > 0) ? timeSigs : [{ sig: '4/4', start: 0 }];
+    
+    // Parse time signature helper
+    const parseTimeSig = (sig) => {
+        const [num, denom] = sig.split('/').map(Number);
+        return { numerator: num || 4, denominator: denom || 4 };
+    };
+    
+    // Helper to map virtual time to source time
+    const virtualToSource = (virtualTime) => {
+        for (const section of virtualSections) {
+            if (virtualTime >= section.virtualStart && virtualTime < section.virtualEnd) {
+                const offsetInSection = virtualTime - section.virtualStart;
+                return section.sourceStart + offsetInSection;
+            }
+        }
+        // If past all sections, use the last section's mapping
+        const lastSection = virtualSections[virtualSections.length - 1];
+        const offsetInSection = virtualTime - lastSection.virtualStart;
+        return lastSection.sourceStart + offsetInSection;
+    };
+    
+    // Small epsilon for floating point comparisons
+    const EPSILON = 0.001;
+    
+    // =================================================================
+    // Build a set of authoritative beat times from tempo changes
+    // Tempo changes always happen on beat boundaries, so these times
+    // are exact and should be used to avoid floating point drift
+    // =================================================================
+    
+    // Map source tempo change times to virtual times
+    const tempoChangeTimes = new Map(); // virtualTime -> tempo
+    for (const section of virtualSections) {
+        for (const t of effectiveTempos) {
+            // Check if this tempo change falls within this section's source range
+            if (t.start >= section.sourceStart && t.start < section.sourceEnd) {
+                const offsetInSource = t.start - section.sourceStart;
+                const virtualTime = section.virtualStart + offsetInSource;
+                if (virtualTime < duration) {
+                    tempoChangeTimes.set(virtualTime, t.tempo);
+                }
+            }
+        }
+    }
+    
+    // =================================================================
+    // Simple iterative approach: walk through virtual time beat by beat,
+    // tracking measure and beat numbers properly through time sig changes.
+    // Snap to tempo change times when close to avoid floating point drift.
+    // =================================================================
+    
+    let currentTime = 0;
+    let measure = 1;
+    let beat = 1;
+    
+    // Safety limit to prevent infinite loops
+    const maxBeats = 10000;
+    
+    while (currentTime < duration && beats.length < maxBeats) {
+        // Check if we're close to a tempo change time and snap to it
+        // This avoids floating point drift accumulation
+        for (const [tempoChangeTime, _] of tempoChangeTimes) {
+            if (Math.abs(currentTime - tempoChangeTime) < EPSILON) {
+                currentTime = tempoChangeTime;
+                break;
+            }
+        }
+        
+        // Map virtual time to source time for tempo/time-sig lookup
+        const sourceTime = virtualToSource(currentTime);
+        
+        // Get tempo and time signature at this source time
+        const tempo = getTempoAtTime(sourceTime, effectiveTempos);
+        const timeSig = getTimeSigAtTime(sourceTime, effectiveTimeSigs);
+        const { numerator: beatsPerMeasure, denominator } = parseTimeSig(timeSig);
+        
+        // Calculate seconds per beat based on tempo and beat unit
+        // BPM is always in quarter notes, so adjust for denominator
+        // 4/4: denominator=4, multiply by 4/4=1 (quarter note beat)
+        // 6/8: denominator=8, multiply by 4/8=0.5 (eighth note beat)
+        const secondsPerBeat = (60 / tempo) * (4 / denominator);
+        
+        // Add this beat
+        beats.push({
+            time: currentTime,
+            measure,
+            beat,
+            isMeasureStart: beat === 1,
+            tempo
+        });
+        
+        // Advance to next beat
+        currentTime += secondsPerBeat;
+        beat++;
+        
+        // Check if we've completed a measure
+        if (beat > beatsPerMeasure) {
+            beat = 1;
+            measure++;
+        }
+    }
+    
+    return beats;
 }

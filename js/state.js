@@ -4,6 +4,7 @@
  */
 
 import { deriveSections, deriveVirtualSections, getVirtualDuration } from './sections.js';
+import { calculateAllBeatPositions } from './metadata.js';
 
 // Generate unique IDs
 export function generateId() {
@@ -311,6 +312,15 @@ export function updateVirtualSections(songId) {
     // Derive virtual sections
     song.virtualSections = deriveVirtualSections(song.sections, arrangementDef);
     song.virtualDuration = getVirtualDuration(song.virtualSections);
+    
+    // Pre-calculate all beat positions for the virtual timeline
+    // This uses multiplication from tempo change points to avoid floating-point drift
+    song.beatPositions = calculateAllBeatPositions(
+        song.virtualDuration,
+        song.virtualSections,
+        song.metadata?.tempos,
+        song.metadata?.['time-sigs']
+    );
     
     return true;
 }

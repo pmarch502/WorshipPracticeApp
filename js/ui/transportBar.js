@@ -6,6 +6,7 @@
 import * as State from '../state.js';
 import { getTransport } from '../transport.js';
 import { getTempoAtTime, getTimeSigAtTime } from '../metadata.js';
+import { virtualToSourcePosition } from '../sections.js';
 
 // Key names in chromatic order starting from A
 const KEYS = ['A', 'Bb', 'B', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab'];
@@ -59,6 +60,23 @@ class TransportBar {
         
         this.attachEventListeners();
         this.attachStateListeners();
+    }
+
+    /**
+     * Convert virtual time to source time for tempo/time-sig lookups
+     * When using arrangements, the playhead position is in virtual time but
+     * tempo/time-sig data is stored in source time coordinates.
+     * @param {number} virtualTime - Time in virtual timeline (seconds)
+     * @param {Object} song - Song object with virtualSections
+     * @returns {number} Source time in seconds
+     */
+    getSourceTime(virtualTime, song) {
+        const virtualSections = song?.virtualSections;
+        if (virtualSections && virtualSections.length > 0) {
+            const mapping = virtualToSourcePosition(virtualTime, virtualSections);
+            return mapping?.sourceTime ?? virtualTime;
+        }
+        return virtualTime;
     }
 
     attachEventListeners() {
@@ -252,8 +270,11 @@ class TransportBar {
         // Update value displays
         this.speedValueEl.textContent = this.transport.formatSpeed(transport.speed);
         
+        // Convert virtual position to source time for tempo/time-sig lookups
+        const sourceTime = this.getSourceTime(transport.position, song);
+        
         // Tempo always comes from metadata or defaults to 120 BPM
-        const tempo = getTempoAtTime(transport.position, song.metadata?.tempos);
+        const tempo = getTempoAtTime(sourceTime, song.metadata?.tempos);
         this.tempoValueEl.textContent = this.transport.formatTempo(tempo);
 
         const hasTimeSigMetadata = song.metadata?.['time-sigs']?.length > 0;
@@ -263,7 +284,7 @@ class TransportBar {
         
         // For time signature: use metadata if available, otherwise use default 4/4
         if (hasTimeSigMetadata) {
-            const timeSig = getTimeSigAtTime(transport.position, song.metadata['time-sigs']);
+            const timeSig = getTimeSigAtTime(sourceTime, song.metadata['time-sigs']);
             this.timeSignatureEl.textContent = timeSig;
         } else {
             this.timeSignatureEl.textContent = '4/4';
@@ -283,25 +304,29 @@ class TransportBar {
     /**
      * Update tempo display based on current playhead position
      * Uses metadata tempo or falls back to 120 BPM
-     * @param {number} position - Current position in seconds
+     * @param {number} position - Current position in virtual time (seconds)
      */
     updateTempoFromPosition(position) {
         const song = State.getActiveSong();
-        const tempo = getTempoAtTime(position, song?.metadata?.tempos);
+        // Convert virtual position to source time for tempo lookup
+        const sourceTime = this.getSourceTime(position, song);
+        const tempo = getTempoAtTime(sourceTime, song?.metadata?.tempos);
         this.tempoValueEl.textContent = this.transport.formatTempo(tempo);
     }
 
     /**
      * Update time signature display based on current playhead position
      * Only updates display if song has time signature metadata
-     * @param {number} position - Current position in seconds
+     * @param {number} position - Current position in virtual time (seconds)
      */
     updateTimeSigFromPosition(position) {
         const song = State.getActiveSong();
         const timeSigs = song?.metadata?.['time-sigs'];
         
         if (timeSigs && timeSigs.length > 0) {
-            const timeSig = getTimeSigAtTime(position, timeSigs);
+            // Convert virtual position to source time for time sig lookup
+            const sourceTime = this.getSourceTime(position, song);
+            const timeSig = getTimeSigAtTime(sourceTime, timeSigs);
             this.timeSignatureEl.textContent = timeSig;
         }
     }
