@@ -547,7 +547,6 @@ class WaveformPanel {
         
         const zoom = this.getEffectiveZoom();
         const offset = song?.timeline?.offset || 0;
-        const scrollLeft = this.scrollArea.scrollLeft;
         const pixelsPerSecondZoomed = BASE_PIXELS_PER_SECOND * zoom;
         
         const buttons = container.querySelectorAll('.section-mute-btn');
@@ -558,12 +557,11 @@ class WaveformPanel {
             // Use virtual start for arrangements, source start for original
             const sectionStart = useVirtualSections ? section.virtualStart : section.start;
             
-            // Calculate position: section start time to pixels, accounting for offset
+            // Calculate position in world coordinates (not screen) so buttons scroll with content
             const worldX = (sectionStart + offset) * pixelsPerSecondZoomed;
-            const screenX = worldX - scrollLeft;
             
             // Position button with small padding from left edge of section
-            btn.style.left = `${screenX + 4}px`;
+            btn.style.left = `${worldX + 4}px`;
         });
     }
 
