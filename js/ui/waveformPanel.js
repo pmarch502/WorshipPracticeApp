@@ -85,11 +85,24 @@ class WaveformPanel {
             this.updatePlayheadPosition(position);
         });
 
-        State.subscribe(State.Events.ZOOM_CHANGED, () => {
+        State.subscribe(State.Events.ZOOM_CHANGED, (newZoom) => {
             this.updateContainerWidth();
             this.redrawAllWaveforms();
             this.updateLoopRegion();
             this.updateAllSectionMuteButtonPositions();
+            
+            // Scroll to keep playhead visible (centered in viewport)
+            const song = State.getActiveSong();
+            if (song) {
+                const position = song.transport.position;
+                const offset = song.timeline?.offset || 0;
+                const zoom = newZoom || this.getEffectiveZoom();
+                const playheadPixelX = (position + offset) * BASE_PIXELS_PER_SECOND * zoom;
+                const viewportWidth = this.scrollArea.clientWidth;
+                
+                // Center the playhead in the viewport
+                this.scrollArea.scrollLeft = Math.max(0, playheadPixelX - viewportWidth / 2);
+            }
         });
 
         // Update loop region when loop state changes
