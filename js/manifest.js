@@ -3,6 +3,8 @@
  * Handles loading and caching the audio manifest
  */
 
+const API_BASE_URL = 'https://g1pan67cc9.execute-api.us-east-2.amazonaws.com/prod';
+
 let manifest = null;
 let loadPromise = null;
 
@@ -21,8 +23,8 @@ export async function loadManifest() {
         return loadPromise;
     }
     
-    // Load manifest
-    loadPromise = fetch('audio/manifest.json')
+    // Load manifest from API
+    loadPromise = fetch(`${API_BASE_URL}/manifest`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`Failed to load manifest: ${response.status}`);

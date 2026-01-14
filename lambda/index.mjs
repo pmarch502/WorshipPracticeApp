@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-cloudfront';
 const s3 = new S3Client({ region: process.env.AWS_REGION });
 const cloudfront = new CloudFrontClient({ region: process.env.AWS_REGION });
@@ -9,13 +9,22 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET;
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS'
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS'
 };
 export const handler = async (event) => {
     console.log('Event:', JSON.stringify(event, null, 2));
     // Handle CORS preflight
     if (event.httpMethod === 'OPTIONS') {
         return { statusCode: 200, headers: corsHeaders, body: '' };
+    }
+    // Handle GET /manifest (public, no auth required)
+    if (event.httpMethod === 'GET' && event.resource === '/manifest') {
+        try {
+            return await handleGetManifest();
+        } catch (err) {
+            console.error('Error in handleGetManifest:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
     }
     try {
         const body = JSON.parse(event.body || '{}');
@@ -37,6 +46,90 @@ export const handler = async (event) => {
         return response(500, { error: 'Internal server error', details: err.message });
     }
 };
+async function handleGetManifest() {
+    console.log('handleGetManifest called, bucket:', BUCKET);
+    
+    // Collect all objects with pagination support
+    const allObjects = [];
+    let continuationToken = undefined;
+    
+    do {
+        const command = new ListObjectsV2Command({
+            Bucket: BUCKET,
+            Prefix: 'audio/',
+            ContinuationToken: continuationToken
+        });
+        const result = await s3.send(command);
+        
+        if (result.Contents) {
+            allObjects.push(...result.Contents);
+        }
+        
+        continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+    } while (continuationToken);
+    
+    // Parse objects into songs and tracks
+    // Key format: audio/{songName}/{trackFileName}
+    const songMap = new Map();
+    
+    for (const obj of allObjects) {
+        const key = obj.Key;
+        
+        // Skip if not under audio/ prefix or is the audio/ folder itself
+        if (!key.startsWith('audio/') || key === 'audio/') {
+            continue;
+        }
+        
+        // Remove 'audio/' prefix and split
+        const relativePath = key.slice(6); // Remove 'audio/'
+        const parts = relativePath.split('/');
+        
+        // Must have exactly 2 parts: songName/trackFileName
+        if (parts.length !== 2) {
+            continue;
+        }
+        
+        const [songName, trackFileName] = parts;
+        
+        // Skip if not an mp3 file
+        if (!trackFileName.toLowerCase().endsWith('.mp3')) {
+            continue;
+        }
+        
+        // Skip empty song names or track names
+        if (!songName || !trackFileName) {
+            continue;
+        }
+        
+        // Add to song map
+        if (!songMap.has(songName)) {
+            songMap.set(songName, []);
+        }
+        songMap.get(songName).push(trackFileName);
+    }
+    
+    // Convert to array and sort
+    const songs = [];
+    for (const [name, tracks] of songMap) {
+        // Sort tracks alphabetically
+        tracks.sort((a, b) => a.localeCompare(b));
+        songs.push({ name, tracks });
+    }
+    
+    // Sort songs alphabetically
+    songs.sort((a, b) => a.name.localeCompare(b.name));
+    
+    // Build manifest response
+    const manifest = {
+        generated: new Date().toISOString(),
+        songs
+    };
+    
+    console.log(`Manifest generated: ${songs.length} songs`);
+    
+    return response(200, manifest);
+}
+
 async function handlePublish({ songName, arrangement }) {
     console.log('handlePublish called with:', { songName, arrangement });
     // Validate input
