@@ -426,10 +426,10 @@ class Timeline {
             
             State.updateLoop({ start, end, enabled: true });
         } else {
-            // It was a click (not a drag) - seek to position
+            // It was a click (not a drag) - seek to position, snapped to nearest beat
             const rect = this.activeCanvas.getBoundingClientRect();
             const clickX = e.clientX - rect.left + this.scrollOffset;
-            const position = this.pixelToTime(clickX);
+            const position = this.snapToBeat(this.pixelToTime(clickX));
             
             if (window.audioEngine) {
                 window.audioEngine.seek(position);
@@ -583,7 +583,8 @@ class Timeline {
         if (useVirtualSections) {
             markersToRender = virtualSections.map(section => ({
                 start: section.virtualStart,
-                name: section.name
+                name: section.name,
+                unlabeled: section.unlabeled
             }));
         } else {
             const markers = song.metadata?.markers;
@@ -599,6 +600,9 @@ class Timeline {
         ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         
         for (const marker of markersToRender) {
+            // Skip label/triangle rendering for unlabeled markers
+            if (marker.unlabeled) continue;
+            
             const x = this.timeToPixel(marker.start);
             
             // Skip if outside visible range (with some margin for label)

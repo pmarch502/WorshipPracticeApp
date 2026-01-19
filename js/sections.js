@@ -31,6 +31,7 @@ export function deriveSections(markers, totalDuration) {
         sections.push({
             index: i,
             name: marker.name || `Section ${i + 1}`,
+            unlabeled: marker.unlabeled || false,
             start: marker.start,
             end: end,
             duration: end - marker.start
@@ -135,6 +136,7 @@ export function deriveVirtualSections(sections, arrangementIndices = null) {
             sourceStart: sourceSection.start,
             sourceEnd: sourceSection.end,
             name: sourceSection.name,
+            unlabeled: sourceSection.unlabeled,
             duration: duration
         });
         

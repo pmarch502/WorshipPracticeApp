@@ -5,6 +5,7 @@
 
 import * as State from '../state.js';
 import * as Waveform from '../waveform.js';
+import { findNearestBeat } from '../metadata.js';
 
 const BASE_PIXELS_PER_SECOND = 100;
 
@@ -446,10 +447,11 @@ class WaveformPanel {
         const zoom = this.getEffectiveZoom();
         const offset = song.timeline?.offset || 0;
         
-        // Convert pixel position to time
+        // Convert pixel position to time and snap to nearest beat
         let position = clickX / (BASE_PIXELS_PER_SECOND * zoom);
         position -= offset;
         position = Math.max(0, position);
+        position = findNearestBeat(position, song.metadata?.tempos, song.metadata?.timeSigs);
         
         // Seek to position
         const audioEngine = (window.audioEngine);
