@@ -1390,7 +1390,37 @@ body {
     font-size: 14px;
 }
 
+/* ========================================
+   Beat Time Tooltip (Ctrl+hover on timeline)
+   ======================================== */
+.beat-time-tooltip {
+    position: fixed;
+    background: #1a1a1a;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: #fff;
+    font-size: 12px;
+    font-family: monospace;
+    pointer-events: none;
+    z-index: 1500;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
 
+.beat-time-tooltip.hidden {
+    display: none;
+}
+
+.beat-time-tooltip .beat-position {
+    color: #aaa;
+    margin-left: 8px;
+}
+
+.beat-time-tooltip.copied {
+    background: #1a3a1a;
+    border-color: #4a4;
+}
 
 /* ========================================
    Knob Component

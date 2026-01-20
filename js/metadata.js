@@ -276,6 +276,52 @@ export function findNearestBeat(timeSeconds, tempos, timeSigs) {
 }
 
 /**
+ * Find the nearest beat to a given time and return full beat info
+ * @param {number} timeSeconds - Target time in seconds
+ * @param {Array|null} tempos - Tempo data array
+ * @param {Array|null} timeSigs - Time signature data array
+ * @returns {Object} - Full beat info: {time, measure, beat, isMeasureStart, tempo}
+ */
+export function findNearestBeatInfo(timeSeconds, tempos, timeSigs) {
+    if (timeSeconds < 0) {
+        return { time: 0, measure: 1, beat: 1, isMeasureStart: true, tempo: getTempoAtTime(0, tempos) };
+    }
+    
+    // Get beats around the target time (with some margin)
+    const tempo = getTempoAtTime(timeSeconds, tempos);
+    const timeSig = getTimeSigAtTime(timeSeconds, timeSigs);
+    const [, denom] = timeSig.split('/').map(Number);
+    const denominator = denom || 4;
+    // Adjust margin for beat unit (e.g., eighth notes in 6/8)
+    const margin = (60 / tempo) * (4 / denominator) * 2; // 2 beats worth of margin
+    
+    const beats = getBeatPositionsInRange(
+        Math.max(0, timeSeconds - margin),
+        timeSeconds + margin,
+        tempos,
+        timeSigs
+    );
+    
+    if (beats.length === 0) {
+        return { time: timeSeconds, measure: 1, beat: 1, isMeasureStart: false, tempo };
+    }
+    
+    // Find closest beat
+    let closest = beats[0];
+    let minDiff = Math.abs(beats[0].time - timeSeconds);
+    
+    for (const beat of beats) {
+        const diff = Math.abs(beat.time - timeSeconds);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closest = beat;
+        }
+    }
+    
+    return closest;
+}
+
+/**
  * Pre-calculate all beat positions for a virtual timeline
  * Iterates sequentially from time=0, properly tracking measure/beat numbers
  * through time signature changes.

@@ -4,7 +4,7 @@
  */
 
 import * as State from './state.js';
-import { getBeatPositionsInRange, findNearestBeat, getTempoAtTime, getTimeSigAtTime } from './metadata.js';
+import { getBeatPositionsInRange, findNearestBeat, findNearestBeatInfo, getTempoAtTime, getTimeSigAtTime } from './metadata.js';
 import { virtualToSourcePosition } from './sections.js';
 
 const BASE_PIXELS_PER_SECOND = 100;
@@ -58,6 +58,10 @@ class Timeline {
         this.dragCurrentTime = 0;
         this.mouseDownX = 0;
         this.mouseDownY = 0;
+        
+        // Beat time tooltip for Ctrl+hover
+        this.beatTimeTooltip = document.getElementById('beat-time-tooltip');
+        this.lastBeatInfo = null; // Cache for Ctrl+click
         
         this.init();
         this.attachStateListeners();
@@ -214,14 +218,24 @@ class Timeline {
             this.timeCanvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
             this.beatsCanvas.addEventListener('mousemove', (e) => this.handleMouseMoveHover(e));
             this.timeCanvas.addEventListener('mousemove', (e) => this.handleMouseMoveHover(e));
+            this.beatsCanvas.addEventListener('mouseleave', () => this.hideBeatTimeTooltip());
+            this.timeCanvas.addEventListener('mouseleave', () => this.hideBeatTimeTooltip());
         } else if (this.legacyCanvas) {
             this.legacyCanvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
             this.legacyCanvas.addEventListener('mousemove', (e) => this.handleMouseMoveHover(e));
+            this.legacyCanvas.addEventListener('mouseleave', () => this.hideBeatTimeTooltip());
         }
 
         // Global mouse events for drag handling
         document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+        
+        // Hide tooltip when Ctrl is released
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'Control') {
+                this.hideBeatTimeTooltip();
+            }
+        });
     }
 
     /**
@@ -293,7 +307,7 @@ class Timeline {
     }
 
     /**
-     * Update cursor based on hover position
+     * Update cursor based on hover position and show beat time tooltip if Ctrl is held
      */
     handleMouseMoveHover(e) {
         const rect = e.target.getBoundingClientRect();
@@ -303,6 +317,21 @@ class Timeline {
             e.target.style.cursor = 'ew-resize';
         } else {
             e.target.style.cursor = 'default';
+        }
+        
+        // Show beat time tooltip when Ctrl is held
+        if (e.ctrlKey) {
+            const song = State.getActiveSong();
+            if (!song) return;
+            
+            const mouseX = e.clientX - rect.left + this.scrollOffset;
+            const time = this.pixelToTime(mouseX);
+            const beatInfo = findNearestBeatInfo(time, song.metadata?.tempos, song.metadata?.['time-sigs']);
+            
+            this.lastBeatInfo = beatInfo; // Cache for potential Ctrl+click
+            this.showBeatTimeTooltip(e.clientX, e.clientY, beatInfo);
+        } else {
+            this.hideBeatTimeTooltip();
         }
     }
 
@@ -426,15 +455,24 @@ class Timeline {
             
             State.updateLoop({ start, end, enabled: true });
         } else {
-            // It was a click (not a drag) - seek to position, snapped to nearest beat
+            // It was a click (not a drag)
             const rect = this.activeCanvas.getBoundingClientRect();
             const clickX = e.clientX - rect.left + this.scrollOffset;
-            const position = this.snapToBeat(this.pixelToTime(clickX));
             
-            if (window.audioEngine) {
-                window.audioEngine.seek(position);
+            if (e.ctrlKey) {
+                // Ctrl+click: copy exact beat time to clipboard
+                const time = this.pixelToTime(clickX);
+                const beatInfo = findNearestBeatInfo(time, song.metadata?.tempos, song.metadata?.['time-sigs']);
+                this.copyBeatTimeToClipboard(beatInfo, e.clientX, e.clientY);
             } else {
-                State.setPosition(position);
+                // Regular click: seek to position, snapped to nearest beat
+                const position = this.snapToBeat(this.pixelToTime(clickX));
+                
+                if (window.audioEngine) {
+                    window.audioEngine.seek(position);
+                } else {
+                    State.setPosition(position);
+                }
             }
         }
         
@@ -446,6 +484,68 @@ class Timeline {
         this.isHandleDragging = false;
         this.dragHandle = null;
         this.activeCanvas = null;
+    }
+
+    /**
+     * Format time with high precision (up to 15 decimal places, no trailing zeros)
+     */
+    formatExactTime(seconds) {
+        // Use toPrecision(15) for max precision, then convert back to number to strip trailing zeros
+        return parseFloat(seconds.toPrecision(15)).toString();
+    }
+
+    /**
+     * Show beat time tooltip at cursor position
+     */
+    showBeatTimeTooltip(clientX, clientY, beatInfo) {
+        if (!this.beatTimeTooltip) return;
+        
+        const timeStr = this.formatExactTime(beatInfo.time);
+        const beatStr = `M${beatInfo.measure}:B${beatInfo.beat}`;
+        
+        this.beatTimeTooltip.innerHTML = `${timeStr}<span class="beat-position">(${beatStr})</span>`;
+        this.beatTimeTooltip.classList.remove('hidden', 'copied');
+        
+        // Position tooltip near cursor (offset slightly to avoid covering the pointer)
+        this.beatTimeTooltip.style.left = `${clientX + 12}px`;
+        this.beatTimeTooltip.style.top = `${clientY - 30}px`;
+    }
+
+    /**
+     * Hide beat time tooltip
+     */
+    hideBeatTimeTooltip() {
+        if (!this.beatTimeTooltip) return;
+        this.beatTimeTooltip.classList.add('hidden');
+        this.lastBeatInfo = null;
+    }
+
+    /**
+     * Copy beat time to clipboard and show feedback
+     */
+    async copyBeatTimeToClipboard(beatInfo, clientX, clientY) {
+        const timeStr = this.formatExactTime(beatInfo.time);
+        
+        try {
+            await navigator.clipboard.writeText(timeStr);
+            
+            // Show "Copied!" feedback in tooltip
+            if (this.beatTimeTooltip) {
+                this.beatTimeTooltip.innerHTML = `Copied: ${timeStr}`;
+                this.beatTimeTooltip.classList.remove('hidden');
+                this.beatTimeTooltip.classList.add('copied');
+                this.beatTimeTooltip.style.left = `${clientX + 12}px`;
+                this.beatTimeTooltip.style.top = `${clientY - 30}px`;
+                
+                // Hide after a short delay
+                setTimeout(() => {
+                    this.beatTimeTooltip.classList.add('hidden');
+                    this.beatTimeTooltip.classList.remove('copied');
+                }, 1500);
+            }
+        } catch (err) {
+            console.error('Failed to copy beat time to clipboard:', err);
+        }
     }
 
     updateZoomSlider() {
