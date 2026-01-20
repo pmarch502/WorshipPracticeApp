@@ -43,6 +43,9 @@ class AudioEngine {
         this.virtualStartPosition = 0; // Virtual position when playback started
         this.sourceStartPosition = 0;  // Source position when playback started
         this.isInCrossfade = false;    // Flag to prevent multiple crossfades
+        
+        // Tab visibility handling - auto-pause when tab is hidden
+        this.autoPausedForVisibility = false;
     }
 
     /**
@@ -66,6 +69,9 @@ class AudioEngine {
         this.pitchShifter.connect(this.masterGain);
         this.masterGain.connect(this.audioContext.destination);
         
+        // Listen for tab visibility changes to pause/resume playback
+        document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
+        
         console.log('Audio engine initialized with SoundTouch worklet, sample rate:', this.audioContext.sampleRate);
     }
 
@@ -75,6 +81,30 @@ class AudioEngine {
     async resume() {
         if (this.audioContext && this.audioContext.state === 'suspended') {
             await this.audioContext.resume();
+        }
+    }
+
+    /**
+     * Handle browser tab visibility changes
+     * Pauses playback when tab is hidden to prevent:
+     * 1. Custom arrangements playing wrong audio (section transitions rely on requestAnimationFrame)
+     * 2. Position drift when returning to tab
+     */
+    handleVisibilityChange() {
+        if (document.hidden) {
+            // Tab became hidden - auto-pause if playing
+            if (this.isPlaying) {
+                this.autoPausedForVisibility = true;
+                this.pause();
+                console.log('Audio auto-paused due to tab visibility change');
+            }
+        } else {
+            // Tab became visible - auto-resume if we auto-paused
+            if (this.autoPausedForVisibility) {
+                this.autoPausedForVisibility = false;
+                this.play();
+                console.log('Audio auto-resumed due to tab visibility change');
+            }
         }
     }
 
