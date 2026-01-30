@@ -37,6 +37,12 @@ export function createDefaultSong(songName) {
         currentArrangementName: null,  // Display name (null = "Original")
         // Note: Section mutes are stored at top-level state.sectionMutes keyed by songName
         // Note: Custom arrangements are stored at top-level state.customArrangements keyed by songName
+        // Phase 4: Waveform-based mute sections (per-track time-based muting)
+        // Structure: { trackId: [{ start, end, muted }, ...] }
+        muteSections: {},
+        muteSetModified: false,      // True if user has made unsaved changes to mute sections
+        currentMuteSetId: null,      // null = "None" (no mute set loaded)
+        currentMuteSetName: null,    // Display name (null = "None")
         transport: {
             position: 0,
             lastPlayPosition: 0,
@@ -156,6 +162,9 @@ export const Events = {
     ARRANGEMENT_CHANGED: 'arrangementChanged',
     CUSTOM_ARRANGEMENTS_UPDATED: 'customArrangementsUpdated',
     ARRANGEMENT_SECTIONS_CHANGED: 'arrangementSectionsChanged',
+    
+    // Mute set events (Phase 4)
+    MUTE_SECTIONS_CHANGED: 'muteSectionsChanged',
     
     // Transport events
     TRANSPORT_UPDATED: 'transportUpdated',
@@ -317,6 +326,33 @@ export function updateSongSections(songId) {
         emit(Events.ARRANGEMENT_SECTIONS_CHANGED, {
             song,
             sections: song.arrangementSections,
+            modified: false
+        });
+    }
+    
+    // Phase 4: Initialize mute sections for any tracks that don't have them
+    // Each track gets a single full-duration unmuted section by default
+    if (!song.muteSections) {
+        song.muteSections = {};
+    }
+    
+    let muteSectionsInitialized = false;
+    song.tracks.forEach(track => {
+        if (!song.muteSections[track.id] && track.duration > 0) {
+            song.muteSections[track.id] = [{
+                start: 0,
+                end: track.duration,
+                muted: false
+            }];
+            muteSectionsInitialized = true;
+        }
+    });
+    
+    if (muteSectionsInitialized) {
+        emit(Events.MUTE_SECTIONS_CHANGED, {
+            song,
+            trackId: null,
+            sections: null,
             modified: false
         });
     }
@@ -838,6 +874,377 @@ export function getArrangementSplitTimes() {
 }
 
 /**
+ * Get the arrangement section at a given time
+ * @param {number} time - Time in seconds
+ * @returns {Object|null} Section object { start, end, enabled, index } or null
+ */
+export function getArrangementSectionAtTime(time) {
+    const song = getActiveSong();
+    if (!song || !song.arrangementSections) return null;
+    
+    for (let i = 0; i < song.arrangementSections.length; i++) {
+        const section = song.arrangementSections[i];
+        if (time >= section.start && time < section.end) {
+            return { ...section, index: i };
+        }
+    }
+    
+    // Edge case: exactly at end of last section
+    const lastIndex = song.arrangementSections.length - 1;
+    const lastSection = song.arrangementSections[lastIndex];
+    if (lastSection && time >= lastSection.start && time <= lastSection.end) {
+        return { ...lastSection, index: lastIndex };
+    }
+    
+    return null;
+}
+
+/**
+ * Get the next enabled arrangement section after a given time
+ * @param {number} time - Current time in seconds
+ * @returns {Object|null} Next enabled section { start, end, enabled, index } or null if none
+ */
+export function getNextEnabledArrangementSection(time) {
+    const song = getActiveSong();
+    if (!song || !song.arrangementSections) return null;
+    
+    // Find sections that start after the given time and are enabled
+    for (let i = 0; i < song.arrangementSections.length; i++) {
+        const section = song.arrangementSections[i];
+        if (section.start > time && section.enabled) {
+            return { ...section, index: i };
+        }
+    }
+    
+    return null;
+}
+
+/**
+ * Get the first enabled arrangement section at or after a given time
+ * Used for finding where to start/resume playback
+ * @param {number} time - Current time in seconds  
+ * @returns {Object|null} Enabled section { start, end, enabled, index } or null if none
+ */
+export function getEnabledArrangementSectionAtOrAfter(time) {
+    const song = getActiveSong();
+    if (!song || !song.arrangementSections) return null;
+    
+    for (let i = 0; i < song.arrangementSections.length; i++) {
+        const section = song.arrangementSections[i];
+        // Section contains the time or starts after it
+        if (section.end > time && section.enabled) {
+            return { ...section, index: i };
+        }
+    }
+    
+    return null;
+}
+
+/**
+ * Check if arrangement sections feature is active (has custom splits)
+ * @returns {boolean} True if there are multiple arrangement sections
+ */
+export function hasArrangementSections() {
+    const song = getActiveSong();
+    return song?.arrangementSections && song.arrangementSections.length > 1;
+}
+
+/**
+ * Check if any arrangement section is disabled
+ * @returns {boolean} True if at least one section is disabled
+ */
+export function hasDisabledArrangementSections() {
+    const song = getActiveSong();
+    if (!song?.arrangementSections) return false;
+    return song.arrangementSections.some(s => !s.enabled);
+}
+
+// ============================================================================
+// Phase 4: Waveform-Based Mute Sections
+// ============================================================================
+
+/**
+ * Get mute sections for a specific track
+ * @param {string} trackId - Track ID
+ * @returns {Array} Array of { start, end, muted } objects
+ */
+export function getMuteSectionsForTrack(trackId) {
+    const song = getActiveSong();
+    if (!song || !song.muteSections) return [];
+    return song.muteSections[trackId] || [];
+}
+
+/**
+ * Set mute sections for a specific track
+ * @param {string} trackId - Track ID
+ * @param {Array} sections - Array of { start, end, muted } objects
+ * @param {boolean} markModified - Whether to mark mute set as modified (default true)
+ */
+export function setMuteSectionsForTrack(trackId, sections, markModified = true) {
+    const song = getActiveSong();
+    if (!song) return false;
+    
+    if (!song.muteSections) {
+        song.muteSections = {};
+    }
+    
+    song.muteSections[trackId] = sections;
+    if (markModified) {
+        song.muteSetModified = true;
+    }
+    
+    emit(Events.MUTE_SECTIONS_CHANGED, {
+        song,
+        trackId,
+        sections,
+        modified: song.muteSetModified
+    });
+    
+    return true;
+}
+
+/**
+ * Check if the mute set has unsaved changes
+ * @returns {boolean} True if mute set has been modified
+ */
+export function isMuteSetModified() {
+    const song = getActiveSong();
+    return song?.muteSetModified || false;
+}
+
+/**
+ * Set the mute set modified flag
+ * @param {boolean} modified - Modified state
+ */
+export function setMuteSetModified(modified) {
+    const song = getActiveSong();
+    if (!song) return false;
+    
+    song.muteSetModified = modified;
+    
+    emit(Events.MUTE_SECTIONS_CHANGED, {
+        song,
+        trackId: null,
+        sections: null,
+        modified
+    });
+    
+    return true;
+}
+
+/**
+ * Get the current mute set display name
+ * @returns {string} Mute set name or "None"
+ */
+export function getCurrentMuteSetDisplayName() {
+    const song = getActiveSong();
+    return song?.currentMuteSetName || 'None';
+}
+
+/**
+ * Initialize mute sections for a single track with full duration, unmuted
+ * @param {string} trackId - Track ID
+ * @param {number} duration - Track duration in seconds
+ * @param {boolean} markModified - Whether to mark as modified (default false for initialization)
+ */
+export function initializeMuteSectionsForTrack(trackId, duration, markModified = false) {
+    if (!trackId || duration <= 0) return false;
+    
+    const sections = [{
+        start: 0,
+        end: duration,
+        muted: false
+    }];
+    
+    return setMuteSectionsForTrack(trackId, sections, markModified);
+}
+
+/**
+ * Initialize mute sections for all tracks in the active song
+ * Only initializes tracks that don't already have mute sections
+ * @param {string} songId - Song ID (optional, defaults to active song)
+ */
+export function initializeAllMuteSections(songId = null) {
+    const song = songId ? getSong(songId) : getActiveSong();
+    if (!song) return false;
+    
+    if (!song.muteSections) {
+        song.muteSections = {};
+    }
+    
+    let initialized = false;
+    
+    song.tracks.forEach(track => {
+        // Only initialize if track doesn't have mute sections and has a duration
+        if (!song.muteSections[track.id] && track.duration > 0) {
+            song.muteSections[track.id] = [{
+                start: 0,
+                end: track.duration,
+                muted: false
+            }];
+            initialized = true;
+        }
+    });
+    
+    if (initialized) {
+        emit(Events.MUTE_SECTIONS_CHANGED, {
+            song,
+            trackId: null, // null indicates multiple tracks changed
+            sections: null,
+            modified: false
+        });
+    }
+    
+    return true;
+}
+
+/**
+ * Add a split to a track's mute sections at a specific time
+ * @param {string} trackId - Track ID
+ * @param {number} splitTime - Time in seconds where to add the split
+ * @returns {boolean} Success
+ */
+export function addMuteSplit(trackId, splitTime) {
+    const song = getActiveSong();
+    if (!song || !trackId) return false;
+    
+    const sections = getMuteSectionsForTrack(trackId);
+    if (sections.length === 0) return false;
+    
+    // Find the section that contains this time
+    let sectionIndex = -1;
+    for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+        if (splitTime > section.start && splitTime < section.end) {
+            sectionIndex = i;
+            break;
+        }
+    }
+    
+    if (sectionIndex === -1) {
+        // Split time is at a boundary or outside sections
+        return false;
+    }
+    
+    const section = sections[sectionIndex];
+    const newSections = [...sections];
+    
+    // Create two new sections from the split
+    const firstSection = {
+        start: section.start,
+        end: splitTime,
+        muted: section.muted
+    };
+    
+    const secondSection = {
+        start: splitTime,
+        end: section.end,
+        muted: section.muted
+    };
+    
+    // Replace the original section with the two new ones
+    newSections.splice(sectionIndex, 1, firstSection, secondSection);
+    
+    return setMuteSectionsForTrack(trackId, newSections, true);
+}
+
+/**
+ * Remove a split from a track's mute sections (merge two sections)
+ * @param {string} trackId - Track ID
+ * @param {number} splitTime - Time of the split to remove
+ * @returns {boolean} Success
+ */
+export function removeMuteSplit(trackId, splitTime) {
+    const song = getActiveSong();
+    if (!song || !trackId) return false;
+    
+    const sections = getMuteSectionsForTrack(trackId);
+    if (sections.length <= 1) return false;
+    
+    // Find the section that starts at this time (the split boundary)
+    const splitIndex = sections.findIndex(s => Math.abs(s.start - splitTime) < 0.001);
+    
+    if (splitIndex <= 0) {
+        // Can't remove the first boundary (time 0) or not found
+        return false;
+    }
+    
+    const newSections = [...sections];
+    
+    // Merge with previous section
+    const prevSection = newSections[splitIndex - 1];
+    const currSection = newSections[splitIndex];
+    
+    const mergedSection = {
+        start: prevSection.start,
+        end: currSection.end,
+        muted: prevSection.muted // Keep the mute state of the first section
+    };
+    
+    // Replace both sections with merged one
+    newSections.splice(splitIndex - 1, 2, mergedSection);
+    
+    return setMuteSectionsForTrack(trackId, newSections, true);
+}
+
+/**
+ * Move a split in a track's mute sections from one time to another
+ * @param {string} trackId - Track ID
+ * @param {number} oldTime - Current split time
+ * @param {number} newTime - New split time
+ * @returns {boolean} Success
+ */
+export function moveMuteSplit(trackId, oldTime, newTime) {
+    const song = getActiveSong();
+    if (!song || !trackId) return false;
+    
+    const sections = getMuteSectionsForTrack(trackId);
+    if (sections.length <= 1) return false;
+    
+    // Find the section that starts at oldTime
+    const splitIndex = sections.findIndex(s => Math.abs(s.start - oldTime) < 0.001);
+    if (splitIndex <= 0) return false; // Can't move first boundary
+    
+    const newSections = [...sections];
+    
+    // Update the boundary
+    newSections[splitIndex - 1] = {
+        ...newSections[splitIndex - 1],
+        end: newTime
+    };
+    newSections[splitIndex] = {
+        ...newSections[splitIndex],
+        start: newTime
+    };
+    
+    return setMuteSectionsForTrack(trackId, newSections, true);
+}
+
+/**
+ * Get the split times for a track (for rendering dividers)
+ * Excludes start (0) and end (duration) boundaries
+ * @param {string} trackId - Track ID
+ * @returns {Array<number>} Array of split times in seconds
+ */
+export function getMuteSplitTimes(trackId) {
+    const sections = getMuteSectionsForTrack(trackId);
+    if (sections.length <= 1) return [];
+    
+    // Return the start time of each section except the first
+    return sections.slice(1).map(s => s.start);
+}
+
+/**
+ * Check if a track has multiple mute sections (has been split)
+ * @param {string} trackId - Track ID
+ * @returns {boolean} True if track has multiple sections
+ */
+export function hasMuteSections(trackId) {
+    const sections = getMuteSectionsForTrack(trackId);
+    return sections.length > 1;
+}
+
+/**
  * Add a track to the active song
  */
 export function addTrack(track) {
@@ -1058,6 +1465,20 @@ export function loadState(savedState) {
             }
             if (song.currentArrangementName === undefined) {
                 song.currentArrangementName = null;
+            }
+            
+            // Phase 4: Waveform-based mute sections migration
+            if (!song.muteSections) {
+                song.muteSections = {};
+            }
+            if (song.muteSetModified === undefined) {
+                song.muteSetModified = false;
+            }
+            if (song.currentMuteSetId === undefined) {
+                song.currentMuteSetId = null;
+            }
+            if (song.currentMuteSetName === undefined) {
+                song.currentMuteSetName = null;
             }
         });
     }

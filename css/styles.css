@@ -746,8 +746,14 @@ body {
     height: 100%;
     background-color: rgba(255, 255, 0, 0.8);
     z-index: 2;
-    pointer-events: none; /* Will be enabled in Phase 3.7 for drag */
+    pointer-events: none; /* Hit detection handled by container for better UX */
     transform: translateX(-1px); /* Center on the split point */
+}
+
+.arrangement-divider:hover,
+.arrangement-divider.dragging {
+    background-color: rgba(255, 255, 0, 1);
+    box-shadow: 0 0 4px rgba(255, 255, 0, 0.5);
 }
 
 /* Legacy single canvas support */
@@ -814,6 +820,53 @@ body {
     height: 100%;
     /* Width set by JS to viewport size - do NOT use 100% as it breaks at high zoom */
     display: block;
+}
+
+/* Disabled Section Overlay Container (Phase 3) */
+.disabled-sections-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* Individual disabled section overlay */
+.disabled-section-overlay {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    pointer-events: none;
+}
+
+/* Mute Section Divider Container (Phase 4) */
+.mute-divider-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 4;
+}
+
+/* Mute Section Divider (Phase 4) */
+.mute-section-divider {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background-color: rgba(0, 206, 209, 0.8); /* Cyan/Teal */
+    pointer-events: none; /* Hit detection handled by wrapper for better UX */
+    transform: translateX(-1px); /* Center on the split point */
+}
+
+.mute-section-divider.dragging {
+    background-color: rgba(0, 206, 209, 1);
+    box-shadow: 0 0 4px rgba(0, 206, 209, 0.5);
 }
 
 /* Section Mute Button Container */

@@ -20,6 +20,9 @@ import {
 import { BASE_PIXELS_PER_SECOND } from './ui/waveformPanel.js';
 import { getWaveformPanel } from './ui/waveformPanel.js';
 
+// Crossfade duration for section skipping (Phase 3)
+const SECTION_SKIP_CROSSFADE_MS = 50;
+
 class AudioEngine {
     constructor() {
         this.audioContext = null;
@@ -269,7 +272,26 @@ class AudioEngine {
         this.setMasterMuted(true, 0);
 
         // Use provided position or current position (always virtual time)
-        const virtualPos = position !== null ? position : song.transport.position;
+        let virtualPos = position !== null ? position : song.transport.position;
+        
+        // Phase 3: Check if starting in a disabled arrangement section
+        // If so, skip to the next enabled section
+        if (State.hasDisabledArrangementSections()) {
+            const currentSection = State.getArrangementSectionAtTime(virtualPos);
+            if (currentSection && !currentSection.enabled) {
+                // Find next enabled section
+                const nextEnabled = State.getNextEnabledArrangementSection(virtualPos);
+                if (nextEnabled) {
+                    virtualPos = nextEnabled.start;
+                    console.log(`Skipping disabled section, starting at ${virtualPos.toFixed(3)}s`);
+                } else {
+                    // No more enabled sections - can't play
+                    console.log('No enabled sections to play');
+                    this.setMasterMuted(false, 0);
+                    return;
+                }
+            }
+        }
         
         // Store last play position for Stop (in virtual time)
         State.updateTransport({ lastPlayPosition: virtualPos });
@@ -638,8 +660,83 @@ class AudioEngine {
     }
 
     /**
+     * Skip to a new position with crossfade (Phase 3)
+     * Used when playback reaches a disabled arrangement section
+     * @param {number} toPosition - Target position in seconds (source/virtual time - same for Phase 3)
+     * @param {number} fadeDuration - Duration of crossfade in seconds
+     */
+    skipToPosition(toPosition, fadeDuration = 0.05) {
+        if (this.isInCrossfade || !this.isPlaying) return;
+        this.isInCrossfade = true;
+        
+        const now = this.audioContext.currentTime;
+        
+        // Fade out all current track gains
+        this.trackNodes.forEach((nodes, trackId) => {
+            if (nodes.gainNode) {
+                nodes.gainNode.gain.cancelScheduledValues(now);
+                nodes.gainNode.gain.setTargetAtTime(0, now, fadeDuration / 3);
+            }
+        });
+        
+        // After fade out, seek to new position
+        setTimeout(() => {
+            // Stop current sources
+            this.trackNodes.forEach((nodes) => {
+                if (nodes.source) {
+                    try {
+                        nodes.source.stop();
+                    } catch (e) {}
+                    nodes.source = null;
+                }
+            });
+            
+            // Clear pitch shifter
+            if (this.pitchShifter) {
+                this.pitchShifter.clear();
+            }
+            
+            // Update tracking state
+            this.startTime = this.audioContext.currentTime;
+            this.startPosition = toPosition;
+            this.virtualStartPosition = toPosition;
+            this.sourceStartPosition = toPosition;
+            
+            // Start at new position with fade in
+            const song = State.getActiveSong();
+            if (song) {
+                song.tracks.forEach(track => {
+                    this.startTrack(track.id, toPosition);
+                    
+                    // Fade in
+                    const nodes = this.trackNodes.get(track.id);
+                    if (nodes && nodes.gainNode) {
+                        const isAudible = State.isTrackAudible(track.id);
+                        const targetGain = isAudible ? track.volume / 100 : 0;
+                        const nowFadeIn = this.audioContext.currentTime;
+                        nodes.gainNode.gain.cancelScheduledValues(nowFadeIn);
+                        nodes.gainNode.gain.setValueAtTime(0, nowFadeIn);
+                        nodes.gainNode.gain.setTargetAtTime(targetGain, nowFadeIn, fadeDuration / 3);
+                    }
+                });
+            }
+            
+            // Update state position
+            State.setPosition(toPosition);
+            
+            this.isInCrossfade = false;
+            
+            // Restart the position update loop (it was stopped when we called skipToPosition)
+            if (this.isPlaying) {
+                this.startPositionUpdate();
+            }
+        }, fadeDuration * 1000);
+    }
+
+    /**
      * Start position update loop
      * Handles virtual timeline section transitions with crossfade
+     * Phase 3: Also handles skipping disabled arrangement sections
      */
     startPositionUpdate() {
         const update = () => {
@@ -654,15 +751,130 @@ class AudioEngine {
                 return;
             }
             
-            // Check if loop is active and we've reached the loop end (in virtual time)
+            // Get loop state early - needed for disabled section checks
             const { loopEnabled, loopStart, loopEnd } = song.transport;
             
+            // Phase 3: Check if entering a disabled arrangement section
+            // This handles the case where playback reaches a disabled section boundary
+            if (State.hasDisabledArrangementSections() && !this.isInCrossfade) {
+                const currentSection = State.getArrangementSectionAtTime(virtualPosition);
+                
+                if (currentSection && !currentSection.enabled) {
+                    // We've entered a disabled section - check if loop end is within this section
+                    if (loopEnabled && loopEnd !== null && 
+                        loopEnd >= currentSection.start && loopEnd <= currentSection.end) {
+                        // Loop end is within this disabled section - loop back instead of skipping
+                        console.log(`Loop end (${loopEnd.toFixed(3)}s) is within disabled section, looping back to start`);
+                        this.seek(loopStart);
+                        return;
+                    }
+                    
+                    // Skip to next enabled section
+                    const nextEnabled = State.getNextEnabledArrangementSection(virtualPosition);
+                    
+                    if (nextEnabled) {
+                        // Check if loop end falls between current position and next enabled section
+                        if (loopEnabled && loopEnd !== null &&
+                            loopEnd > virtualPosition && loopEnd < nextEnabled.start) {
+                            // Loop end is within the range we're about to skip - loop back instead
+                            console.log(`Loop end (${loopEnd.toFixed(3)}s) is within skip range, looping back to start`);
+                            this.seek(loopStart);
+                            return;
+                        }
+                        
+                        console.log(`Skipping disabled section at ${virtualPosition.toFixed(3)}s, jumping to ${nextEnabled.start.toFixed(3)}s`);
+                        this.skipToPosition(nextEnabled.start, SECTION_SKIP_CROSSFADE_MS / 1000);
+                        return;
+                    } else {
+                        // No more enabled sections - check if we should loop
+                        if (loopEnabled && loopEnd !== null && loopEnd >= currentSection.start) {
+                            console.log('No more enabled sections but loop end reached, looping back');
+                            this.seek(loopStart);
+                            return;
+                        }
+                        // No more enabled sections - stop playback
+                        console.log('No more enabled sections, stopping playback');
+                        this.stop();
+                        return;
+                    }
+                }
+                
+                // Also check if we're about to enter a disabled section (pre-emptive skip)
+                // This creates a smoother transition by skipping slightly before the boundary
+                if (currentSection && currentSection.enabled) {
+                    const timeUntilEnd = currentSection.end - virtualPosition;
+                    if (timeUntilEnd > 0 && timeUntilEnd < 0.05) { // Within 50ms of section end
+                        // Check if the NEXT section is disabled
+                        const nextSection = State.getArrangementSectionAtTime(currentSection.end + 0.001);
+                        if (nextSection && !nextSection.enabled) {
+                            // Check if loop end is within the disabled section we're about to enter
+                            if (loopEnabled && loopEnd !== null &&
+                                loopEnd >= nextSection.start && loopEnd <= nextSection.end) {
+                                // Loop end is within the disabled section - loop back instead of skipping
+                                console.log(`Pre-emptive: Loop end (${loopEnd.toFixed(3)}s) is within disabled section, looping back`);
+                                this.seek(loopStart);
+                                return;
+                            }
+                            
+                            // Next section is disabled - find next enabled one
+                            const nextEnabled = State.getNextEnabledArrangementSection(currentSection.end);
+                            if (nextEnabled) {
+                                // Check if loop end falls between current section end and next enabled section
+                                if (loopEnabled && loopEnd !== null &&
+                                    loopEnd > currentSection.end && loopEnd < nextEnabled.start) {
+                                    // Loop end is within the range we're about to skip - loop back instead
+                                    console.log(`Pre-emptive: Loop end (${loopEnd.toFixed(3)}s) is within skip range, looping back`);
+                                    this.seek(loopStart);
+                                    return;
+                                }
+                                
+                                console.log(`Pre-emptive skip: section ending at ${currentSection.end.toFixed(3)}s, next enabled at ${nextEnabled.start.toFixed(3)}s`);
+                                this.skipToPosition(nextEnabled.start, SECTION_SKIP_CROSSFADE_MS / 1000);
+                                return;
+                            } else {
+                                // No more enabled sections after disabled - check if we should loop
+                                if (loopEnabled && loopEnd !== null && loopEnd >= nextSection.start) {
+                                    console.log('Pre-emptive: No more enabled sections but loop end in disabled, looping back');
+                                    this.seek(loopStart);
+                                    return;
+                                }
+                                // Will stop when we reach the disabled section
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Check if loop is active and we've reached the loop end (in virtual time)
+            // Note: loopEnabled, loopStart, loopEnd already extracted above for disabled section checks
             if (loopEnabled && loopStart !== null && loopEnd !== null) {
                 // Only loop back if position is close to loopEnd (within 0.1s tolerance)
                 // This prevents looping when user deliberately seeks past the loop
                 if (virtualPosition >= loopEnd && virtualPosition < loopEnd + 0.1) {
-                    // Loop back to start (handles crossfade automatically via play())
-                    this.seek(loopStart);
+                    // Phase 3: When looping back, find the first enabled position at or after loopStart
+                    let targetPosition = loopStart;
+                    
+                    if (State.hasDisabledArrangementSections()) {
+                        const sectionAtLoopStart = State.getArrangementSectionAtTime(loopStart);
+                        
+                        if (sectionAtLoopStart && !sectionAtLoopStart.enabled) {
+                            // Loop start is in a disabled section, find next enabled
+                            const nextEnabled = State.getEnabledArrangementSectionAtOrAfter(loopStart);
+                            
+                            if (nextEnabled && nextEnabled.start < loopEnd) {
+                                targetPosition = nextEnabled.start;
+                                console.log(`Loop start in disabled section, jumping to ${targetPosition.toFixed(3)}s`);
+                            } else {
+                                // No enabled section within loop range - stop looping
+                                console.log('No enabled sections within loop range, stopping');
+                                this.stop();
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // Loop back to target position (handles crossfade automatically via seek->play)
+                    this.seek(targetPosition);
                     return; // seek() will restart position update if playing
                 }
             }
