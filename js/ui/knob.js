@@ -17,6 +17,7 @@ export class Knob {
             onChange: options.onChange ?? (() => {}),
             formatValue: options.formatValue ?? ((v) => v.toString()),
             bipolar: options.bipolar ?? false, // For pan-style knobs where center is 0
+            defaultValue: options.defaultValue ?? null, // Value to reset to on double-click (null = auto)
         };
 
         this.value = this.options.value;
@@ -211,7 +212,10 @@ export class Knob {
 
         // Double-click to reset
         this.element.addEventListener('dblclick', () => {
-            if (this.options.bipolar) {
+            if (this.options.defaultValue !== null) {
+                // Use custom default value if specified
+                this.setValue(this.options.defaultValue);
+            } else if (this.options.bipolar) {
                 this.setValue(0);
             } else {
                 this.setValue((this.options.max + this.options.min) / 2);

@@ -6,6 +6,7 @@
 import * as State from './state.js';
 import { getBeatPositionsInRange, findNearestBeat, findNearestBeatInfo, getTempoAtTime, getTimeSigAtTime } from './metadata.js';
 import { virtualToSourcePosition } from './sections.js';
+import { Knob } from './ui/knob.js';
 
 const BASE_PIXELS_PER_SECOND = 100;
 
@@ -40,11 +41,11 @@ class Timeline {
             this.legacyCtx = this.legacyCanvas.getContext('2d');
         }
         
-        this.zoomSlider = document.getElementById('zoom-slider');
-        this.zoomInBtn = document.getElementById('zoom-in');
-        this.zoomOutBtn = document.getElementById('zoom-out');
+        // New zoom knob control
+        this.zoomKnobContainer = document.getElementById('zoom-knob-container');
         this.zoomFitBtn = document.getElementById('zoom-fit');
         this.zoomValueEl = document.getElementById('zoom-value');
+        this.zoomKnob = null;
         
         this.scrollOffset = 0;
         this.resizeObserver = null;
@@ -105,13 +106,13 @@ class Timeline {
 
     attachStateListeners() {
         State.subscribe(State.Events.SONG_SWITCHED, () => {
-            this.updateZoomSlider();
+            this.updateZoomControls();
             this.render();
         });
 
         State.subscribe(State.Events.TIMELINE_UPDATED, ({ updates }) => {
             if ('zoom' in updates) {
-                this.zoomSlider.value = updates.zoom;
+                this.updateZoomKnob(updates.zoom);
                 this.updateZoomDisplay(updates.zoom);
             }
             this.render();
@@ -131,7 +132,7 @@ class Timeline {
         });
 
         State.subscribe(State.Events.STATE_LOADED, () => {
-            this.updateZoomSlider();
+            this.updateZoomControls();
             this.render();
         });
 
@@ -148,62 +149,14 @@ class Timeline {
         
         // Re-render when arrangement changes
         State.subscribe(State.Events.ARRANGEMENT_CHANGED, () => {
-            this.updateZoomSlider();
+            this.updateZoomControls();
             this.render();
         });
     }
 
     attachUIListeners() {
-        // Zoom controls
-        if (this.zoomSlider) {
-            this.zoomSlider.addEventListener('input', () => {
-                const zoom = parseFloat(this.zoomSlider.value);
-                State.updateTimeline({ zoom });
-                this.updateZoomDisplay(zoom);
-            });
-
-            // Mouse wheel with shift for fine control
-            this.zoomSlider.addEventListener('wheel', (e) => {
-                e.preventDefault();
-                const song = State.getActiveSong();
-                if (!song) return;
-
-                const { minZoom, maxZoom } = this.calculateZoomLimits();
-                const currentZoom = song.timeline.zoom || 1;
-                const baseStep = (maxZoom - minZoom) / 100;
-                const step = e.shiftKey ? baseStep * 0.1 : baseStep; // 10x finer with shift
-                const direction = e.deltaY > 0 ? -1 : 1;
-                const newZoom = Math.max(minZoom, Math.min(maxZoom, currentZoom + step * direction));
-
-                State.updateTimeline({ zoom: newZoom });
-                this.zoomSlider.value = newZoom;
-                this.updateZoomDisplay(newZoom);
-            });
-        }
-
-        if (this.zoomInBtn) {
-            this.zoomInBtn.addEventListener('click', (e) => {
-                const song = State.getActiveSong();
-                if (!song) return;
-                const currentZoom = song.timeline.zoom || 1;
-                const { maxZoom } = this.calculateZoomLimits();
-                const multiplier = e.shiftKey ? 1.05 : 1.25; // Finer with shift
-                const newZoom = Math.min(maxZoom, currentZoom * multiplier);
-                State.updateTimeline({ zoom: newZoom });
-            });
-        }
-
-        if (this.zoomOutBtn) {
-            this.zoomOutBtn.addEventListener('click', (e) => {
-                const song = State.getActiveSong();
-                if (!song) return;
-                const currentZoom = song.timeline.zoom || 1;
-                const { minZoom } = this.calculateZoomLimits();
-                const multiplier = e.shiftKey ? 1.05 : 1.25; // Finer with shift
-                const newZoom = Math.max(minZoom, currentZoom / multiplier);
-                State.updateTimeline({ zoom: newZoom });
-            });
-        }
+        // Initialize zoom knob
+        this.initZoomKnob();
 
         // Fit to window button
         if (this.zoomFitBtn) {
@@ -236,6 +189,89 @@ class Timeline {
                 this.hideBeatTimeTooltip();
             }
         });
+    }
+
+    /**
+     * Initialize the zoom knob control
+     * Uses logarithmic mapping for natural zoom feel
+     * Range: 1% to 400% (stored as 0.01 to 4.0 zoom multiplier)
+     * Default: 100% (1.0 zoom multiplier)
+     * 
+     * Logarithmic mapping ensures equal knob rotation = equal perceived zoom change
+     * - Knob at min (0): zoom = 1% (0.01)
+     * - Knob at ~75%: zoom = 100% (1.0)  
+     * - Knob at max (100): zoom = 400% (4.0)
+     */
+    initZoomKnob() {
+        if (!this.zoomKnobContainer) return;
+        
+        // Knob uses 0-100 range internally, we map logarithmically to zoom
+        // 100% zoom should be the default, which maps to knob value ~75
+        const defaultKnobValue = this.zoomToKnobValue(1.0);
+        
+        this.zoomKnob = new Knob(this.zoomKnobContainer, {
+            min: 0,
+            max: 100,
+            value: defaultKnobValue,
+            step: 0.5,
+            size: 28,
+            bipolar: false,
+            defaultValue: defaultKnobValue, // Double-click resets to 100% zoom
+            onChange: (knobValue) => {
+                const zoom = this.knobValueToZoom(knobValue);
+                State.updateTimeline({ zoom });
+                this.updateZoomDisplay(zoom);
+            }
+        });
+    }
+
+    /**
+     * Convert knob value (0-100) to zoom multiplier (0.01-4.0) using logarithmic scale
+     * This makes the knob feel natural - equal rotation = equal perceived zoom change
+     */
+    knobValueToZoom(knobValue) {
+        // Knob range: 0 to 100
+        // Zoom range: 0.01 (1%) to 4.0 (400%)
+        const minZoom = 0.01;
+        const maxZoom = 4.0;
+        
+        // Clamp knob value to valid range
+        knobValue = Math.max(0, Math.min(100, knobValue));
+        
+        // Normalize knob value to 0-1
+        const normalized = knobValue / 100;
+        
+        // Logarithmic mapping: zoom = minZoom * (maxZoom/minZoom)^normalized
+        const zoom = minZoom * Math.pow(maxZoom / minZoom, normalized);
+        
+        return zoom;
+    }
+
+    /**
+     * Convert zoom multiplier (0.01-4.0) to knob value (0-100) using logarithmic scale
+     */
+    zoomToKnobValue(zoom) {
+        const minZoom = 0.01;
+        const maxZoom = 4.0;
+        
+        // Clamp zoom to valid range
+        zoom = Math.max(minZoom, Math.min(maxZoom, zoom));
+        
+        // Inverse of logarithmic mapping: normalized = log(zoom/minZoom) / log(maxZoom/minZoom)
+        const normalized = Math.log(zoom / minZoom) / Math.log(maxZoom / minZoom);
+        
+        // Convert to knob range 0-100
+        return normalized * 100;
+    }
+
+    /**
+     * Update the zoom knob to reflect current state
+     */
+    updateZoomKnob(zoom) {
+        if (!this.zoomKnob) return;
+        
+        const knobValue = this.zoomToKnobValue(zoom);
+        this.zoomKnob.setValue(knobValue, false); // false = don't trigger onChange
     }
 
     /**
@@ -548,17 +584,13 @@ class Timeline {
         }
     }
 
-    updateZoomSlider() {
+    /**
+     * Update zoom controls to reflect current state
+     * The knob range is fixed at 1-400%, but we clamp values to that range
+     */
+    updateZoomControls() {
         const song = State.getActiveSong();
         let zoom = song?.timeline?.zoom;
-        
-        // Update slider min/max based on calculated limits
-        if (this.zoomSlider) {
-            const { minZoom, maxZoom } = this.calculateZoomLimits();
-            this.zoomSlider.min = minZoom;
-            this.zoomSlider.max = maxZoom;
-            this.zoomSlider.step = (maxZoom - minZoom) / 100; // 100 steps
-        }
         
         // If zoom is null, calculate fit-to-window zoom
         if (zoom === null) {
@@ -569,9 +601,10 @@ class Timeline {
             }
         }
         
-        if (this.zoomSlider) {
-            this.zoomSlider.value = zoom;
-        }
+        // Clamp zoom to our fixed range (1% to 400% = 0.01 to 4.0)
+        zoom = Math.max(0.01, Math.min(4.0, zoom));
+        
+        this.updateZoomKnob(zoom);
         this.updateZoomDisplay(zoom);
     }
 
@@ -595,58 +628,8 @@ class Timeline {
         // Fit entire song at ~90% of viewport width
         const fitZoom = (viewportWidth * 0.9) / (maxDuration * BASE_PIXELS_PER_SECOND);
         
-        // Calculate zoom limits
-        const { minZoom, maxZoom } = this.calculateZoomLimits();
-        
-        // Clamp to calculated range
-        return Math.max(minZoom, Math.min(maxZoom, fitZoom));
-    }
-
-    /**
-     * Calculate the min and max zoom levels based on song duration and tempo
-     * - Min zoom: song fits at ~50% of viewport width
-     * - Max zoom: ~1 measure fills viewport width
-     */
-    calculateZoomLimits() {
-        const maxDuration = State.getMaxDuration();
-        const song = State.getActiveSong();
-        
-        // Use first time signature from metadata, or fall back to transport time signature
-        const timeSigs = song?.metadata?.['time-sigs'];
-        const timeSignature = (timeSigs && timeSigs.length > 0) ? timeSigs[0].sig : (song?.transport?.timeSignature || '4/4');
-        
-        // Use first tempo from metadata, or fall back to transport tempo
-        const tempos = song?.metadata?.tempos;
-        const tempo = (tempos && tempos.length > 0) ? tempos[0].tempo : (song?.transport?.tempo || 120);
-        
-        // Get viewport width
-        const waveformScrollArea = document.getElementById('waveform-scroll-area');
-        const viewportWidth = waveformScrollArea ? waveformScrollArea.clientWidth - 20 : 800;
-        
-        // Calculate seconds per measure
-        const [beatsPerMeasure] = timeSignature.split('/').map(Number);
-        const secondsPerBeat = 60 / tempo;
-        const secondsPerMeasure = secondsPerBeat * beatsPerMeasure;
-        
-        // Min zoom: entire song at 50% of viewport
-        // zoom = desiredWidth / (duration * BASE_PIXELS_PER_SECOND)
-        let minZoom = 0.01; // Absolute minimum
-        if (maxDuration > 0) {
-            minZoom = (viewportWidth * 0.5) / (maxDuration * BASE_PIXELS_PER_SECOND);
-            minZoom = Math.max(0.01, minZoom);
-        }
-        
-        // Max zoom: 1 measure fills viewport
-        // zoom = viewportWidth / (secondsPerMeasure * BASE_PIXELS_PER_SECOND)
-        let maxZoom = viewportWidth / (secondsPerMeasure * BASE_PIXELS_PER_SECOND);
-        maxZoom = Math.min(50, maxZoom); // Cap at 50x
-        
-        // Ensure min < max
-        if (minZoom >= maxZoom) {
-            minZoom = maxZoom / 10;
-        }
-        
-        return { minZoom, maxZoom };
+        // Clamp to our fixed range (1% to 400% = 0.01 to 4.0)
+        return Math.max(0.01, Math.min(4.0, fitZoom));
     }
 
     fitToWindow() {
