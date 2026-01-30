@@ -359,20 +359,29 @@ class AudioEngine {
         const song = State.getActiveSong();
         let isSectionMuted = false;
         
+        // Phase 4: Check time-based mute sections first
+        const timeMuteSection = State.getMuteSectionAtTime(trackId, sourcePosition);
+        const isTimeMuted = timeMuteSection?.muted || false;
+        
+        // Legacy: Check marker-based section mutes
+        let isLegacyMuted = false;
         const virtualSections = song?.virtualSections;
         if (virtualSections && virtualSections.length > 0 && this.currentVirtualSectionIndex >= 0) {
             // Using arrangement - get source index from current virtual section
             const currentVirtualSection = virtualSections[this.currentVirtualSectionIndex];
             if (currentVirtualSection) {
-                isSectionMuted = State.isSectionMuted(trackId, currentVirtualSection.sourceIndex);
+                isLegacyMuted = State.isSectionMuted(trackId, currentVirtualSection.sourceIndex);
             }
         } else if (song && song.sections && song.sections.length > 0) {
             // No arrangement - check regular sections
             const currentSection = getSectionAtTime(song.sections, sourcePosition);
             if (currentSection) {
-                isSectionMuted = State.isSectionMuted(trackId, currentSection.index);
+                isLegacyMuted = State.isSectionMuted(trackId, currentSection.index);
             }
         }
+        
+        // Combined: muted if either system says muted
+        isSectionMuted = isTimeMuted || isLegacyMuted;
 
         // Stop existing source
         if (nodes.source) {
@@ -987,22 +996,32 @@ class AudioEngine {
             let isSectionMuted = false;
             if (this.isPlaying) {
                 const song = State.getActiveSong();
+                const sourcePosition = this.getCurrentSourcePosition();
+                
+                // Phase 4: Check time-based mute sections first
+                const timeMuteSection = State.getMuteSectionAtTime(trackId, sourcePosition);
+                const isTimeMuted = timeMuteSection?.muted || false;
+                
+                // Legacy: Check marker-based section mutes
+                let isLegacyMuted = false;
                 const virtualSections = song?.virtualSections;
                 
                 if (virtualSections && virtualSections.length > 0 && this.currentVirtualSectionIndex >= 0) {
                     // Using arrangement - get source index from current virtual section
                     const currentVirtualSection = virtualSections[this.currentVirtualSectionIndex];
                     if (currentVirtualSection) {
-                        isSectionMuted = State.isSectionMuted(trackId, currentVirtualSection.sourceIndex);
+                        isLegacyMuted = State.isSectionMuted(trackId, currentVirtualSection.sourceIndex);
                     }
                 } else if (song && song.sections && song.sections.length > 0) {
                     // No arrangement - get source index from regular sections
-                    const sourcePosition = this.getCurrentSourcePosition();
                     const currentSection = getSectionAtTime(song.sections, sourcePosition);
                     if (currentSection) {
-                        isSectionMuted = State.isSectionMuted(trackId, currentSection.index);
+                        isLegacyMuted = State.isSectionMuted(trackId, currentSection.index);
                     }
                 }
+                
+                // Combined: muted if either system says muted
+                isSectionMuted = isTimeMuted || isLegacyMuted;
             }
             
             const shouldBeMuted = !isTrackAudible || isSectionMuted;
@@ -1026,6 +1045,7 @@ class AudioEngine {
      * Update section mute state for a track based on current position
      * Uses smooth gain ramps to avoid audio clicks
      * Works with both regular sections and virtual sections (arrangements)
+     * Also handles Phase 4 time-based mute sections
      * @param {string} trackId - Track ID
      * @param {number} sourceTime - Current source audio position in seconds
      * @param {Array|null} virtualSections - Virtual sections array (for arrangements)
@@ -1038,10 +1058,15 @@ class AudioEngine {
         const nodes = this.trackNodes.get(trackId);
         if (!track || !nodes || !nodes.gainNode) return;
         
-        // Determine the SOURCE section index for mute checking
+        // Phase 4: Check time-based mute sections first
+        const timeMuteSection = State.getMuteSectionAtTime(trackId, sourceTime);
+        const isTimeMuted = timeMuteSection?.muted || false;
+        
+        // Determine the SOURCE section index for legacy mute checking
         // For arrangements, we use the current virtual section's sourceIndex
         // Section mutes are always keyed by source index
-        let sourceIndex;
+        let sourceIndex = -1;
+        let isLegacyMuted = false;
         
         if (virtualSections && virtualSections.length > 0 && this.currentVirtualSectionIndex >= 0) {
             // Using arrangement - get source index from current virtual section
@@ -1051,13 +1076,14 @@ class AudioEngine {
             // No arrangement - get source index from regular sections
             const currentSection = getSectionAtTime(song.sections, sourceTime);
             sourceIndex = currentSection?.index ?? -1;
-        } else {
-            return; // No sections to check
         }
         
-        if (sourceIndex < 0) return;
+        if (sourceIndex >= 0) {
+            isLegacyMuted = State.isSectionMuted(trackId, sourceIndex);
+        }
         
-        const isSectionMuted = State.isSectionMuted(trackId, sourceIndex);
+        // Combined mute state: muted if either system says muted
+        const isSectionMuted = isTimeMuted || isLegacyMuted;
         
         // Get previous state
         let prevState = this.trackSectionState.get(trackId);
@@ -1242,10 +1268,23 @@ export function getAudioEngine() {
     return audioEngineInstance;
 }
 
-// Subscribe to section mute changes to update audio in real-time
+// Subscribe to section mute changes to update audio in real-time (legacy marker-based)
 State.subscribe(State.Events.SECTION_MUTE_UPDATED, ({ trackId, sectionIndex, muted }) => {
     if (audioEngineInstance) {
         audioEngineInstance.applySectionMuteChange(trackId);
+    }
+});
+
+// Phase 4: Subscribe to time-based mute section changes
+State.subscribe(State.Events.MUTE_SECTIONS_CHANGED, ({ trackId }) => {
+    if (audioEngineInstance && audioEngineInstance.isPlaying) {
+        if (trackId) {
+            // Single track changed
+            audioEngineInstance.applySectionMuteChange(trackId);
+        } else {
+            // Multiple tracks changed - update all
+            audioEngineInstance.updateAllTracksAudibility();
+        }
     }
 });
 

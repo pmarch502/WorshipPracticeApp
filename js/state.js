@@ -1245,6 +1245,56 @@ export function hasMuteSections(trackId) {
 }
 
 /**
+ * Toggle a mute section's muted state
+ * @param {string} trackId - Track ID
+ * @param {number} sectionIndex - Index of the section to toggle
+ * @returns {boolean|null} New muted state, or null on failure
+ */
+export function toggleMuteSection(trackId, sectionIndex) {
+    const song = getActiveSong();
+    if (!song || !trackId) return null;
+    
+    const sections = getMuteSectionsForTrack(trackId);
+    if (sectionIndex < 0 || sectionIndex >= sections.length) return null;
+    
+    const newSections = [...sections];
+    newSections[sectionIndex] = {
+        ...newSections[sectionIndex],
+        muted: !newSections[sectionIndex].muted
+    };
+    
+    setMuteSectionsForTrack(trackId, newSections, true);
+    return newSections[sectionIndex].muted;
+}
+
+/**
+ * Get the mute section at a given time for a track
+ * @param {string} trackId - Track ID
+ * @param {number} time - Time in seconds
+ * @returns {Object|null} Section object { start, end, muted, index } or null
+ */
+export function getMuteSectionAtTime(trackId, time) {
+    const sections = getMuteSectionsForTrack(trackId);
+    if (sections.length === 0) return null;
+    
+    for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+        if (time >= section.start && time < section.end) {
+            return { ...section, index: i };
+        }
+    }
+    
+    // Edge case: exactly at end of last section
+    const lastIndex = sections.length - 1;
+    const lastSection = sections[lastIndex];
+    if (lastSection && time >= lastSection.start && time <= lastSection.end) {
+        return { ...lastSection, index: lastIndex };
+    }
+    
+    return null;
+}
+
+/**
  * Add a track to the active song
  */
 export function addTrack(track) {

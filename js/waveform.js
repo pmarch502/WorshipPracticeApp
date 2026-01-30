@@ -85,8 +85,9 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
         duration = 0,
         pixelsPerSecond = 100,
         offset = 0,  // Timeline offset for beat alignment
-        sections = null,  // Array of section objects for muted section rendering
-        sectionMutes = null  // Object { sectionIndex: true } for muted sections
+        sections = null,  // Array of section objects for muted section rendering (legacy marker-based)
+        sectionMutes = null,  // Object { sectionIndex: true } for muted sections (legacy)
+        muteSections = null  // Phase 4: Array of { start, end, muted } for per-track time-based muting
     } = options;
 
     const ctx = canvas.getContext('2d');
@@ -214,8 +215,15 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
     const useSmoothing = false; // Always use max-pooling to preserve transients (clicks, etc.)
     
     // Check if we need to render section-aware (with muted sections)
-    const hasSectionMutes = sections && sectionMutes && 
+    // Legacy marker-based mutes
+    const hasLegacySectionMutes = sections && sectionMutes && 
         sections.length > 0 && Object.keys(sectionMutes).length > 0;
+    
+    // Phase 4: Time-based mute sections (per-track)
+    const hasTimeMuteSections = muteSections && muteSections.length > 0 &&
+        muteSections.some(s => s.muted);
+    
+    const hasSectionMutes = hasLegacySectionMutes || hasTimeMuteSections;
     
     if (hasSectionMutes) {
         // Create inactive gradient for muted sections
@@ -232,11 +240,24 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
         
         // Helper to check if a time is in a muted section
         const isTimeInMutedSection = (time) => {
-            for (const section of sections) {
-                if (time >= section.start && time < section.end) {
-                    return !!sectionMutes[section.index];
+            // Phase 4: Check time-based mute sections first
+            if (hasTimeMuteSections) {
+                for (const section of muteSections) {
+                    if (time >= section.start && time < section.end) {
+                        return section.muted;
+                    }
                 }
             }
+            
+            // Legacy: Check marker-based sections
+            if (hasLegacySectionMutes) {
+                for (const section of sections) {
+                    if (time >= section.start && time < section.end) {
+                        return !!sectionMutes[section.index];
+                    }
+                }
+            }
+            
             return false;
         };
         
@@ -615,7 +636,8 @@ export function renderVirtualWaveform(canvas, peaks, virtualSections, options = 
         virtualDuration = 0, // Duration of virtual timeline
         pixelsPerSecond = 100,
         offset = 0,
-        sectionMutes = null  // Object { sourceIndex: true } for muted sections
+        sectionMutes = null,  // Object { sourceIndex: true } for muted sections (legacy)
+        muteSections = null   // Phase 4: Array of { start, end, muted } for time-based muting
     } = options;
 
     const ctx = canvas.getContext('2d');
@@ -686,9 +708,31 @@ export function renderVirtualWaveform(canvas, peaks, virtualSections, options = 
         const visibleStartX = Math.max(0, sectionStartX);
         const visibleEndX = Math.min(canvasWidth, sectionEndX);
         
-        // Check if this section is muted
-        const isMuted = sectionMutes && sectionMutes[section.sourceIndex];
-        ctx.fillStyle = isMuted ? inactiveGradient : activeGradient;
+        // Check if this section is muted (legacy marker-based)
+        const isLegacyMuted = sectionMutes && sectionMutes[section.sourceIndex];
+        
+        // Phase 4: For time-based mute sections, we'll check per-pixel below
+        // since the mute sections are in source time and sections may span different mute regions
+        const hasTimeMuteSections = muteSections && muteSections.length > 0 &&
+            muteSections.some(s => s.muted);
+        
+        // Helper to check if a source time is muted
+        const isSourceTimeMuted = (sourceTime) => {
+            if (!hasTimeMuteSections) return false;
+            for (const ms of muteSections) {
+                if (sourceTime >= ms.start && sourceTime < ms.end) {
+                    return ms.muted;
+                }
+            }
+            return false;
+        };
+        
+        // If legacy muted, the whole section is inactive
+        if (isLegacyMuted) {
+            ctx.fillStyle = inactiveGradient;
+        } else {
+            ctx.fillStyle = activeGradient;
+        }
         
         // Track last end index within this section to ensure no gaps
         let lastSourceEndIndex = -1;
@@ -723,6 +767,12 @@ export function renderVirtualWaveform(canvas, peaks, virtualSections, options = 
             // Update last end index for gap tracking
             const clampedEnd = Math.min(sourceDuration, Math.max(0, sourceTimeEnd));
             lastSourceEndIndex = Math.floor((clampedEnd / sourceDuration) * peaks.length);
+            
+            // Phase 4: Check if this source time is in a muted time-based section
+            if (!isLegacyMuted && hasTimeMuteSections) {
+                const midSourceTime = (sourceTimeStart + sourceTimeEnd) / 2;
+                ctx.fillStyle = isSourceTimeMuted(midSourceTime) ? inactiveGradient : activeGradient;
+            }
             
             if (barHeight > 0.5) {
                 ctx.fillRect(x, centerY - barHeight, 1, barHeight * 2);
