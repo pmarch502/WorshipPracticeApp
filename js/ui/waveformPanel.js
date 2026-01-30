@@ -348,7 +348,7 @@ class WaveformPanel {
                 sectionMutes
             });
             
-            // Render section dividers
+            // Render section dividers (only if multiple sections from custom arrangements)
             if (sections && sections.length > 1) {
                 const ctx = canvas.getContext('2d');
                 Waveform.renderSectionDividers(ctx, canvas.width, canvas.height, sections, {
@@ -358,6 +358,18 @@ class WaveformPanel {
                     offset
                 });
             }
+        }
+        
+        // Always render marker lines as visual guides (from metadata, independent of sections)
+        const markers = song?.metadata?.markers;
+        if (markers && markers.length > 0) {
+            const ctx = canvas.getContext('2d');
+            Waveform.renderMarkerLines(ctx, canvas.width, canvas.height, markers, {
+                zoom,
+                scrollOffset: this.scrollArea.scrollLeft,
+                pixelsPerSecond: BASE_PIXELS_PER_SECOND,
+                offset
+            });
         }
     }
 
@@ -493,6 +505,9 @@ class WaveformPanel {
     /**
      * Render section mute buttons for a track
      * Uses virtual sections when an arrangement is active
+     * 
+     * Phase 2 update: Don't show section mute buttons when there's only one section
+     * (single "Full Song" section) - track mute button serves that purpose.
      */
     renderSectionMuteButtons(trackId) {
         const container = this.sectionMuteContainers.get(trackId);
@@ -513,7 +528,9 @@ class WaveformPanel {
         const useVirtualSections = virtualSections && virtualSections.length > 0;
         const sectionsToRender = useVirtualSections ? virtualSections : (song?.sections || []);
         
-        if (sectionsToRender.length === 0) return;
+        // Phase 2: Don't show section mute buttons for single section
+        // Track mute button already serves that purpose
+        if (sectionsToRender.length <= 1) return;
         
         sectionsToRender.forEach((section, index) => {
             const btn = document.createElement('button');

@@ -3,6 +3,7 @@
  * Central state store with event-based updates
  */
 
+// Note: deriveSections kept for Phase 3 (custom arrangements from S3)
 import { deriveSections, deriveVirtualSections, getVirtualDuration } from './sections.js';
 import { calculateAllBeatPositions } from './metadata.js';
 
@@ -21,13 +22,19 @@ export function createDefaultSong(songName) {
         tracks: [],
         metadata: null, // Will hold parsed metadata.json contents
         sections: [], // Derived from markers - array of {index, name, start, end, duration}
-        // Arrangement support
+        // Arrangement support (legacy index-based)
         arrangement: {
             name: 'Default', // Selected arrangement name ('Default' = all sections in order)
             customId: null   // If set, this is a custom arrangement ID from state.customArrangements
         },
         virtualSections: [], // Derived from arrangement - maps virtual timeline to source sections
         virtualDuration: 0,  // Total duration of virtual timeline
+        // Phase 3: Timeline-based arrangement sections
+        // Array of { start, end, enabled } where start/end are in seconds
+        arrangementSections: [],
+        arrangementModified: false,    // True if user has made unsaved changes
+        currentArrangementId: null,    // null = "Original" arrangement
+        currentArrangementName: null,  // Display name (null = "Original")
         // Note: Section mutes are stored at top-level state.sectionMutes keyed by songName
         // Note: Custom arrangements are stored at top-level state.customArrangements keyed by songName
         transport: {
@@ -148,6 +155,7 @@ export const Events = {
     // Arrangement events
     ARRANGEMENT_CHANGED: 'arrangementChanged',
     CUSTOM_ARRANGEMENTS_UPDATED: 'customArrangementsUpdated',
+    ARRANGEMENT_SECTIONS_CHANGED: 'arrangementSectionsChanged',
     
     // Transport events
     TRANSPORT_UPDATED: 'transportUpdated',
@@ -260,31 +268,58 @@ export function updateSongMetadata(songId, metadata) {
 /**
  * Update derived sections for a song
  * Call this when metadata or track durations change
+ * 
+ * Phase 2 change: Default to "full song" single section instead of deriving from markers.
+ * Markers are now visual-only and don't create section boundaries.
+ * Section splits will come from user-defined arrangements in Phase 3.
+ * 
  * @param {string} songId - Song ID
  */
 export function updateSongSections(songId) {
     const song = getSong(songId);
     if (!song) return false;
     
-    const markers = song.metadata?.markers;
-    if (!markers || markers.length === 0) {
-        song.sections = [];
-        return true;
-    }
-    
     // Get max duration from tracks
     const maxDuration = song.tracks.length > 0 
         ? Math.max(...song.tracks.map(t => t.duration || 0))
         : 0;
     
-    // If we don't have duration yet, we can't properly derive sections
-    // (the last section wouldn't have a valid end time)
+    // If we don't have duration yet, we can't create sections
     if (maxDuration <= 0) {
         song.sections = [];
         return true;
     }
     
-    song.sections = deriveSections(markers, maxDuration);
+    // Phase 2: Default to single "full song" section
+    // Markers are now visual-only and don't define section boundaries
+    // Custom arrangements (Phase 3) will define their own splits
+    song.sections = [{
+        index: 0,
+        name: 'Full Song',
+        unlabeled: false,
+        start: 0,
+        end: maxDuration,
+        duration: maxDuration
+    }];
+    
+    // Phase 3: Initialize arrangement sections if empty
+    // This ensures the arrangement bar has something to render
+    if (!song.arrangementSections || song.arrangementSections.length === 0) {
+        song.arrangementSections = [{
+            start: 0,
+            end: maxDuration,
+            enabled: true
+        }];
+        song.arrangementModified = false;
+        song.currentArrangementId = null;
+        song.currentArrangementName = null;
+        
+        emit(Events.ARRANGEMENT_SECTIONS_CHANGED, {
+            song,
+            sections: song.arrangementSections,
+            modified: false
+        });
+    }
     
     // Also update virtual sections based on current arrangement
     updateVirtualSections(songId);
@@ -565,6 +600,243 @@ export function getActiveCustomArrangement(songId) {
     return getCustomArrangementById(song.songName, song.arrangement.customId);
 }
 
+// ============================================================================
+// Phase 3: Timeline-Based Arrangement Sections
+// ============================================================================
+
+/**
+ * Get arrangement sections for the active song
+ * @returns {Array} Array of { start, end, enabled } objects
+ */
+export function getArrangementSections() {
+    const song = getActiveSong();
+    return song?.arrangementSections || [];
+}
+
+/**
+ * Set arrangement sections for the active song
+ * @param {Array} sections - Array of { start, end, enabled } objects
+ * @param {boolean} markModified - Whether to mark arrangement as modified (default true)
+ */
+export function setArrangementSections(sections, markModified = true) {
+    const song = getActiveSong();
+    if (!song) return false;
+    
+    song.arrangementSections = sections;
+    if (markModified) {
+        song.arrangementModified = true;
+    }
+    
+    emit(Events.ARRANGEMENT_SECTIONS_CHANGED, {
+        song,
+        sections,
+        modified: song.arrangementModified
+    });
+    
+    return true;
+}
+
+/**
+ * Initialize the "Original" arrangement for a song
+ * Creates a single full-song section with all enabled
+ * Call this when a song loads and we know the duration
+ * @param {string} songId - Song ID (optional, defaults to active song)
+ */
+export function initializeOriginalArrangement(songId = null) {
+    const song = songId ? getSong(songId) : getActiveSong();
+    if (!song) return false;
+    
+    // Get duration from tracks
+    const maxDuration = song.tracks.length > 0
+        ? Math.max(...song.tracks.map(t => t.duration || 0))
+        : 0;
+    
+    if (maxDuration <= 0) {
+        song.arrangementSections = [];
+        return true;
+    }
+    
+    // Create single "full song" section
+    song.arrangementSections = [{
+        start: 0,
+        end: maxDuration,
+        enabled: true
+    }];
+    
+    // Reset to original state
+    song.arrangementModified = false;
+    song.currentArrangementId = null;
+    song.currentArrangementName = null;
+    
+    emit(Events.ARRANGEMENT_SECTIONS_CHANGED, {
+        song,
+        sections: song.arrangementSections,
+        modified: false
+    });
+    
+    return true;
+}
+
+/**
+ * Check if the arrangement has unsaved changes
+ * @returns {boolean} True if arrangement has been modified
+ */
+export function isArrangementModified() {
+    const song = getActiveSong();
+    return song?.arrangementModified || false;
+}
+
+/**
+ * Set the arrangement modified flag
+ * @param {boolean} modified - Modified state
+ */
+export function setArrangementModified(modified) {
+    const song = getActiveSong();
+    if (!song) return false;
+    
+    song.arrangementModified = modified;
+    
+    emit(Events.ARRANGEMENT_SECTIONS_CHANGED, {
+        song,
+        sections: song.arrangementSections,
+        modified
+    });
+    
+    return true;
+}
+
+/**
+ * Get the current arrangement name
+ * @returns {string} Arrangement name or "Original"
+ */
+export function getCurrentArrangementDisplayName() {
+    const song = getActiveSong();
+    return song?.currentArrangementName || 'Original';
+}
+
+/**
+ * Add a split to the arrangement at a specific time
+ * Splits the section containing that time into two sections
+ * @param {number} splitTime - Time in seconds where to add the split
+ * @returns {boolean} Success
+ */
+export function addArrangementSplit(splitTime) {
+    const song = getActiveSong();
+    if (!song || !song.arrangementSections || song.arrangementSections.length === 0) {
+        return false;
+    }
+    
+    // Find the section that contains this time
+    const sections = [...song.arrangementSections];
+    let sectionIndex = -1;
+    
+    for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+        if (splitTime > section.start && splitTime < section.end) {
+            sectionIndex = i;
+            break;
+        }
+    }
+    
+    if (sectionIndex === -1) {
+        // Split time is at a boundary or outside sections
+        return false;
+    }
+    
+    const section = sections[sectionIndex];
+    
+    // Create two new sections from the split
+    const firstSection = {
+        start: section.start,
+        end: splitTime,
+        enabled: section.enabled
+    };
+    
+    const secondSection = {
+        start: splitTime,
+        end: section.end,
+        enabled: section.enabled
+    };
+    
+    // Replace the original section with the two new ones
+    sections.splice(sectionIndex, 1, firstSection, secondSection);
+    
+    return setArrangementSections(sections, true);
+}
+
+/**
+ * Remove a split from the arrangement (merge two sections)
+ * @param {number} splitTime - Time of the split to remove
+ * @returns {boolean} Success
+ */
+export function removeArrangementSplit(splitTime) {
+    const song = getActiveSong();
+    if (!song || !song.arrangementSections || song.arrangementSections.length <= 1) {
+        return false;
+    }
+    
+    const sections = [...song.arrangementSections];
+    
+    // Find the section that starts at this time (the split boundary)
+    const splitIndex = sections.findIndex(s => Math.abs(s.start - splitTime) < 0.001);
+    
+    if (splitIndex <= 0) {
+        // Can't remove the first boundary (time 0) or not found
+        return false;
+    }
+    
+    // Merge with previous section
+    const prevSection = sections[splitIndex - 1];
+    const currSection = sections[splitIndex];
+    
+    const mergedSection = {
+        start: prevSection.start,
+        end: currSection.end,
+        enabled: prevSection.enabled // Keep the state of the first section
+    };
+    
+    // Replace both sections with merged one
+    sections.splice(splitIndex - 1, 2, mergedSection);
+    
+    return setArrangementSections(sections, true);
+}
+
+/**
+ * Toggle a section's enabled state
+ * @param {number} sectionIndex - Index of section to toggle
+ * @returns {boolean} New enabled state, or null on failure
+ */
+export function toggleArrangementSection(sectionIndex) {
+    const song = getActiveSong();
+    if (!song || !song.arrangementSections || sectionIndex >= song.arrangementSections.length) {
+        return null;
+    }
+    
+    const sections = [...song.arrangementSections];
+    sections[sectionIndex] = {
+        ...sections[sectionIndex],
+        enabled: !sections[sectionIndex].enabled
+    };
+    
+    setArrangementSections(sections, true);
+    return sections[sectionIndex].enabled;
+}
+
+/**
+ * Get the section boundaries (split times) for rendering dividers
+ * Excludes start (0) and end (duration) boundaries
+ * @returns {Array<number>} Array of split times in seconds
+ */
+export function getArrangementSplitTimes() {
+    const song = getActiveSong();
+    if (!song || !song.arrangementSections || song.arrangementSections.length <= 1) {
+        return [];
+    }
+    
+    // Return the start time of each section except the first
+    return song.arrangementSections.slice(1).map(s => s.start);
+}
+
 /**
  * Add a track to the active song
  */
@@ -773,6 +1045,20 @@ export function loadState(savedState) {
             // Initialize derived properties (will be recalculated when metadata loads)
             song.virtualSections = song.virtualSections || [];
             song.virtualDuration = song.virtualDuration || 0;
+            
+            // Phase 3: Timeline-based arrangement sections migration
+            if (!song.arrangementSections) {
+                song.arrangementSections = [];
+            }
+            if (song.arrangementModified === undefined) {
+                song.arrangementModified = false;
+            }
+            if (song.currentArrangementId === undefined) {
+                song.currentArrangementId = null;
+            }
+            if (song.currentArrangementName === undefined) {
+                song.currentArrangementName = null;
+            }
         });
     }
     

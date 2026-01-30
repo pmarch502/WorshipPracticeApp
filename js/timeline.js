@@ -650,30 +650,20 @@ class Timeline {
     /**
      * Render markers on the beats timeline
      * Markers appear as upside-down triangles with labels
-     * Uses virtual sections when an arrangement is active
+     * 
+     * Phase 2 update: Markers are now always visual-only from metadata.
+     * For custom arrangements (future), we'll render virtual section boundaries separately.
+     * For now, just render the original markers from metadata as visual guides.
      */
     renderMarkers(ctx, canvas) {
         const song = State.getActiveSong();
         if (!song) return;
         
-        // Determine which sections to use (virtual or original markers)
-        const virtualSections = song.virtualSections;
-        const useVirtualSections = virtualSections && virtualSections.length > 0;
-        
-        // If using virtual sections, render a marker at the start of each virtual section
-        // Otherwise, use original markers
-        let markersToRender;
-        if (useVirtualSections) {
-            markersToRender = virtualSections.map(section => ({
-                start: section.virtualStart,
-                name: section.name,
-                unlabeled: section.unlabeled
-            }));
-        } else {
-            const markers = song.metadata?.markers;
-            if (!markers || markers.length === 0) return;
-            markersToRender = markers;
-        }
+        // Phase 2: Always render markers from metadata as visual guides
+        // Markers no longer define section boundaries, they're purely informational
+        const markers = song.metadata?.markers;
+        if (!markers || markers.length === 0) return;
+        const markersToRender = markers;
         
         const triangleWidth = 20;
         const triangleHeight = 20;

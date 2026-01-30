@@ -1,6 +1,10 @@
 /**
  * Waveform Renderer
  * Canvas-based waveform visualization
+ * 
+ * Phase 2 note: Section dividers are only rendered when there's more than one section.
+ * With the new "full song" default, waveforms render without dividers until
+ * custom arrangements (Phase 3) define splits.
  */
 
 const ACTIVE_COLOR = '#00d4ff';
@@ -529,6 +533,54 @@ export function renderSectionDividers(ctx, canvasWidth, canvasHeight, sections, 
         // Convert section start time to screen X position
         // Account for timeline offset and scroll position
         const worldX = (section.start + offset) * pixelsPerSecondZoomed;
+        const screenX = worldX - scrollOffset;
+        
+        // Skip if outside visible range
+        if (screenX < 0 || screenX > canvasWidth) {
+            continue;
+        }
+        
+        // Draw vertical line
+        ctx.beginPath();
+        ctx.moveTo(screenX, 0);
+        ctx.lineTo(screenX, canvasHeight);
+        ctx.stroke();
+    }
+}
+
+/**
+ * Render marker lines on waveform as visual guides
+ * Draws vertical lines at marker positions from metadata (purely visual, not section boundaries)
+ * 
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} canvasWidth - Canvas width
+ * @param {number} canvasHeight - Canvas height  
+ * @param {Array} markers - Markers array from metadata.markers
+ * @param {Object} options - Rendering options
+ */
+export function renderMarkerLines(ctx, canvasWidth, canvasHeight, markers, options = {}) {
+    if (!markers || markers.length === 0) {
+        return;
+    }
+    
+    const {
+        zoom = 1,
+        scrollOffset = 0,
+        pixelsPerSecond = 100,
+        offset = 0
+    } = options;
+    
+    const pixelsPerSecondZoomed = pixelsPerSecond * zoom;
+    
+    ctx.strokeStyle = SECTION_DIVIDER_COLOR; // Same yellow color as before
+    ctx.lineWidth = 1;
+    
+    // Draw line at each marker position (skip time 0 to avoid edge clutter)
+    for (const marker of markers) {
+        if (marker.start <= 0) continue; // Skip marker at time 0
+        
+        // Convert marker time to screen X position
+        const worldX = (marker.start + offset) * pixelsPerSecondZoomed;
         const screenX = worldX - scrollOffset;
         
         // Skip if outside visible range

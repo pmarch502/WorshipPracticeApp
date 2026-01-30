@@ -2,6 +2,10 @@
  * Audio Engine
  * Handles Web Audio API, audio loading, playback, and pitch/time stretching
  * Uses SoundTouch via AudioWorklet for high-quality independent speed/pitch control
+ * 
+ * Phase 2 note: Default state is now a single "Full Song" section.
+ * Playback is continuous without section transitions until custom arrangements
+ * (Phase 3) define multiple sections.
  */
 
 import * as State from './state.js';

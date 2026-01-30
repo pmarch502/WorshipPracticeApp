@@ -1,6 +1,13 @@
 /**
  * Sections Module
- * Derives section regions from markers for arrangements and visual display
+ * 
+ * Phase 2 update: Markers are now visual-only and don't define sections.
+ * The default state is a single "full song" section.
+ * 
+ * This module still provides:
+ * - deriveSections() - kept for future use (loading arrangements from S3)
+ * - Virtual section mapping for arrangements
+ * - Section boundary utilities
  */
 
 /**

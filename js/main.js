@@ -15,6 +15,7 @@ import { getWaveformPanel } from './ui/waveformPanel.js';
 import { getTransportBar } from './ui/transportBar.js';
 import { getTabs } from './ui/tabs.js';
 import { getTimeline } from './timeline.js';
+import { getTimelineSections } from './ui/timelineSections.js';
 import { initDragDrop } from './ui/dragDrop.js';
 import { getModal } from './ui/modal.js';
 import { getSongLoader } from './ui/songLoader.js';
@@ -89,6 +90,7 @@ class App {
         getTransportBar();
         getTabs();
         getTimeline();
+        getTimelineSections(); // Phase 3: Timeline-based arrangement sections
         initDragDrop();
         getModal();
         getSongLoader();
@@ -263,12 +265,17 @@ class App {
                 }
             }
 
-            // Escape: Clear loop (only if no modal is open)
+            // Escape: Clear loop points (only if no modal is open)
+            // Clears loop regardless of whether looping is enabled
             if (e.code === 'Escape') {
                 const modalOverlay = document.getElementById('modal-overlay');
                 const isModalOpen = modalOverlay && !modalOverlay.classList.contains('hidden');
                 
-                if (!isModalOpen && State.getLoopState().enabled) {
+                // Check if there are any loop points to clear
+                const loopState = State.getLoopState();
+                const hasLoopPoints = loopState.start !== null || loopState.end !== null;
+                
+                if (!isModalOpen && hasLoopPoints) {
                     e.preventDefault();
                     State.clearLoop();
                 }
