@@ -177,6 +177,24 @@ body {
     color: var(--text-primary);
 }
 
+/* Tab drag-and-drop reordering */
+.song-tab[draggable="true"] {
+    cursor: grab;
+}
+
+.song-tab.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.song-tab.drag-over-left {
+    border-left: 2px solid var(--accent-primary);
+}
+
+.song-tab.drag-over-right {
+    border-right: 2px solid var(--accent-primary);
+}
+
 #add-song-btn {
     flex-shrink: 0;
     position: relative;

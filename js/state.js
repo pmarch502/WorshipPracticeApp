@@ -140,6 +140,9 @@ export const Events = {
     TRACK_SELECTED: 'trackSelected',
     TRACKS_REORDERED: 'tracksReordered',
     
+    // Tab/song order events
+    SONGS_REORDERED: 'songsReordered',
+    
     // Arrangement events
     ARRANGEMENT_CHANGED: 'arrangementChanged',
     ARRANGEMENT_SECTIONS_CHANGED: 'arrangementSectionsChanged',
@@ -1129,6 +1132,32 @@ export function reorderTrack(trackId, newIndex) {
     
     // Emit event but do NOT save state - order is temporary
     emit(Events.TRACKS_REORDERED, { song, trackId, fromIndex: currentIndex, toIndex: newIndex });
+    
+    return true;
+}
+
+/**
+ * Reorder a song (tab) in the songs array
+ * Note: Does NOT persist to storage - order resets on refresh
+ * @param {string} songId - Song ID to move
+ * @param {number} newIndex - New index position
+ */
+export function reorderSong(songId, newIndex) {
+    const currentIndex = state.songs.findIndex(s => s.id === songId);
+    if (currentIndex === -1) return false;
+    
+    // Clamp newIndex to valid range
+    newIndex = Math.max(0, Math.min(newIndex, state.songs.length - 1));
+    
+    // No change needed
+    if (currentIndex === newIndex) return false;
+    
+    // Remove from current position and insert at new position
+    const [song] = state.songs.splice(currentIndex, 1);
+    state.songs.splice(newIndex, 0, song);
+    
+    // Emit event but do NOT save state - order is temporary
+    emit(Events.SONGS_REORDERED, { songId, fromIndex: currentIndex, toIndex: newIndex });
     
     return true;
 }

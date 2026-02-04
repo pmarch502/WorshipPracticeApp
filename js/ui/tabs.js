@@ -50,6 +50,9 @@ class TabsUI {
         this.activeSubmenu = null;
         this.submenuTimeout = null;
         
+        // Drag-and-drop tracking
+        this.draggedSongId = null;
+        
         this.init();
         this.attachStateListeners();
     }
@@ -94,6 +97,123 @@ class TabsUI {
                 this.toggleDropdown();
             });
         }
+        
+        // Initialize drag-and-drop for tab reordering
+        this.initDragDrop();
+    }
+
+    /**
+     * Initialize drag-and-drop for tab reordering
+     */
+    initDragDrop() {
+        // Dragstart - initiate drag if not on close button
+        this.container.addEventListener('dragstart', (e) => {
+            const tabElement = e.target.closest('.song-tab');
+            if (!tabElement) return;
+            
+            // Cancel drag if started on close button
+            const closeBtn = e.target.closest('.song-tab-close');
+            if (closeBtn) {
+                e.preventDefault();
+                return;
+            }
+            
+            this.draggedSongId = tabElement.dataset.songId;
+            tabElement.classList.add('dragging');
+            
+            // Required for Firefox
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', this.draggedSongId);
+        });
+
+        // Dragover - determine drop position and show indicator
+        this.container.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            const tabElement = e.target.closest('.song-tab');
+            if (!tabElement || tabElement.dataset.songId === this.draggedSongId) {
+                return;
+            }
+            
+            // Clear previous indicators
+            this.clearDropIndicators();
+            
+            // Determine if we're in the left or right half of the element (horizontal)
+            const rect = tabElement.getBoundingClientRect();
+            const midpoint = rect.left + rect.width / 2;
+            
+            if (e.clientX < midpoint) {
+                tabElement.classList.add('drag-over-left');
+            } else {
+                tabElement.classList.add('drag-over-right');
+            }
+        });
+
+        // Dragleave - clean up indicators when leaving an element
+        this.container.addEventListener('dragleave', (e) => {
+            const tabElement = e.target.closest('.song-tab');
+            if (tabElement) {
+                tabElement.classList.remove('drag-over-left', 'drag-over-right');
+            }
+        });
+
+        // Drop - perform the reorder
+        this.container.addEventListener('drop', (e) => {
+            e.preventDefault();
+            
+            const targetElement = e.target.closest('.song-tab');
+            if (!targetElement || !this.draggedSongId) {
+                this.clearDropIndicators();
+                return;
+            }
+            
+            const targetSongId = targetElement.dataset.songId;
+            if (targetSongId === this.draggedSongId) {
+                this.clearDropIndicators();
+                return;
+            }
+            
+            // Get the target index
+            let targetIndex = State.state.songs.findIndex(s => s.id === targetSongId);
+            
+            // If dropping in right half, insert after the target
+            const rect = targetElement.getBoundingClientRect();
+            const midpoint = rect.left + rect.width / 2;
+            if (e.clientX >= midpoint) {
+                targetIndex++;
+            }
+            
+            // Adjust for the fact that dragged item will be removed first
+            const draggedIndex = State.state.songs.findIndex(s => s.id === this.draggedSongId);
+            if (draggedIndex < targetIndex) {
+                targetIndex--;
+            }
+            
+            // Perform the reorder
+            State.reorderSong(this.draggedSongId, targetIndex);
+            
+            this.clearDropIndicators();
+        });
+
+        // Dragend - clean up
+        this.container.addEventListener('dragend', (e) => {
+            const tabElement = e.target.closest('.song-tab');
+            if (tabElement) {
+                tabElement.classList.remove('dragging');
+            }
+            this.draggedSongId = null;
+            this.clearDropIndicators();
+        });
+    }
+
+    /**
+     * Clear all drop indicator classes from tabs
+     */
+    clearDropIndicators() {
+        this.container.querySelectorAll('.song-tab').forEach(el => {
+            el.classList.remove('drag-over-left', 'drag-over-right');
+        });
     }
 
     attachStateListeners() {
@@ -118,6 +238,11 @@ class TabsUI {
             this.updateEmptyState();
             const song = State.getActiveSong();
             this.updateDropdownSelector(song);
+        });
+        
+        // Re-render tabs when reordered
+        State.subscribe(State.Events.SONGS_REORDERED, () => {
+            this.renderTabs();
         });
         
         // Update dropdown when arrangement sections change (modified indicator)
@@ -1597,6 +1722,7 @@ class TabsUI {
         const tab = document.createElement('div');
         tab.className = 'song-tab';
         tab.dataset.songId = song.id;
+        tab.draggable = true;
         
         tab.innerHTML = `
             <span class="song-tab-name" title="${song.name}">${song.name}</span>
