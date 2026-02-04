@@ -884,8 +884,8 @@ body {
 .pan-value {
     font-size: 10px;
     color: var(--text-muted);
-    width: 24px;
-    text-align: center;
+    width: 18px;
+    text-align: left;
 }
 
 /* Solo/Mute Buttons */

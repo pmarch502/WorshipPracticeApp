@@ -400,6 +400,15 @@
                 <li>Click the X to close the song</li>
                 <li>Closing a song clears all local resources. If you open the song again, resources are pulled from the web.</li>
             </ul>
+            
+            <h3>Reordering Songs</h3>
+            <p>Tabs can be reordered by dragging them within the tab bar.</p>
+            <ol>
+                <li><strong>Click and hold</strong> on a tab</li>
+                <li><strong>Drag</strong> left or right to the desired position</li>
+                <li>A <strong>drop indicator</strong> shows where the tab will be placed</li>
+                <li><strong>Release</strong> to drop the tab in its new position</li>
+            </ol>
         </section>
         
         <!-- Section 4: Track Management -->
@@ -423,8 +432,8 @@
                     <th>Description</th>
                 </tr>
                 <tr>
-                    <td><strong>Volume Slider</strong></td>
-                    <td>Adjusts track volume from 0 to 100</td>
+                    <td><strong>Volume Knob</strong></td>
+                    <td>Adjusts track volume from 0 to 100 (drag up/down)</td>
                 </tr>
                 <tr>
                     <td><strong>Pan Knob</strong></td>
@@ -564,8 +573,8 @@
                 <li><strong>Inactive tracks:</strong> Displayed in grey, dimmed</li>
                 <li><strong>Section dividers:</strong> Yellow vertical lines indicate section boundaries (Intro, Verse, Chorus, etc.)</li>
                 <li><strong>Click on waveform:</strong> Seek to that position</li>
-                <li><strong>Scroll horizontally:</strong> Navigate through the song</li>
-                <li><strong>Scroll vertically:</strong> Navigate through tracks (synced with track controls)</li>
+                <li><strong>Scrollbars:</strong> Use horizontal scrollbar to navigate through the song, vertical scrollbar to navigate through tracks (synced with track controls)</li>
+                <li><strong>Mouse wheel:</strong> Zoom in/out on the waveform</li>
             </ul>
             
             <h3>Playhead</h3>
@@ -899,7 +908,8 @@
                 <li><strong>Variable time signature:</strong> Songs can have time signature changes; the display updates as the playhead moves through different sections</li>
             </ul>
             
-            <h3>Pan Knob (Track Controls)</h3>
+            <h3>Knob Controls (Volume &amp; Pan)</h3>
+            <p>Both the volume and pan knobs in the track controls use the same interaction model:</p>
             <table>
                 <tr>
                     <th>Interaction</th>
@@ -907,7 +917,7 @@
                 </tr>
                 <tr>
                     <td>Drag up/down</td>
-                    <td>Increase/decrease pan value</td>
+                    <td>Increase/decrease value</td>
                 </tr>
                 <tr>
                     <td><kbd>Shift</kbd> + Drag</td>
@@ -915,7 +925,7 @@
                 </tr>
                 <tr>
                     <td>Double-click</td>
-                    <td>Reset to center (0)</td>
+                    <td>Reset to default (Volume: 100, Pan: 0)</td>
                 </tr>
                 <tr>
                     <td>Mouse wheel</td>
@@ -1018,7 +1028,8 @@
             <h3>Shift-Modified Controls</h3>
             <ul>
                 <li><kbd>Shift</kbd> + <kbd>Arrow Keys</kbd> - Jump 10 seconds instead of 1</li>
-                <li><kbd>Shift</kbd> + Mouse wheel on Zoom - Fine adjustment</li>
+                <li>Mouse wheel on waveform - Zoom in/out</li>
+                <li><kbd>Shift</kbd> + Mouse wheel on Zoom control - Fine adjustment</li>
                 <li><kbd>Shift</kbd> + Drag pan knob - Fine adjustment (10x more precise)</li>
                 <li><kbd>Shift</kbd> + Mouse wheel on knob - Fine adjustment</li>
             </ul>
