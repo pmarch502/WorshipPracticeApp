@@ -182,34 +182,280 @@ body {
     position: relative;
 }
 
-/* Arrangement Selector in Tab Bar */
+/* Arrangement/Mute Selector Dropdown in Tab Bar */
 #arrangement-selector {
     flex-shrink: 0;
     margin-left: auto; /* Push to the right */
     padding-right: 8px;
+    position: relative;
 }
 
-#arrangement-selector select {
-    padding: 6px 24px 6px 8px;
+/* Dropdown Trigger Button */
+.dropdown-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
     background-color: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     border-radius: 4px;
     font-size: 13px;
     cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%23b0b0b0' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 6px center;
+    transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
-#arrangement-selector select:hover {
+.dropdown-btn:hover {
     border-color: var(--accent-primary);
 }
 
-#arrangement-selector select:focus {
+.dropdown-btn.open {
+    border-color: var(--accent-primary);
+    background-color: var(--bg-hover);
+}
+
+.dropdown-btn-text {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dropdown-arrow {
+    flex-shrink: 0;
+    transition: transform var(--transition-fast);
+}
+
+.dropdown-btn.open .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+/* Main Dropdown Menu */
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    z-index: 200;
+    min-width: 200px;
+    padding: 4px 0;
+    overflow: visible; /* Allow submenus to appear outside bounds */
+}
+
+.dropdown-menu.hidden {
+    display: none;
+}
+
+/* Dropdown Menu Items */
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+    white-space: nowrap;
+    position: relative;
+}
+
+.dropdown-item:hover {
+    background-color: var(--bg-hover);
+}
+
+.dropdown-item.disabled {
+    color: var(--text-muted);
+    cursor: default;
+    pointer-events: none;
+}
+
+.dropdown-item.active {
+    color: var(--accent-primary);
+}
+
+/* Checkmark for selected items */
+.dropdown-item .checkmark {
+    width: 16px;
+    margin-right: 8px;
+    color: var(--accent-primary);
+    flex-shrink: 0;
+}
+
+.dropdown-item .checkmark.hidden {
+    visibility: hidden;
+}
+
+/* Submenu arrow indicator - on LEFT side since submenus open left */
+.dropdown-item .submenu-arrow {
+    margin-right: 8px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.dropdown-item:hover .submenu-arrow {
+    color: var(--text-primary);
+}
+
+/* Item with submenu */
+.dropdown-item.has-submenu {
+    padding-left: 8px;
+}
+
+/* Dropdown Divider */
+.dropdown-divider {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 4px 0;
+}
+
+/* Section Header */
+.dropdown-section-header {
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: default;
+}
+
+/* Loading indicator in dropdown */
+.dropdown-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    color: var(--text-muted);
+    font-size: 13px;
+    gap: 8px;
+}
+
+.dropdown-loading::before {
+    content: '';
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* Empty state in dropdown */
+.dropdown-empty {
+    padding: 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    font-style: italic;
+}
+
+/* Submenu - opens to the LEFT by default since dropdown is on far right */
+.dropdown-submenu {
+    position: absolute;
+    left: auto;
+    right: 100%;
+    top: -4px;
+    margin-right: 4px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    z-index: 201;
+    min-width: 180px;
+    max-height: 300px;
+    padding: 4px 0;
+    overflow: visible; /* Allow nested submenus to appear outside bounds */
+}
+
+.dropdown-submenu.hidden {
+    display: none;
+}
+
+/* Position submenu to the right if there's not enough room on left */
+.dropdown-submenu.position-right {
+    left: 100%;
+    right: auto;
+    margin-right: 0;
+    margin-left: 4px;
+}
+
+/* Highlight parent item when submenu is open */
+.dropdown-item.submenu-open {
+    background-color: var(--bg-hover);
+}
+
+/* Modified indicator (asterisk) */
+.dropdown-modified {
+    color: var(--accent-warning);
+    margin-left: 4px;
+}
+
+/* Save Dialog Styles */
+.save-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.save-dialog-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.save-dialog-field label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.save-dialog-field input[type="text"],
+.save-dialog-field input[type="password"] {
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.save-dialog-field input[type="text"]:focus,
+.save-dialog-field input[type="password"]:focus {
     outline: none;
     border-color: var(--accent-primary);
+}
+
+.save-dialog-checkbox {
+    flex-direction: row;
+    align-items: center;
+}
+
+.save-dialog-checkbox label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.save-dialog-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
+}
+
+.save-dialog-error {
+    color: var(--accent-danger);
+    font-size: 12px;
+}
+
+.save-dialog-error.hidden {
+    display: none;
 }
 
 /* ========================================

@@ -22,11 +22,17 @@
             <div id="tabs-container">
                 <!-- Tabs will be dynamically inserted here -->
             </div>
-            <!-- Arrangement Selector (shown when song is open) -->
+            <!-- Arrangement/Mute Selector Dropdown (shown when song is open) -->
             <div id="arrangement-selector" class="hidden">
-                <select id="arrangement-select">
-                    <option value="Default">Default</option>
-                </select>
+                <button id="arrangement-dropdown-btn" class="dropdown-btn">
+                    <span class="dropdown-btn-text">Arrangements</span>
+                    <svg class="dropdown-arrow" viewBox="0 0 24 24" width="12" height="12">
+                        <path fill="currentColor" d="M7 10l5 5 5-5z"/>
+                    </svg>
+                </button>
+                <div id="arrangement-dropdown-menu" class="dropdown-menu hidden">
+                    <!-- Menu items populated dynamically by tabs.js -->
+                </div>
             </div>
             <!-- Song picker dropdown (hidden by default) -->
             <div id="song-picker" class="picker-dropdown hidden">

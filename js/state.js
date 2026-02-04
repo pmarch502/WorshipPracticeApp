@@ -1099,6 +1099,37 @@ export function initializeAllMuteSections(songId = null) {
 }
 
 /**
+ * Reset all mute sections to default unmuted state for all tracks
+ * Unlike initializeAllMuteSections, this FORCES reset even if sections exist
+ * @param {string} songId - Song ID (optional, defaults to active song)
+ */
+export function resetAllMuteSections(songId = null) {
+    const song = songId ? getSong(songId) : getActiveSong();
+    if (!song) return false;
+    
+    song.muteSections = {};
+    
+    song.tracks.forEach(track => {
+        if (track.duration > 0) {
+            song.muteSections[track.id] = [{
+                start: 0,
+                end: track.duration,
+                muted: false
+            }];
+        }
+    });
+    
+    emit(Events.MUTE_SECTIONS_CHANGED, {
+        song,
+        trackId: null,
+        sections: null,
+        modified: false
+    });
+    
+    return true;
+}
+
+/**
  * Add a split to a track's mute sections at a specific time
  * @param {string} trackId - Track ID
  * @param {number} splitTime - Time in seconds where to add the split

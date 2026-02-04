@@ -1218,8 +1218,8 @@ class WaveformPanel {
         // Get mute sections for this track
         const sections = State.getMuteSectionsForTrack(trackId);
         
-        // Don't show buttons if only one section (track mute serves that purpose)
-        if (sections.length <= 1) return;
+        // Show mute button even for single section (allows muting entire track for mute sets)
+        if (sections.length === 0) return;
         
         const zoom = this.getEffectiveZoom();
         const offset = song.timeline?.offset || 0;
