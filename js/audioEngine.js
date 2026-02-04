@@ -3,20 +3,12 @@
  * Handles Web Audio API, audio loading, playback, and pitch/time stretching
  * Uses SoundTouch via AudioWorklet for high-quality independent speed/pitch control
  * 
- * Phase 2 note: Default state is now a single "Full Song" section.
- * Playback is continuous without section transitions until custom arrangements
- * (Phase 3) define multiple sections.
+ * Phase 8 cleanup: Removed legacy virtual sections and marker-based mutes.
+ * Now uses only Phase 3 arrangement sections (time-based enable/disable)
+ * and Phase 4 mute sections (time-based per-track mutes).
  */
 
 import * as State from './state.js';
-import { 
-    getSectionAtTime, 
-    getVirtualSectionAtTime, 
-    virtualToSourcePosition,
-    sourceToVirtualPosition,
-    getNextVirtualSection,
-    requiresSeekTransition
-} from './sections.js';
 import { BASE_PIXELS_PER_SECOND } from './ui/waveformPanel.js';
 import { getWaveformPanel } from './ui/waveformPanel.js';
 
@@ -42,12 +34,8 @@ class AudioEngine {
         this._speed = 1.0; // tempo (0.5 to 2.0)
         
         // Track section mute state for smooth transitions
-        // trackId -> { currentSectionIndex: number, isSectionMuted: boolean }
+        // trackId -> { isSectionMuted: boolean }
         this.trackSectionState = new Map();
-        
-        // Virtual timeline tracking for arrangements
-        this.currentVirtualSectionIndex = -1; // Index in virtualSections array
-        this.virtualStartPosition = 0; // Virtual position when playback started
         this.sourceStartPosition = 0;  // Source position when playback started
         this.isInCrossfade = false;    // Flag to prevent multiple crossfades
         
@@ -293,33 +281,15 @@ class AudioEngine {
             }
         }
         
-        // Store last play position for Stop (in virtual time)
+        // Store last play position for Stop
         State.updateTransport({ lastPlayPosition: virtualPos });
 
-        // Convert virtual position to source position for actual audio playback
-        const virtualSections = song.virtualSections;
-        const useVirtualTimeline = virtualSections && virtualSections.length > 0;
-        
-        let sourcePos;
-        if (useVirtualTimeline) {
-            const mapping = virtualToSourcePosition(virtualPos, virtualSections);
-            if (mapping) {
-                sourcePos = mapping.sourceTime;
-                this.currentVirtualSectionIndex = mapping.virtualSectionIndex;
-            } else {
-                // Position out of range, start at beginning
-                sourcePos = virtualSections[0]?.sourceStart || 0;
-                this.currentVirtualSectionIndex = 0;
-            }
-        } else {
-            sourcePos = virtualPos;
-            this.currentVirtualSectionIndex = -1;
-        }
+        // Position is now directly the source position (no virtual timeline)
+        const sourcePos = virtualPos;
 
         this.isPlaying = true;
         this.startTime = this.audioContext.currentTime;
-        this.startPosition = sourcePos;      // Source position for audio playback
-        this.virtualStartPosition = virtualPos; // Virtual position for UI
+        this.startPosition = sourcePos;
         this.sourceStartPosition = sourcePos;
         this.isInCrossfade = false;
 
@@ -354,34 +324,9 @@ class AudioEngine {
         // Check if track should be audible
         const isTrackAudible = State.isTrackAudible(trackId);
         
-        // Check if current section is muted
-        // For arrangements, use source index from current virtual section
-        const song = State.getActiveSong();
-        let isSectionMuted = false;
-        
-        // Phase 4: Check time-based mute sections first
+        // Phase 4: Check time-based mute sections
         const timeMuteSection = State.getMuteSectionAtTime(trackId, sourcePosition);
-        const isTimeMuted = timeMuteSection?.muted || false;
-        
-        // Legacy: Check marker-based section mutes
-        let isLegacyMuted = false;
-        const virtualSections = song?.virtualSections;
-        if (virtualSections && virtualSections.length > 0 && this.currentVirtualSectionIndex >= 0) {
-            // Using arrangement - get source index from current virtual section
-            const currentVirtualSection = virtualSections[this.currentVirtualSectionIndex];
-            if (currentVirtualSection) {
-                isLegacyMuted = State.isSectionMuted(trackId, currentVirtualSection.sourceIndex);
-            }
-        } else if (song && song.sections && song.sections.length > 0) {
-            // No arrangement - check regular sections
-            const currentSection = getSectionAtTime(song.sections, sourcePosition);
-            if (currentSection) {
-                isLegacyMuted = State.isSectionMuted(trackId, currentSection.index);
-            }
-        }
-        
-        // Combined: muted if either system says muted
-        isSectionMuted = isTimeMuted || isLegacyMuted;
+        const isSectionMuted = timeMuteSection?.muted || false;
 
         // Stop existing source
         if (nodes.source) {
@@ -450,12 +395,9 @@ class AudioEngine {
 
         // Clear section mute tracking state
         this.trackSectionState.clear();
-        
-        // Clear virtual section tracking
-        this.currentVirtualSectionIndex = -1;
         this.isInCrossfade = false;
 
-        // Return to last play position (in virtual time)
+        // Return to last play position
         State.setPosition(song.transport.lastPlayPosition);
         State.setPlaybackState('stopped');
     }
@@ -501,7 +443,7 @@ class AudioEngine {
     }
 
     /**
-     * Get current playback position (virtual time for arrangements)
+     * Get current playback position
      * Note: Since SoundTouch handles tempo, the source plays at 1.0 rate.
      * The position in the original audio advances at real-time rate.
      */
@@ -511,47 +453,17 @@ class AudioEngine {
             return song ? song.transport.position : 0;
         }
 
-        // Calculate elapsed time and current source position
+        // Calculate elapsed time and current position
         const elapsed = this.audioContext.currentTime - this.startTime;
-        const currentSourcePos = this.startPosition + elapsed;
-        
-        // For arrangements, convert source position to virtual position
-        const song = State.getActiveSong();
-        const virtualSections = song?.virtualSections;
-        
-        if (virtualSections && virtualSections.length > 0 && this.currentVirtualSectionIndex >= 0) {
-            const section = virtualSections[this.currentVirtualSectionIndex];
-            if (section) {
-                // Calculate position within current virtual section
-                const offsetInSection = currentSourcePos - section.sourceStart;
-                return section.virtualStart + offsetInSection;
-            }
-        }
-        
-        // No arrangement active, return source position directly
-        return currentSourcePos;
+        return this.startPosition + elapsed;
     }
 
     /**
      * Get current source (audio) position
-     * Use this for actual audio operations
+     * Now the same as getCurrentPosition() since we removed virtual sections
      */
     getCurrentSourcePosition() {
-        if (!this.isPlaying) {
-            const song = State.getActiveSong();
-            if (!song) return 0;
-            
-            // Convert stored virtual position to source
-            const virtualSections = song.virtualSections;
-            if (virtualSections && virtualSections.length > 0) {
-                const mapping = virtualToSourcePosition(song.transport.position, virtualSections);
-                return mapping?.sourceTime || 0;
-            }
-            return song.transport.position;
-        }
-
-        const elapsed = this.audioContext.currentTime - this.startTime;
-        return this.startPosition + elapsed;
+        return this.getCurrentPosition();
     }
 
     /**
@@ -601,73 +513,6 @@ class AudioEngine {
             this.play(virtualPosition);
         }
     }
-
-    /**
-     * Seek with crossfade for smooth transitions between sections
-     * Used internally when transitioning between non-consecutive sections in arrangements
-     * @param {number} toSourcePosition - Target source position
-     * @param {number} newVirtualSectionIndex - Index of the new virtual section
-     * @param {number} fadeDuration - Duration of crossfade in seconds (default 0.05 = 50ms)
-     */
-    seekWithCrossfade(toSourcePosition, newVirtualSectionIndex, fadeDuration = 0.05) {
-        if (this.isInCrossfade || !this.isPlaying) return;
-        this.isInCrossfade = true;
-        
-        const now = this.audioContext.currentTime;
-        
-        // Fade out all current track gains
-        this.trackNodes.forEach((nodes, trackId) => {
-            if (nodes.gainNode) {
-                nodes.gainNode.gain.cancelScheduledValues(now);
-                nodes.gainNode.gain.setTargetAtTime(0, now, fadeDuration / 3);
-            }
-        });
-        
-        // After fade out, seek to new position
-        setTimeout(() => {
-            // Stop current sources
-            this.trackNodes.forEach((nodes) => {
-                if (nodes.source) {
-                    try {
-                        nodes.source.stop();
-                    } catch (e) {}
-                    nodes.source = null;
-                }
-            });
-            
-            // Clear pitch shifter
-            if (this.pitchShifter) {
-                this.pitchShifter.clear();
-            }
-            
-            // Update tracking state
-            this.startTime = this.audioContext.currentTime;
-            this.startPosition = toSourcePosition;
-            this.currentVirtualSectionIndex = newVirtualSectionIndex;
-            
-            // Start at new source position with fade in
-            const song = State.getActiveSong();
-            if (song) {
-                song.tracks.forEach(track => {
-                    this.startTrack(track.id, toSourcePosition);
-                    
-                    // Fade in
-                    const nodes = this.trackNodes.get(track.id);
-                    if (nodes && nodes.gainNode) {
-                        const isAudible = State.isTrackAudible(track.id);
-                        const targetGain = isAudible ? track.volume / 100 : 0;
-                        const nowFadeIn = this.audioContext.currentTime;
-                        nodes.gainNode.gain.cancelScheduledValues(nowFadeIn);
-                        nodes.gainNode.gain.setValueAtTime(0, nowFadeIn);
-                        nodes.gainNode.gain.setTargetAtTime(targetGain, nowFadeIn, fadeDuration / 3);
-                    }
-                });
-            }
-            
-            this.isInCrossfade = false;
-        }, fadeDuration * 1000);
-    }
-
     /**
      * Skip to a new position with crossfade (Phase 3)
      * Used when playback reaches a disabled arrangement section
@@ -708,7 +553,6 @@ class AudioEngine {
             // Update tracking state
             this.startTime = this.audioContext.currentTime;
             this.startPosition = toPosition;
-            this.virtualStartPosition = toPosition;
             this.sourceStartPosition = toPosition;
             
             // Start at new position with fade in
@@ -888,39 +732,8 @@ class AudioEngine {
                 }
             }
             
-            // Check for virtual section transitions (arrangements only)
-            const virtualSections = song.virtualSections;
-            const useVirtualTimeline = virtualSections && virtualSections.length > 0;
-            
-            if (useVirtualTimeline && this.currentVirtualSectionIndex >= 0 && !this.isInCrossfade) {
-                const currentSection = virtualSections[this.currentVirtualSectionIndex];
-                
-                if (currentSection && sourcePosition >= currentSection.sourceEnd - 0.02) {
-                    // About to reach end of current section, check if we need to transition
-                    const nextSection = getNextVirtualSection(virtualSections, this.currentVirtualSectionIndex);
-                    
-                    if (nextSection) {
-                        // Check if transition requires a seek (non-consecutive source positions)
-                        if (requiresSeekTransition(currentSection, nextSection)) {
-                            // Crossfade seek to next section's source position
-                            this.seekWithCrossfade(
-                                nextSection.sourceStart, 
-                                nextSection.virtualIndex,
-                                0.05 // 50ms crossfade
-                            );
-                        } else {
-                            // Consecutive sections - just update tracking
-                            this.currentVirtualSectionIndex = nextSection.virtualIndex;
-                        }
-                    } else {
-                        // No next section - we're at the end of arrangement
-                        // Let playback continue until stop check below
-                    }
-                }
-            }
-            
-            // Update section mutes for all tracks (use source position for mute checks)
-            this.updateAllSectionMutes(sourcePosition, virtualSections);
+            // Update section mutes for all tracks (Phase 4 time-based mutes)
+            this.updateAllSectionMutes(sourcePosition);
             
             // Update UI with virtual position
             State.setPosition(virtualPosition);
@@ -983,7 +796,6 @@ class AudioEngine {
 
     /**
      * Update track audibility (solo/mute)
-     * Works with both regular sections and virtual sections (arrangements)
      */
     updateTrackAudibility(trackId) {
         const track = State.getTrack(trackId);
@@ -995,33 +807,11 @@ class AudioEngine {
             // Also check section mute if playing
             let isSectionMuted = false;
             if (this.isPlaying) {
-                const song = State.getActiveSong();
                 const sourcePosition = this.getCurrentSourcePosition();
                 
-                // Phase 4: Check time-based mute sections first
+                // Phase 4: Check time-based mute sections
                 const timeMuteSection = State.getMuteSectionAtTime(trackId, sourcePosition);
-                const isTimeMuted = timeMuteSection?.muted || false;
-                
-                // Legacy: Check marker-based section mutes
-                let isLegacyMuted = false;
-                const virtualSections = song?.virtualSections;
-                
-                if (virtualSections && virtualSections.length > 0 && this.currentVirtualSectionIndex >= 0) {
-                    // Using arrangement - get source index from current virtual section
-                    const currentVirtualSection = virtualSections[this.currentVirtualSectionIndex];
-                    if (currentVirtualSection) {
-                        isLegacyMuted = State.isSectionMuted(trackId, currentVirtualSection.sourceIndex);
-                    }
-                } else if (song && song.sections && song.sections.length > 0) {
-                    // No arrangement - get source index from regular sections
-                    const currentSection = getSectionAtTime(song.sections, sourcePosition);
-                    if (currentSection) {
-                        isLegacyMuted = State.isSectionMuted(trackId, currentSection.index);
-                    }
-                }
-                
-                // Combined: muted if either system says muted
-                isSectionMuted = isTimeMuted || isLegacyMuted;
+                isSectionMuted = timeMuteSection?.muted || false;
             }
             
             const shouldBeMuted = !isTrackAudible || isSectionMuted;
@@ -1044,13 +834,11 @@ class AudioEngine {
     /**
      * Update section mute state for a track based on current position
      * Uses smooth gain ramps to avoid audio clicks
-     * Works with both regular sections and virtual sections (arrangements)
-     * Also handles Phase 4 time-based mute sections
+     * Uses Phase 4 time-based mute sections
      * @param {string} trackId - Track ID
      * @param {number} sourceTime - Current source audio position in seconds
-     * @param {Array|null} virtualSections - Virtual sections array (for arrangements)
      */
-    updateSectionMuteForTrack(trackId, sourceTime, virtualSections = null) {
+    updateSectionMuteForTrack(trackId, sourceTime) {
         const song = State.getActiveSong();
         if (!song) return;
         
@@ -1058,49 +846,22 @@ class AudioEngine {
         const nodes = this.trackNodes.get(trackId);
         if (!track || !nodes || !nodes.gainNode) return;
         
-        // Phase 4: Check time-based mute sections first
+        // Phase 4: Check time-based mute sections
         const timeMuteSection = State.getMuteSectionAtTime(trackId, sourceTime);
-        const isTimeMuted = timeMuteSection?.muted || false;
-        
-        // Determine the SOURCE section index for legacy mute checking
-        // For arrangements, we use the current virtual section's sourceIndex
-        // Section mutes are always keyed by source index
-        let sourceIndex = -1;
-        let isLegacyMuted = false;
-        
-        if (virtualSections && virtualSections.length > 0 && this.currentVirtualSectionIndex >= 0) {
-            // Using arrangement - get source index from current virtual section
-            const currentVirtualSection = virtualSections[this.currentVirtualSectionIndex];
-            sourceIndex = currentVirtualSection?.sourceIndex ?? -1;
-        } else if (song.sections && song.sections.length > 0) {
-            // No arrangement - get source index from regular sections
-            const currentSection = getSectionAtTime(song.sections, sourceTime);
-            sourceIndex = currentSection?.index ?? -1;
-        }
-        
-        if (sourceIndex >= 0) {
-            isLegacyMuted = State.isSectionMuted(trackId, sourceIndex);
-        }
-        
-        // Combined mute state: muted if either system says muted
-        const isSectionMuted = isTimeMuted || isLegacyMuted;
+        const isSectionMuted = timeMuteSection?.muted || false;
         
         // Get previous state
         let prevState = this.trackSectionState.get(trackId);
         if (!prevState) {
-            prevState = { currentSectionIndex: -1, isSectionMuted: false };
+            prevState = { isSectionMuted: false };
             this.trackSectionState.set(trackId, prevState);
         }
         
         // Check if section mute state has changed
-        // Use virtual section index for change detection to handle repeated sections
-        const effectiveIndex = virtualSections ? this.currentVirtualSectionIndex : sourceIndex;
-        const stateChanged = prevState.currentSectionIndex !== effectiveIndex || 
-                            prevState.isSectionMuted !== isSectionMuted;
+        const stateChanged = prevState.isSectionMuted !== isSectionMuted;
         
         if (stateChanged) {
             // Update stored state
-            prevState.currentSectionIndex = effectiveIndex;
             prevState.isSectionMuted = isSectionMuted;
             
             // Calculate target gain
@@ -1119,14 +880,13 @@ class AudioEngine {
     /**
      * Update section mutes for all tracks
      * @param {number} sourceTime - Current source audio position in seconds
-     * @param {Array|null} virtualSections - Virtual sections array (for arrangements)
      */
-    updateAllSectionMutes(sourceTime, virtualSections = null) {
+    updateAllSectionMutes(sourceTime) {
         const song = State.getActiveSong();
         if (!song) return;
         
         song.tracks.forEach(track => {
-            this.updateSectionMuteForTrack(track.id, sourceTime, virtualSections);
+            this.updateSectionMuteForTrack(track.id, sourceTime);
         });
     }
 
@@ -1138,14 +898,12 @@ class AudioEngine {
         if (!this.isPlaying) return;
         
         const sourcePosition = this.getCurrentSourcePosition();
-        const song = State.getActiveSong();
-        const virtualSections = song?.virtualSections;
         
         // Reset the tracked state so it will be recalculated
         this.trackSectionState.delete(trackId);
         
         // Update immediately
-        this.updateSectionMuteForTrack(trackId, sourcePosition, virtualSections);
+        this.updateSectionMuteForTrack(trackId, sourcePosition);
     }
 
     /**
@@ -1267,13 +1025,6 @@ export function getAudioEngine() {
     }
     return audioEngineInstance;
 }
-
-// Subscribe to section mute changes to update audio in real-time (legacy marker-based)
-State.subscribe(State.Events.SECTION_MUTE_UPDATED, ({ trackId, sectionIndex, muted }) => {
-    if (audioEngineInstance) {
-        audioEngineInstance.applySectionMuteChange(trackId);
-    }
-});
 
 // Phase 4: Subscribe to time-based mute section changes
 State.subscribe(State.Events.MUTE_SECTIONS_CHANGED, ({ trackId }) => {

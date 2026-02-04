@@ -5,7 +5,6 @@
 
 import * as State from './state.js';
 import { getBeatPositionsInRange, findNearestBeat, findNearestBeatInfo, getTempoAtTime, getTimeSigAtTime } from './metadata.js';
-import { virtualToSourcePosition } from './sections.js';
 import { Knob } from './ui/knob.js';
 
 const BASE_PIXELS_PER_SECOND = 100;
@@ -783,37 +782,24 @@ class Timeline {
         
         const pixelsPerSecond = BASE_PIXELS_PER_SECOND * zoom;
         
-        // Calculate visible time range (in virtual time for arrangements)
+        // Calculate visible time range
         const startTime = Math.max(0, this.scrollOffset / pixelsPerSecond - offset);
         const endTime = (this.scrollOffset + canvas.width) / pixelsPerSecond - offset;
         
-        // Check if using virtual timeline (arrangement mode)
-        const virtualSections = song.virtualSections;
-        const useVirtualTimeline = virtualSections && virtualSections.length > 0;
-        
-        // Get beat positions - use virtual or standard method
+        // Get beat positions - use pre-calculated if available, otherwise calculate in range
         let beatPositions;
-        if (useVirtualTimeline) {
-            beatPositions = this.getVirtualBeatPositions(startTime, endTime, virtualSections, tempos, timeSigs);
+        if (song.beatPositions && song.beatPositions.length > 0) {
+            // Filter pre-calculated beats to visible range
+            beatPositions = song.beatPositions.filter(b => b.time >= startTime && b.time <= endTime);
         } else {
             beatPositions = getBeatPositionsInRange(startTime, endTime, tempos, timeSigs);
         }
         
         // Determine labeling density based on zoom level
         // Use the tempo and time signature at the center of the view to estimate spacing
-        let centerTempo, centerTimeSig;
-        if (useVirtualTimeline) {
-            // For virtual timeline, get tempo from the source position of center
-            const centerTime = (startTime + endTime) / 2;
-            const sourcePos = virtualToSourcePosition(centerTime, virtualSections);
-            const sourceTime = sourcePos?.sourceTime || 0;
-            centerTempo = getTempoAtTime(sourceTime, tempos);
-            centerTimeSig = getTimeSigAtTime(sourceTime, timeSigs);
-        } else {
-            const centerTime = (startTime + endTime) / 2;
-            centerTempo = getTempoAtTime(centerTime, tempos);
-            centerTimeSig = getTimeSigAtTime(centerTime, timeSigs);
-        }
+        const centerTime = (startTime + endTime) / 2;
+        const centerTempo = getTempoAtTime(centerTime, tempos);
+        const centerTimeSig = getTimeSigAtTime(centerTime, timeSigs);
         
         const [beatsPerMeasure] = centerTimeSig.split('/').map(Number);
         const pixelsPerBeat = pixelsPerSecond * (60 / centerTempo);
@@ -1013,25 +999,6 @@ class Timeline {
         const tenths = Math.floor((seconds % 1) * 10);
         
         return `${minutes}:${secs.toString().padStart(2, '0')}.${tenths}`;
-    }
-
-    /**
-     * Get beat positions for virtual timeline
-     * Returns pre-calculated beats filtered to visible range
-     * Beat positions are calculated once when song loads or arrangement changes
-     */
-    getVirtualBeatPositions(startTime, endTime, virtualSections, tempos, timeSigs) {
-        const song = State.getActiveSong();
-        
-        // Use pre-calculated beat positions if available
-        if (song?.beatPositions && song.beatPositions.length > 0) {
-            // Filter to visible range
-            // Could optimize with binary search, but filter is fast enough for typical use
-            return song.beatPositions.filter(b => b.time >= startTime && b.time <= endTime);
-        }
-        
-        // Fallback: return empty array (beat positions should always be pre-calculated)
-        return [];
     }
 
     setScrollOffset(offset) {

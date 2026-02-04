@@ -322,20 +322,20 @@ export function findNearestBeatInfo(timeSeconds, tempos, timeSigs) {
 }
 
 /**
- * Pre-calculate all beat positions for a virtual timeline
+ * Pre-calculate all beat positions for a song's timeline.
  * Iterates sequentially from time=0, properly tracking measure/beat numbers
  * through time signature changes.
  * 
- * @param {number} duration - Total duration in seconds (virtual duration for arrangements)
- * @param {Array} virtualSections - Virtual sections array (maps virtual time to source time)
+ * @param {number} duration - Total duration in seconds
+ * @param {null} _unused - Previously used for virtual sections (deprecated)
  * @param {Array} tempos - Tempo array [{tempo, start}, ...] in source time
  * @param {Array} timeSigs - Time signature array [{sig, start}, ...] in source time
  * @returns {Array} Array of {time, measure, beat, isMeasureStart, tempo}
  */
-export function calculateAllBeatPositions(duration, virtualSections, tempos, timeSigs) {
+export function calculateAllBeatPositions(duration, _unused, tempos, timeSigs) {
     const beats = [];
     
-    if (!virtualSections || virtualSections.length === 0 || duration <= 0) {
+    if (duration <= 0) {
         return beats;
     }
     
@@ -348,20 +348,6 @@ export function calculateAllBeatPositions(duration, virtualSections, tempos, tim
         return { numerator: num || 4, denominator: denom || 4 };
     };
     
-    // Helper to map virtual time to source time
-    const virtualToSource = (virtualTime) => {
-        for (const section of virtualSections) {
-            if (virtualTime >= section.virtualStart && virtualTime < section.virtualEnd) {
-                const offsetInSection = virtualTime - section.virtualStart;
-                return section.sourceStart + offsetInSection;
-            }
-        }
-        // If past all sections, use the last section's mapping
-        const lastSection = virtualSections[virtualSections.length - 1];
-        const offsetInSection = virtualTime - lastSection.virtualStart;
-        return lastSection.sourceStart + offsetInSection;
-    };
-    
     // Small epsilon for floating point comparisons
     const EPSILON = 0.001;
     
@@ -371,23 +357,15 @@ export function calculateAllBeatPositions(duration, virtualSections, tempos, tim
     // are exact and should be used to avoid floating point drift
     // =================================================================
     
-    // Map source tempo change times to virtual times
-    const tempoChangeTimes = new Map(); // virtualTime -> tempo
-    for (const section of virtualSections) {
-        for (const t of effectiveTempos) {
-            // Check if this tempo change falls within this section's source range
-            if (t.start >= section.sourceStart && t.start < section.sourceEnd) {
-                const offsetInSource = t.start - section.sourceStart;
-                const virtualTime = section.virtualStart + offsetInSource;
-                if (virtualTime < duration) {
-                    tempoChangeTimes.set(virtualTime, t.tempo);
-                }
-            }
+    const tempoChangeTimes = new Map(); // time -> tempo
+    for (const t of effectiveTempos) {
+        if (t.start < duration) {
+            tempoChangeTimes.set(t.start, t.tempo);
         }
     }
     
     // =================================================================
-    // Simple iterative approach: walk through virtual time beat by beat,
+    // Simple iterative approach: walk through time beat by beat,
     // tracking measure and beat numbers properly through time sig changes.
     // Snap to tempo change times when close to avoid floating point drift.
     // =================================================================
@@ -409,12 +387,9 @@ export function calculateAllBeatPositions(duration, virtualSections, tempos, tim
             }
         }
         
-        // Map virtual time to source time for tempo/time-sig lookup
-        const sourceTime = virtualToSource(currentTime);
-        
-        // Get tempo and time signature at this source time
-        const tempo = getTempoAtTime(sourceTime, effectiveTempos);
-        const timeSig = getTimeSigAtTime(sourceTime, effectiveTimeSigs);
+        // Get tempo and time signature at this time
+        const tempo = getTempoAtTime(currentTime, effectiveTempos);
+        const timeSig = getTimeSigAtTime(currentTime, effectiveTimeSigs);
         const { numerator: beatsPerMeasure, denominator } = parseTimeSig(timeSig);
         
         // Calculate seconds per beat based on tempo and beat unit

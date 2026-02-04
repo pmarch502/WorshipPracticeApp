@@ -102,15 +102,6 @@ export async function saveArrangement(songName, name, data) {
 }
 
 /**
- * @deprecated Use saveArrangement instead. This function is kept for backward compatibility.
- * The POST /arrangements endpoint has been removed from the Lambda.
- * @throws {Error} - Always throws with deprecation message
- */
-export async function publishArrangement(songName, arrangement, secret) {
-    throw new Error('publishArrangement is deprecated. Use saveArrangement instead.');
-}
-
-/**
  * Delete an arrangement
  * @param {string} songName - Name of the song
  * @param {string} name - Name of the arrangement

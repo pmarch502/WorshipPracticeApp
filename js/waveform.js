@@ -85,8 +85,6 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
         duration = 0,
         pixelsPerSecond = 100,
         offset = 0,  // Timeline offset for beat alignment
-        sections = null,  // Array of section objects for muted section rendering (legacy marker-based)
-        sectionMutes = null,  // Object { sectionIndex: true } for muted sections (legacy)
         muteSections = null  // Phase 4: Array of { start, end, muted } for per-track time-based muting
     } = options;
 
@@ -214,18 +212,11 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
     const peaksPerPixel = secondsPerPixel * peaksPerSecond;
     const useSmoothing = false; // Always use max-pooling to preserve transients (clicks, etc.)
     
-    // Check if we need to render section-aware (with muted sections)
-    // Legacy marker-based mutes
-    const hasLegacySectionMutes = sections && sectionMutes && 
-        sections.length > 0 && Object.keys(sectionMutes).length > 0;
-    
-    // Phase 4: Time-based mute sections (per-track)
-    const hasTimeMuteSections = muteSections && muteSections.length > 0 &&
+    // Phase 4: Check for time-based mute sections
+    const hasMuteSections = muteSections && muteSections.length > 0 &&
         muteSections.some(s => s.muted);
     
-    const hasSectionMutes = hasLegacySectionMutes || hasTimeMuteSections;
-    
-    if (hasSectionMutes) {
+    if (hasMuteSections) {
         // Create inactive gradient for muted sections
         const inactiveGradient = ctx.createLinearGradient(0, 0, 0, height);
         inactiveGradient.addColorStop(0, adjustColorAlpha(INACTIVE_COLOR, 0.3));
@@ -240,24 +231,11 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
         
         // Helper to check if a time is in a muted section
         const isTimeInMutedSection = (time) => {
-            // Phase 4: Check time-based mute sections first
-            if (hasTimeMuteSections) {
-                for (const section of muteSections) {
-                    if (time >= section.start && time < section.end) {
-                        return section.muted;
-                    }
+            for (const section of muteSections) {
+                if (time >= section.start && time < section.end) {
+                    return section.muted;
                 }
             }
-            
-            // Legacy: Check marker-based sections
-            if (hasLegacySectionMutes) {
-                for (const section of sections) {
-                    if (time >= section.start && time < section.end) {
-                        return !!sectionMutes[section.index];
-                    }
-                }
-            }
-            
             return false;
         };
         
@@ -602,222 +580,6 @@ export function renderMarkerLines(ctx, canvasWidth, canvasHeight, markers, optio
         
         // Convert marker time to screen X position
         const worldX = (marker.start + offset) * pixelsPerSecondZoomed;
-        const screenX = worldX - scrollOffset;
-        
-        // Skip if outside visible range
-        if (screenX < 0 || screenX > canvasWidth) {
-            continue;
-        }
-        
-        // Draw vertical line
-        ctx.beginPath();
-        ctx.moveTo(screenX, 0);
-        ctx.lineTo(screenX, canvasHeight);
-        ctx.stroke();
-    }
-}
-
-/**
- * Render waveform for virtual sections (arrangement mode)
- * Draws slices of the source waveform at virtual timeline positions
- * 
- * @param {HTMLCanvasElement} canvas - Target canvas
- * @param {Float32Array|Array} peaks - Source peak values (0-1)
- * @param {Array} virtualSections - Array of virtual section objects
- * @param {Object} options - Rendering options
- */
-export function renderVirtualWaveform(canvas, peaks, virtualSections, options = {}) {
-    const {
-        color = ACTIVE_COLOR,
-        backgroundColor = BACKGROUND_COLOR,
-        zoom = 1,
-        scrollOffset = 0,
-        sourceDuration = 0,  // Duration of source audio
-        virtualDuration = 0, // Duration of virtual timeline
-        pixelsPerSecond = 100,
-        offset = 0,
-        sectionMutes = null,  // Object { sourceIndex: true } for muted sections (legacy)
-        muteSections = null   // Phase 4: Array of { start, end, muted } for time-based muting
-    } = options;
-
-    const ctx = canvas.getContext('2d');
-    const { width: canvasWidth, height } = canvas;
-    
-    // Clear canvas
-    ctx.fillStyle = backgroundColor;
-    ctx.fillRect(0, 0, canvasWidth, height);
-    
-    if (!peaks || peaks.length === 0 || sourceDuration <= 0 || !virtualSections || virtualSections.length === 0) {
-        return;
-    }
-
-    const pixelsPerSecondZoomed = pixelsPerSecond * zoom;
-    const centerY = height / 2;
-    const amplitude = height / 2 - 2;
-
-    // Create gradients
-    const activeGradient = ctx.createLinearGradient(0, 0, 0, height);
-    activeGradient.addColorStop(0, adjustColorAlpha(color, 0.3));
-    activeGradient.addColorStop(0.5, color);
-    activeGradient.addColorStop(1, adjustColorAlpha(color, 0.3));
-    
-    const inactiveGradient = ctx.createLinearGradient(0, 0, 0, height);
-    inactiveGradient.addColorStop(0, adjustColorAlpha(INACTIVE_COLOR, 0.3));
-    inactiveGradient.addColorStop(0.5, INACTIVE_COLOR);
-    inactiveGradient.addColorStop(1, adjustColorAlpha(INACTIVE_COLOR, 0.3));
-
-    /**
-     * Get max peak value from source audio for a range of source time.
-     * Uses max-pooling to ensure transients are not missed when zoomed out.
-     */
-    const getMaxPeakInSourceRange = (sourceTimeStart, sourceTimeEnd) => {
-        if (sourceTimeStart >= sourceDuration || sourceTimeEnd <= 0) return 0;
-        
-        // Clamp to valid range
-        const clampedStart = Math.max(0, sourceTimeStart);
-        const clampedEnd = Math.min(sourceDuration, sourceTimeEnd);
-        
-        // Convert times to peak indices
-        const startIndex = Math.floor((clampedStart / sourceDuration) * peaks.length);
-        let endIndex = Math.floor((clampedEnd / sourceDuration) * peaks.length);
-        
-        // Ensure at least one sample
-        if (endIndex <= startIndex) endIndex = startIndex + 1;
-        
-        // Find max peak in range
-        let maxPeak = 0;
-        for (let i = startIndex; i < endIndex && i < peaks.length; i++) {
-            const p = peaks[i] || 0;
-            if (p > maxPeak) maxPeak = p;
-        }
-        return maxPeak;
-    };
-
-    // Render each virtual section
-    for (const section of virtualSections) {
-        // Calculate screen X positions for this section
-        const sectionStartX = (section.virtualStart + offset) * pixelsPerSecondZoomed - scrollOffset;
-        const sectionEndX = (section.virtualEnd + offset) * pixelsPerSecondZoomed - scrollOffset;
-        
-        // Skip if section is completely outside visible range
-        if (sectionEndX < 0 || sectionStartX > canvasWidth) {
-            continue;
-        }
-        
-        // Clamp to visible range
-        const visibleStartX = Math.max(0, sectionStartX);
-        const visibleEndX = Math.min(canvasWidth, sectionEndX);
-        
-        // Check if this section is muted (legacy marker-based)
-        const isLegacyMuted = sectionMutes && sectionMutes[section.sourceIndex];
-        
-        // Phase 4: For time-based mute sections, we'll check per-pixel below
-        // since the mute sections are in source time and sections may span different mute regions
-        const hasTimeMuteSections = muteSections && muteSections.length > 0 &&
-            muteSections.some(s => s.muted);
-        
-        // Helper to check if a source time is muted
-        const isSourceTimeMuted = (sourceTime) => {
-            if (!hasTimeMuteSections) return false;
-            for (const ms of muteSections) {
-                if (sourceTime >= ms.start && sourceTime < ms.end) {
-                    return ms.muted;
-                }
-            }
-            return false;
-        };
-        
-        // If legacy muted, the whole section is inactive
-        if (isLegacyMuted) {
-            ctx.fillStyle = inactiveGradient;
-        } else {
-            ctx.fillStyle = activeGradient;
-        }
-        
-        // Track last end index within this section to ensure no gaps
-        let lastSourceEndIndex = -1;
-        
-        // Draw peaks for this section with max-pooling
-        for (let x = Math.floor(visibleStartX); x < visibleEndX; x++) {
-            // Convert screen X to virtual time (start of this pixel)
-            const virtualTime = ((x + scrollOffset) / pixelsPerSecondZoomed) - offset;
-            // Convert screen X+1 to virtual time (start of next pixel)
-            const nextVirtualTime = ((x + 1 + scrollOffset) / pixelsPerSecondZoomed) - offset;
-            
-            // Convert virtual times to source times for this section
-            const offsetInSection = virtualTime - section.virtualStart;
-            const nextOffsetInSection = nextVirtualTime - section.virtualStart;
-            
-            let sourceTimeStart = section.sourceStart + offsetInSection;
-            const sourceTimeEnd = section.sourceStart + nextOffsetInSection;
-            
-            // Fix gaps: if there's a gap from last pixel, extend backward
-            if (lastSourceEndIndex >= 0) {
-                const currentStartIndex = Math.floor((Math.max(0, sourceTimeStart) / sourceDuration) * peaks.length);
-                if (currentStartIndex > lastSourceEndIndex) {
-                    // Adjust sourceTimeStart to cover the gap
-                    sourceTimeStart = (lastSourceEndIndex / peaks.length) * sourceDuration;
-                }
-            }
-            
-            // Get max peak in the source time range
-            const peak = getMaxPeakInSourceRange(sourceTimeStart, sourceTimeEnd);
-            const barHeight = peak * amplitude;
-            
-            // Update last end index for gap tracking
-            const clampedEnd = Math.min(sourceDuration, Math.max(0, sourceTimeEnd));
-            lastSourceEndIndex = Math.floor((clampedEnd / sourceDuration) * peaks.length);
-            
-            // Phase 4: Check if this source time is in a muted time-based section
-            if (!isLegacyMuted && hasTimeMuteSections) {
-                const midSourceTime = (sourceTimeStart + sourceTimeEnd) / 2;
-                ctx.fillStyle = isSourceTimeMuted(midSourceTime) ? inactiveGradient : activeGradient;
-            }
-            
-            if (barHeight > 0.5) {
-                ctx.fillRect(x, centerY - barHeight, 1, barHeight * 2);
-            } else {
-                ctx.fillRect(x, centerY - 0.5, 1, 1);
-            }
-        }
-    }
-    
-    // Draw center line
-    ctx.strokeStyle = adjustColorAlpha(color, 0.5);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, centerY);
-    ctx.lineTo(canvasWidth, centerY);
-    ctx.stroke();
-}
-
-/**
- * Render section dividers for virtual sections
- * Draws vertical lines at the start of each virtual section (except the first)
- */
-export function renderVirtualSectionDividers(ctx, canvasWidth, canvasHeight, virtualSections, options = {}) {
-    if (!virtualSections || virtualSections.length <= 1) {
-        return;
-    }
-    
-    const {
-        zoom = 1,
-        scrollOffset = 0,
-        pixelsPerSecond = 100,
-        offset = 0
-    } = options;
-    
-    const pixelsPerSecondZoomed = pixelsPerSecond * zoom;
-    
-    ctx.strokeStyle = SECTION_DIVIDER_COLOR;
-    ctx.lineWidth = 1;
-    
-    // Draw divider at the start of each section (except the first)
-    for (let i = 1; i < virtualSections.length; i++) {
-        const section = virtualSections[i];
-        
-        // Convert virtual time to screen X position
-        const worldX = (section.virtualStart + offset) * pixelsPerSecondZoomed;
         const screenX = worldX - scrollOffset;
         
         // Skip if outside visible range

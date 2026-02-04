@@ -24,7 +24,6 @@ class WaveformPanel {
         
         this.trackCanvases = new Map(); // trackId -> canvas
         this.trackWrappers = new Map(); // trackId -> wrapper element
-        this.sectionMuteContainers = new Map(); // trackId -> section mute button container (legacy marker-based)
         this.muteDividerContainers = new Map(); // trackId -> mute section divider container (Phase 4)
         this.muteSectionBtnContainers = new Map(); // trackId -> mute section button container (Phase 4)
         this.resizeObserver = null;
@@ -60,8 +59,6 @@ class WaveformPanel {
             State.emit('waveformScrollVertical', this.scrollArea.scrollTop);
             // Redraw waveforms with new scroll offset (viewport-based rendering)
             this.redrawAllWaveforms();
-            // Update section mute button positions
-            this.updateAllSectionMuteButtonPositions();
         });
 
         // Listen for scroll from track panel to sync vertical scrolling
@@ -141,7 +138,6 @@ class WaveformPanel {
             this.updateContainerWidth();
             this.redrawAllWaveforms();
             this.updateLoopRegion();
-            this.updateAllSectionMuteButtonPositions();
             this.updateDisabledSectionsOverlay();
             this.renderAllMuteSectionDividers(); // Phase 4: Update mute dividers
             this.renderAllMuteSectionButtons();  // Phase 4: Update mute buttons
@@ -172,27 +168,16 @@ class WaveformPanel {
             }
         });
         
-        // Redraw waveforms when sections are updated (to show section dividers)
+        // Redraw waveforms when sections are updated
         State.subscribe(State.Events.SECTIONS_UPDATED, () => {
             this.redrawAllWaveforms();
-            // Recreate section mute buttons when sections change
-            this.updateAllSectionMuteButtons();
         });
         
         // Redraw everything when arrangement changes
         State.subscribe(State.Events.ARRANGEMENT_CHANGED, () => {
             this.updateContainerWidth();
             this.redrawAllWaveforms();
-            this.updateAllSectionMuteButtons();
             this.updateLoopRegion();
-        });
-        
-        // Handle section mute changes
-        State.subscribe(State.Events.SECTION_MUTE_UPDATED, ({ trackId, sectionIndex, muted }) => {
-            // Update button state
-            this.updateSectionMuteButtonState(trackId, sectionIndex, muted);
-            // Redraw waveform to show muted section
-            this.drawWaveform(trackId);
         });
 
         // Handle track reordering
@@ -268,11 +253,6 @@ class WaveformPanel {
         canvas.className = 'waveform-canvas';
         wrapper.appendChild(canvas);
         
-        // Create section mute button container
-        const sectionMuteContainer = document.createElement('div');
-        sectionMuteContainer.className = 'section-mute-container';
-        wrapper.appendChild(sectionMuteContainer);
-        
         // Phase 4: Create mute section divider container
         const muteDividerContainer = document.createElement('div');
         muteDividerContainer.className = 'mute-divider-container';
@@ -286,14 +266,12 @@ class WaveformPanel {
         this.container.appendChild(wrapper);
         this.trackCanvases.set(track.id, canvas);
         this.trackWrappers.set(track.id, wrapper);
-        this.sectionMuteContainers.set(track.id, sectionMuteContainer);
         this.muteDividerContainers.set(track.id, muteDividerContainer);
         this.muteSectionBtnContainers.set(track.id, muteSectionBtnContainer);
 
         // Initial draw
         requestAnimationFrame(() => {
             this.drawWaveform(track.id);
-            this.renderSectionMuteButtons(track.id);
             this.renderMuteSectionDividers(track.id);
             this.renderMuteSectionButtons(track.id);
         });
@@ -324,7 +302,6 @@ class WaveformPanel {
             this.trackCanvases.delete(trackId);
         }
         this.trackWrappers.delete(trackId);
-        this.sectionMuteContainers.delete(trackId);
         this.muteDividerContainers.delete(trackId);
         this.muteSectionBtnContainers.delete(trackId);
     }
@@ -404,69 +381,21 @@ class WaveformPanel {
         const isAudible = State.isTrackAudible(trackId);
         const color = Waveform.getTrackColor(isAudible);
         
-        // Get legacy section mutes for this track (marker-based)
-        const sectionMutes = State.getSectionMutesForTrack(trackId);
-        
         // Phase 4: Get time-based mute sections for this track
         const muteSections = State.getMuteSectionsForTrack(trackId);
         
-        // Check if we should use virtual sections (arrangement mode)
-        const virtualSections = song?.virtualSections;
-        const useVirtualSections = virtualSections && virtualSections.length > 0;
+        // Standard waveform rendering
+        Waveform.renderWaveformGradient(canvas, track.peaks, {
+            color,
+            zoom,
+            scrollOffset: this.scrollArea.scrollLeft,
+            duration: track.duration,
+            pixelsPerSecond: BASE_PIXELS_PER_SECOND,
+            offset,
+            muteSections  // Phase 4 time-based mutes
+        });
         
-        if (useVirtualSections) {
-            // Use virtual waveform rendering for arrangements
-            Waveform.renderVirtualWaveform(canvas, track.peaks, virtualSections, {
-                color,
-                zoom,
-                scrollOffset: this.scrollArea.scrollLeft,
-                sourceDuration: track.duration,
-                virtualDuration: song.virtualDuration,
-                pixelsPerSecond: BASE_PIXELS_PER_SECOND,
-                offset,
-                sectionMutes,
-                muteSections  // Phase 4
-            });
-            
-            // Render section dividers for virtual sections
-            if (virtualSections.length > 1) {
-                const ctx = canvas.getContext('2d');
-                Waveform.renderVirtualSectionDividers(ctx, canvas.width, canvas.height, virtualSections, {
-                    zoom,
-                    scrollOffset: this.scrollArea.scrollLeft,
-                    pixelsPerSecond: BASE_PIXELS_PER_SECOND,
-                    offset
-                });
-            }
-        } else {
-            // Standard rendering (no arrangement or Default arrangement with all sections)
-            const sections = song?.sections || null;
-            
-            Waveform.renderWaveformGradient(canvas, track.peaks, {
-                color,
-                zoom,
-                scrollOffset: this.scrollArea.scrollLeft,
-                duration: track.duration,
-                pixelsPerSecond: BASE_PIXELS_PER_SECOND,
-                offset,
-                sections,
-                sectionMutes,
-                muteSections  // Phase 4
-            });
-            
-            // Render section dividers (only if multiple sections from custom arrangements)
-            if (sections && sections.length > 1) {
-                const ctx = canvas.getContext('2d');
-                Waveform.renderSectionDividers(ctx, canvas.width, canvas.height, sections, {
-                    zoom,
-                    scrollOffset: this.scrollArea.scrollLeft,
-                    pixelsPerSecond: BASE_PIXELS_PER_SECOND,
-                    offset
-                });
-            }
-        }
-        
-        // Always render marker lines as visual guides (from metadata, independent of sections)
+        // Render marker lines as visual guides (from metadata)
         const markers = song?.metadata?.markers;
         if (markers && markers.length > 0) {
             const ctx = canvas.getContext('2d');
@@ -850,140 +779,8 @@ class WaveformPanel {
         tracks.forEach(track => track.remove());
         this.trackCanvases.clear();
         this.trackWrappers.clear();
-        this.sectionMuteContainers.clear();
         this.muteDividerContainers.clear();
         this.muteSectionBtnContainers.clear();
-    }
-
-    /**
-     * Render section mute buttons for a track
-     * Uses virtual sections when an arrangement is active
-     * 
-     * Phase 2 update: Don't show section mute buttons when there's only one section
-     * (single "Full Song" section) - track mute button serves that purpose.
-     */
-    renderSectionMuteButtons(trackId) {
-        const container = this.sectionMuteContainers.get(trackId);
-        if (!container) return;
-        
-        // Clear existing buttons
-        container.innerHTML = '';
-        
-        const song = State.getActiveSong();
-        const track = State.getTrack(trackId);
-        if (!track) return;
-        
-        // Get section mutes from top-level state (keyed by songName/trackFileName)
-        const sectionMutes = State.getSectionMutesForTrack(trackId);
-        
-        // Determine which sections to use (virtual or original)
-        const virtualSections = song?.virtualSections;
-        const useVirtualSections = virtualSections && virtualSections.length > 0;
-        const sectionsToRender = useVirtualSections ? virtualSections : (song?.sections || []);
-        
-        // Phase 2: Don't show section mute buttons for single section
-        // Track mute button already serves that purpose
-        if (sectionsToRender.length <= 1) return;
-        
-        sectionsToRender.forEach((section, index) => {
-            const btn = document.createElement('button');
-            btn.className = 'section-mute-btn';
-            // Store both virtual index and source index for proper handling
-            btn.dataset.virtualIndex = index;
-            btn.dataset.sourceIndex = useVirtualSections ? section.sourceIndex : index;
-            btn.textContent = 'M';
-            btn.title = `Mute ${section.name}`;
-            
-            // Check if muted - always keyed by SOURCE index
-            const sourceIndex = useVirtualSections ? section.sourceIndex : index;
-            if (sectionMutes[sourceIndex]) {
-                btn.classList.add('active');
-            }
-            
-            // Click handler - toggles by SOURCE index (so all instances of a section get muted)
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent waveform seek
-                State.toggleSectionMute(trackId, sourceIndex);
-            });
-            
-            container.appendChild(btn);
-        });
-        
-        // Position the buttons
-        this.updateSectionMuteButtonPositions(trackId);
-    }
-
-    /**
-     * Update positions of section mute buttons based on zoom and scroll
-     * Uses virtual section positions when an arrangement is active
-     */
-    updateSectionMuteButtonPositions(trackId) {
-        const container = this.sectionMuteContainers.get(trackId);
-        if (!container) return;
-        
-        const song = State.getActiveSong();
-        
-        // Determine which sections to use (virtual or original)
-        const virtualSections = song?.virtualSections;
-        const useVirtualSections = virtualSections && virtualSections.length > 0;
-        const sections = useVirtualSections ? virtualSections : (song?.sections || []);
-        
-        if (sections.length === 0) return;
-        
-        const zoom = this.getEffectiveZoom();
-        const offset = song?.timeline?.offset || 0;
-        const pixelsPerSecondZoomed = BASE_PIXELS_PER_SECOND * zoom;
-        
-        const buttons = container.querySelectorAll('.section-mute-btn');
-        buttons.forEach((btn, index) => {
-            const section = sections[index];
-            if (!section) return;
-            
-            // Use virtual start for arrangements, source start for original
-            const sectionStart = useVirtualSections ? section.virtualStart : section.start;
-            
-            // Calculate position in world coordinates (not screen) so buttons scroll with content
-            const worldX = (sectionStart + offset) * pixelsPerSecondZoomed;
-            
-            // Position button with small padding from left edge of section
-            btn.style.left = `${worldX + 4}px`;
-        });
-    }
-
-    /**
-     * Update section mute buttons for all tracks
-     */
-    updateAllSectionMuteButtons() {
-        const song = State.getActiveSong();
-        if (!song) return;
-        
-        song.tracks.forEach(track => {
-            this.renderSectionMuteButtons(track.id);
-        });
-    }
-
-    /**
-     * Update section mute button positions for all tracks
-     */
-    updateAllSectionMuteButtonPositions() {
-        this.sectionMuteContainers.forEach((container, trackId) => {
-            this.updateSectionMuteButtonPositions(trackId);
-        });
-    }
-
-    /**
-     * Update section mute button's active state
-     * Updates all buttons with matching source index (for repeated sections in arrangements)
-     */
-    updateSectionMuteButtonState(trackId, sectionIndex, muted) {
-        const container = this.sectionMuteContainers.get(trackId);
-        if (!container) return;
-        
-        // Update all buttons with this source index (handles repeated sections)
-        const buttons = container.querySelectorAll(`[data-source-index="${sectionIndex}"]`);
-        buttons.forEach(btn => {
-            btn.classList.toggle('active', muted);
-        });
     }
 
     /**
