@@ -346,12 +346,14 @@ class WaveformPanel {
         let zoom = song?.timeline?.zoom;
         
         if (zoom === null || zoom === undefined) {
-            // Calculate fit-to-window zoom
+            // Calculate fit-to-window zoom (same logic as timeline.js calculateFitZoom)
             const maxDuration = State.getMaxDuration();
             if (maxDuration > 0) {
                 const viewportWidth = this.scrollArea.clientWidth - 20;
-                zoom = viewportWidth / (maxDuration * BASE_PIXELS_PER_SECOND);
-                zoom = Math.max(0.1, Math.min(5, zoom));
+                // Fit entire song at ~90% of viewport width
+                zoom = (viewportWidth * 0.9) / (maxDuration * BASE_PIXELS_PER_SECOND);
+                // Clamp to valid range (1% to 400% = 0.01 to 4.0)
+                zoom = Math.max(0.01, Math.min(4.0, zoom));
             } else {
                 zoom = 1;
             }

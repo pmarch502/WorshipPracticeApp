@@ -351,16 +351,12 @@ class TrackPanel {
                 </button>
             </div>
             <div class="track-control-row">
-                <label>Vol</label>
-                <div class="volume-slider-container">
-                    <input type="range" class="volume-slider" min="0" max="100" value="${track.volume}">
-                    <span class="volume-value">${track.volume}</span>
+                <div class="knob-group vol-group">
+                    <div class="vol-knob-container"></div>
+                    <span class="volume-value">${track.volume}%</span>
                 </div>
-            </div>
-            <div class="track-control-row">
-                <label>Pan</label>
-                <div class="pan-container">
-                    <div class="pan-knob-container knob-small"></div>
+                <div class="knob-group pan-group">
+                    <div class="pan-knob-container"></div>
                     <span class="pan-value">${this.formatPan(track.pan)}</span>
                 </div>
                 <div class="track-buttons">
@@ -369,6 +365,22 @@ class TrackPanel {
                 </div>
             </div>
         `;
+
+        // Create volume knob
+        const volContainer = element.querySelector('.vol-knob-container');
+        const volumeValue = element.querySelector('.volume-value');
+        const volKnob = new Knob(volContainer, {
+            min: 0,
+            max: 100,
+            value: track.volume,
+            step: 1,
+            size: 28,
+            defaultValue: 100,
+            onChange: (value) => {
+                volumeValue.textContent = `${value}%`;
+                TrackManager.setTrackVolume(track.id, value);
+            }
+        });
 
         // Create pan knob
         const panContainer = element.querySelector('.pan-knob-container');
@@ -383,7 +395,7 @@ class TrackPanel {
                 TrackManager.setTrackPan(track.id, value);
             }
         });
-        this.knobs.set(track.id, { pan: panKnob });
+        this.knobs.set(track.id, { volume: volKnob, pan: panKnob });
 
         // Attach event listeners
         this.attachTrackEvents(element, track.id);
@@ -408,16 +420,6 @@ class TrackPanel {
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             TrackManager.deleteTrack(trackId, false);// false = No confirmation needed
-        });
-
-        // Volume slider
-        const volumeSlider = element.querySelector('.volume-slider');
-        const volumeValue = element.querySelector('.volume-value');
-        
-        volumeSlider.addEventListener('input', () => {
-            const value = parseInt(volumeSlider.value);
-            volumeValue.textContent = value;
-            TrackManager.setTrackVolume(trackId, value);
         });
 
         // Solo button
@@ -448,6 +450,7 @@ class TrackPanel {
         // Cleanup knobs
         const knobs = this.knobs.get(trackId);
         if (knobs) {
+            if (knobs.volume) knobs.volume.destroy();
             if (knobs.pan) knobs.pan.destroy();
             this.knobs.delete(trackId);
         }
@@ -461,10 +464,13 @@ class TrackPanel {
         if (!element) return;
 
         if ('volume' in updates) {
-            const slider = element.querySelector('.volume-slider');
             const value = element.querySelector('.volume-value');
-            slider.value = updates.volume;
-            value.textContent = updates.volume;
+            value.textContent = `${updates.volume}%`;
+            
+            const knobs = this.knobs.get(trackId);
+            if (knobs && knobs.volume) {
+                knobs.volume.setValue(updates.volume, false);
+            }
         }
 
         if ('pan' in updates) {

@@ -78,6 +78,7 @@ class Timeline {
             this.resizeObserver = new ResizeObserver(() => {
                 this.resize();
                 this.render();
+                this.updateZoomControls();
             });
             this.resizeObserver.observe(targetElement);
         }
@@ -105,7 +106,8 @@ class Timeline {
 
     attachStateListeners() {
         State.subscribe(State.Events.SONG_SWITCHED, () => {
-            this.updateZoomControls();
+            // Delay zoom control update to ensure DOM layout is complete
+            requestAnimationFrame(() => this.updateZoomControls());
             this.render();
         });
 
@@ -123,6 +125,7 @@ class Timeline {
         });
 
         State.subscribe(State.Events.TRACK_ADDED, () => {
+            this.updateZoomControls();
             this.render();
         });
 
@@ -131,7 +134,8 @@ class Timeline {
         });
 
         State.subscribe(State.Events.STATE_LOADED, () => {
-            this.updateZoomControls();
+            // Delay zoom control update to ensure DOM layout is complete
+            requestAnimationFrame(() => this.updateZoomControls());
             this.render();
         });
 
@@ -148,7 +152,8 @@ class Timeline {
         
         // Re-render when arrangement changes
         State.subscribe(State.Events.ARRANGEMENT_CHANGED, () => {
-            this.updateZoomControls();
+            // Delay zoom control update to ensure DOM layout is complete
+            requestAnimationFrame(() => this.updateZoomControls());
             this.render();
         });
     }
@@ -591,13 +596,14 @@ class Timeline {
         const song = State.getActiveSong();
         let zoom = song?.timeline?.zoom;
         
-        // If zoom is null, calculate fit-to-window zoom
+        // If zoom is null, calculate fit-to-window zoom dynamically (don't persist)
+        // This allows auto-fit to respond to window resizing
         if (zoom === null) {
-            zoom = this.calculateFitZoom();
-            // Apply the calculated zoom
-            if (song) {
-                State.updateTimeline({ zoom });
+            const maxDuration = State.getMaxDuration();
+            if (!maxDuration || maxDuration === 0) {
+                return; // Don't update display yet - wait for tracks to load
             }
+            zoom = this.calculateFitZoom();
         }
         
         // Clamp zoom to our fixed range (1% to 400% = 0.01 to 4.0)

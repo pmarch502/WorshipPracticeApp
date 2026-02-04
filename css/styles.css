@@ -30,7 +30,7 @@
     
     /* Sizing */
     --track-control-width: 200px;
-    --track-height: 100px;
+    --track-height: 70px;
     --transport-height: 80px;
     --tab-height: 36px;
     --timeline-header-height: 120px;
@@ -801,7 +801,6 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 6px;
 }
 
 .track-control-row label {
@@ -809,6 +808,21 @@ body {
     color: var(--text-muted);
     width: 28px;
     flex-shrink: 0;
+}
+
+/* Knob Group - contains knob + value label */
+.knob-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.vol-group {
+    min-width: 58px;
+}
+
+.pan-group {
+    flex: 1;
 }
 
 /* Volume Slider */
@@ -853,10 +867,10 @@ body {
 }
 
 .volume-value {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text-muted);
-    width: 28px;
-    text-align: right;
+    min-width: 28px;
+    text-align: left;
 }
 
 /* Pan Knob Container */

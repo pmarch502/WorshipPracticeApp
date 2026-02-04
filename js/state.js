@@ -60,7 +60,7 @@ export function createDefaultTrack(name, filePath, duration, peaks = null) {
         filePath: filePath, // Path to audio file (e.g., "audio/SongName/Track.mp3")
         duration: duration,
         peaks: peaks, // Stored in IndexedDB, not localStorage
-        volume: 80,
+        volume: 100,
         pan: 0,
         solo: false,
         mute: false
