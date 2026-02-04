@@ -69,6 +69,11 @@ class WaveformPanel {
             }
         });
 
+        // Handle mouse wheel for zooming (scroll wheel zooms when over waveform area)
+        this.scrollArea.addEventListener('wheel', (e) => {
+            this.handleWheelZoom(e);
+        }, { passive: false });
+
         // Phase 4: Listen for Ctrl key to update cursor on waveform tracks
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Control') {
@@ -824,6 +829,65 @@ class WaveformPanel {
     getPixelsPerSecond() {
         const zoom = this.getEffectiveZoom();
         return BASE_PIXELS_PER_SECOND * zoom;
+    }
+
+    /**
+     * Handle mouse wheel for zooming on waveform area
+     * Zooms toward the mouse cursor position (keeps point under cursor stationary)
+     * @param {WheelEvent} e - Wheel event
+     */
+    handleWheelZoom(e) {
+        const song = State.getActiveSong();
+        if (!song) return;
+
+        // Prevent default scroll behavior - we're using wheel for zoom
+        e.preventDefault();
+
+        // Get current zoom (handle auto-fit case)
+        const currentZoom = this.getEffectiveZoom();
+
+        // Calculate zoom change - scroll up = zoom in, scroll down = zoom out
+        // Use a zoom factor per scroll increment (1.1x feels natural)
+        const zoomFactor = 1.1;
+        const delta = -e.deltaY; // Negative deltaY = scroll up = zoom in
+        
+        let newZoom;
+        if (delta > 0) {
+            // Zoom in
+            newZoom = currentZoom * zoomFactor;
+        } else if (delta < 0) {
+            // Zoom out
+            newZoom = currentZoom / zoomFactor;
+        } else {
+            return; // No change
+        }
+
+        // Clamp zoom to valid range (1% to 400%)
+        const minZoom = 0.01;
+        const maxZoom = 4.0;
+        newZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
+
+        // If zoom didn't change (hit limits), skip
+        if (Math.abs(newZoom - currentZoom) < 0.0001) return;
+
+        // Calculate the time position under the cursor (to keep it stationary)
+        const rect = this.scrollArea.getBoundingClientRect();
+        const cursorViewportX = e.clientX - rect.left; // Cursor X relative to viewport
+        const cursorContentX = cursorViewportX + this.scrollArea.scrollLeft; // Cursor X in content coordinates
+        
+        const offset = song.timeline?.offset || 0;
+        // Convert pixel position to time
+        const cursorTime = (cursorContentX / (BASE_PIXELS_PER_SECOND * currentZoom)) - offset;
+
+        // Update the zoom state (this triggers redraw via ZOOM_CHANGED event)
+        State.updateTimeline({ zoom: newZoom });
+
+        // Adjust scroll position to keep the cursor position stationary
+        // New cursor content X should map to same time
+        const newCursorContentX = (cursorTime + offset) * BASE_PIXELS_PER_SECOND * newZoom;
+        const newScrollLeft = newCursorContentX - cursorViewportX;
+        
+        this.scrollArea.scrollLeft = Math.max(0, newScrollLeft);
     }
 
     /**
