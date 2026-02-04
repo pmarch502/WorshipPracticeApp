@@ -215,7 +215,7 @@ class Timeline {
             step: 0.5,
             size: 28,
             bipolar: false,
-            defaultValue: defaultKnobValue, // Double-click resets to 100% zoom
+            defaultValue: 50, // Double-click resets to center (displays 200%)
             onChange: (knobValue) => {
                 const zoom = this.knobValueToZoom(knobValue);
                 State.updateTimeline({ zoom });
@@ -609,8 +609,13 @@ class Timeline {
 
     updateZoomDisplay(zoom) {
         if (this.zoomValueEl) {
-            const percentage = Math.round(zoom * 100);
-            this.zoomValueEl.textContent = `${percentage}%`;
+            // Display a "perceptual" zoom value that's linear with knob rotation
+            // This makes the numbers feel proportional to how much you turn the knob,
+            // even though the actual zoom uses a logarithmic scale for smooth feel
+            // Formula: 0→1, 50→200, 100→400
+            const knobValue = this.zoomToKnobValue(zoom);
+            const displayValue = Math.round(knobValue * 4) || 1;
+            this.zoomValueEl.textContent = `${displayValue}%`;
         }
     }
 
