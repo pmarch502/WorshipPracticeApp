@@ -5,13 +5,14 @@
 
 import * as State from '../state.js';
 import * as Waveform from '../waveform.js';
-import { findNearestBeat } from '../metadata.js';
+import { findNearestBeat, findNearestBeatInfo } from '../metadata.js';
 
 const BASE_PIXELS_PER_SECOND = 100;
 
 // Phase 4: Constants for mute section split interactions
 const MIN_SPLIT_DISTANCE_PX = 10;  // Minimum pixels from existing split to allow new split
 const DIVIDER_HIT_THRESHOLD = 8;   // Pixels threshold for clicking on a divider
+const MIN_SECTION_BEATS = 1;       // Minimum section duration in beats
 
 class WaveformPanel {
     constructor() {
@@ -573,6 +574,26 @@ class WaveformPanel {
         if (time <= 0.01 || time >= duration - 0.01) {
             console.log('Cannot split at track boundaries');
             return;
+        }
+        
+        // Check minimum section size (MIN_SECTION_BEATS)
+        const beatInfo = findNearestBeatInfo(time, song.metadata?.tempos, song.metadata?.['time-sigs']);
+        const beatDuration = 60 / beatInfo.tempo; // seconds per beat
+        const minSectionDuration = beatDuration * MIN_SECTION_BEATS;
+        
+        // Find which section this split would be in
+        const sections = State.getMuteSectionsForTrack(trackId);
+        const targetSection = sections?.find(s => time > s.start && time < s.end);
+        
+        if (targetSection) {
+            // Check that both resulting sections would be at least MIN_SECTION_BEATS long
+            const leftDuration = time - targetSection.start;
+            const rightDuration = targetSection.end - time;
+            
+            if (leftDuration < minSectionDuration || rightDuration < minSectionDuration) {
+                console.log(`Split would create section smaller than ${MIN_SECTION_BEATS} beat(s)`);
+                return;
+            }
         }
         
         // Add the split

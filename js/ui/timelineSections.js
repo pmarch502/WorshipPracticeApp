@@ -15,7 +15,8 @@
  */
 
 import * as State from '../state.js';
-import { findNearestBeat } from '../metadata.js';
+import { findNearestBeat, findNearestBeatInfo } from '../metadata.js';
+import { getModal } from './modal.js';
 
 const BASE_PIXELS_PER_SECOND = 100;
 
@@ -374,6 +375,26 @@ class TimelineSections {
             return;
         }
         
+        // Check minimum section size (MIN_SECTION_BEATS)
+        const beatInfo = findNearestBeatInfo(snappedTime, song.metadata?.tempos, song.metadata?.['time-sigs']);
+        const beatDuration = 60 / beatInfo.tempo; // seconds per beat
+        const minSectionDuration = beatDuration * MIN_SECTION_BEATS;
+        
+        // Find which section this split would be in
+        const sections = State.getArrangementSections();
+        const targetSection = sections.find(s => snappedTime > s.start && snappedTime < s.end);
+        
+        if (targetSection) {
+            // Check that both resulting sections would be at least MIN_SECTION_BEATS long
+            const leftDuration = snappedTime - targetSection.start;
+            const rightDuration = targetSection.end - snappedTime;
+            
+            if (leftDuration < minSectionDuration || rightDuration < minSectionDuration) {
+                console.log(`Split would create section smaller than ${MIN_SECTION_BEATS} beat(s)`);
+                return;
+            }
+        }
+        
         // Add the split
         const success = State.addArrangementSplit(snappedTime);
         if (success) {
@@ -415,7 +436,7 @@ class TimelineSections {
     /**
      * Toggle a section's enabled/disabled state
      */
-    toggleSection(sectionIndex) {
+    async toggleSection(sectionIndex) {
         const sections = State.getArrangementSections();
         
         // Count enabled sections
@@ -423,7 +444,11 @@ class TimelineSections {
         
         // Don't allow disabling the last enabled section
         if (sections[sectionIndex].enabled && enabledCount <= 1) {
-            console.log('Cannot disable the last enabled section');
+            const modal = getModal();
+            await modal.alert({
+                title: 'Cannot Disable Section',
+                message: 'At least one section must remain enabled for playback.'
+            });
             return;
         }
         

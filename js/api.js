@@ -5,6 +5,80 @@
 
 const API_BASE_URL = 'https://g1pan67cc9.execute-api.us-east-2.amazonaws.com/prod';
 
+// Timeout and retry configuration
+const DEFAULT_TIMEOUT_MS = 10000; // 10 seconds
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1000; // Initial retry delay (doubles each retry)
+
+/**
+ * Fetch wrapper with timeout and retry support
+ * @param {string} url - URL to fetch
+ * @param {Object} options - Fetch options
+ * @param {number} [timeoutMs] - Timeout in milliseconds (default: 10000)
+ * @param {number} [maxRetries] - Maximum retries for transient failures (default: 2)
+ * @returns {Promise<Response>} - Fetch response
+ * @throws {Error} - On timeout, network error, or max retries exceeded
+ */
+async function fetchWithTimeoutAndRetry(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS, maxRetries = MAX_RETRIES) {
+    let lastError;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        
+        try {
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            // Don't retry on client errors (4xx) - these won't change on retry
+            if (response.status >= 400 && response.status < 500) {
+                return response;
+            }
+            
+            // Retry on server errors (5xx)
+            if (response.status >= 500) {
+                lastError = new Error(`Server error: ${response.status}`);
+                lastError.status = response.status;
+                
+                if (attempt < maxRetries) {
+                    const delay = RETRY_DELAY_MS * Math.pow(2, attempt);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
+                return response; // Return last response after max retries
+            }
+            
+            return response;
+            
+        } catch (error) {
+            clearTimeout(timeoutId);
+            
+            if (error.name === 'AbortError') {
+                lastError = new Error('Request timed out');
+                lastError.isTimeout = true;
+            } else {
+                lastError = error;
+                lastError.isNetworkError = true;
+            }
+            
+            // Retry on network errors or timeouts
+            if (attempt < maxRetries) {
+                const delay = RETRY_DELAY_MS * Math.pow(2, attempt);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+            
+            throw lastError;
+        }
+    }
+    
+    throw lastError;
+}
+
 // ============ Arrangement API Functions ============
 
 /**
@@ -14,7 +88,7 @@ const API_BASE_URL = 'https://g1pan67cc9.execute-api.us-east-2.amazonaws.com/pro
  * @throws {Error} - On network or API errors
  */
 export async function listArrangements(songName) {
-    const response = await fetch(
+    const response = await fetchWithTimeoutAndRetry(
         `${API_BASE_URL}/arrangements/${encodeURIComponent(songName)}`,
         {
             method: 'GET',
@@ -44,7 +118,7 @@ export async function listArrangements(songName) {
  * @throws {Error} - On network or API errors
  */
 export async function getArrangement(songName, name) {
-    const response = await fetch(
+    const response = await fetchWithTimeoutAndRetry(
         `${API_BASE_URL}/arrangements/${encodeURIComponent(songName)}/${encodeURIComponent(name)}`,
         {
             method: 'GET',
@@ -78,7 +152,7 @@ export async function getArrangement(songName, name) {
  * @throws {Error} - On network or API errors
  */
 export async function saveArrangement(songName, name, data) {
-    const response = await fetch(
+    const response = await fetchWithTimeoutAndRetry(
         `${API_BASE_URL}/arrangements/${encodeURIComponent(songName)}/${encodeURIComponent(name)}`,
         {
             method: 'PUT',
@@ -112,7 +186,7 @@ export async function saveArrangement(songName, name, data) {
 export async function deleteArrangement(songName, name, secret = null) {
     const body = secret ? { secret } : {};
     
-    const response = await fetch(
+    const response = await fetchWithTimeoutAndRetry(
         `${API_BASE_URL}/arrangements/${encodeURIComponent(songName)}/${encodeURIComponent(name)}`,
         {
             method: 'DELETE',
@@ -156,7 +230,7 @@ export async function checkArrangementExists(songName, name) {
  * @throws {Error} - On network or API errors
  */
 export async function listMuteSets(songName) {
-    const response = await fetch(
+    const response = await fetchWithTimeoutAndRetry(
         `${API_BASE_URL}/mutes/${encodeURIComponent(songName)}`,
         {
             method: 'GET',
@@ -186,7 +260,7 @@ export async function listMuteSets(songName) {
  * @throws {Error} - On network or API errors
  */
 export async function getMuteSet(songName, name) {
-    const response = await fetch(
+    const response = await fetchWithTimeoutAndRetry(
         `${API_BASE_URL}/mutes/${encodeURIComponent(songName)}/${encodeURIComponent(name)}`,
         {
             method: 'GET',
@@ -220,7 +294,7 @@ export async function getMuteSet(songName, name) {
  * @throws {Error} - On network or API errors
  */
 export async function saveMuteSet(songName, name, data) {
-    const response = await fetch(
+    const response = await fetchWithTimeoutAndRetry(
         `${API_BASE_URL}/mutes/${encodeURIComponent(songName)}/${encodeURIComponent(name)}`,
         {
             method: 'PUT',
@@ -254,7 +328,7 @@ export async function saveMuteSet(songName, name, data) {
 export async function deleteMuteSet(songName, name, secret = null) {
     const body = secret ? { secret } : {};
     
-    const response = await fetch(
+    const response = await fetchWithTimeoutAndRetry(
         `${API_BASE_URL}/mutes/${encodeURIComponent(songName)}/${encodeURIComponent(name)}`,
         {
             method: 'DELETE',

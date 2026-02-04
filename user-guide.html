@@ -320,6 +320,7 @@
                 <li><a href="#timeline-waveform">6. Timeline &amp; Waveform</a></li>
                 <li><a href="#loop-functionality">7. Loop Functionality</a></li>
                 <li><a href="#arrangements">8. Arrangements</a></li>
+                <li><a href="#mute-sets">8.5 Mute Sets</a></li>
                 <li><a href="#audio-controls">9. Audio Controls</a></li>
                 <li><a href="#keyboard-shortcuts">10. Keyboard Shortcuts</a></li>
                 <li><a href="#hidden-features">11. Hidden Features</a></li>
@@ -356,7 +357,7 @@
             <div class="interface-layout">
                 <div class="feature-card full-width">
                     <h4>Tab Bar (Top)</h4>
-                    <p>Spans the full width at the top. Displays open songs as tabs. Click tabs to switch between songs. Use the + button at the far left to open new songs. The arrangement selector dropdown on the far right lets you choose different arrangements for the current song.</p>
+                    <p>Spans the full width at the top. Displays open songs as tabs. Click tabs to switch between songs. Use the + button at the far left to open new songs. The dropdown menu on the far right provides access to Arrangements and Mute Sets for the current song.</p>
                 </div>
                 <div class="feature-card">
                     <h4>Track Controls (Left)</h4>
@@ -598,18 +599,41 @@
                 </tr>
             </table>
             
-            <h3>Section Muting</h3>
-            <p>Each track's waveform displays the song's sections with small mute buttons, allowing you to mute specific sections on individual tracks. This is useful for practicing specific parts without certain instruments.</p>
+            <h3>Mute Sections (Per-Track)</h3>
+            <p>You can create custom mute sections on each track independently, allowing you to mute specific time ranges on individual tracks. This is useful for practicing specific parts without certain instruments.</p>
             
-            <h4>Using Section Mute</h4>
+            <h4>Creating Mute Sections</h4>
             <ul>
-                <li><strong>Locate</strong> the small "M" buttons that appear on each section of a track's waveform</li>
-                <li><strong>Click</strong> the M button to toggle mute for that section on that track</li>
-                <li><strong>Muted sections</strong> appear grey/dimmed in the waveform display</li>
-                <li><strong>Unmuted sections</strong> remain in their normal cyan color</li>
+                <li><strong>Ctrl+Click</strong> on a waveform to add a split (cyan divider) at that position</li>
+                <li>Splits automatically snap to the nearest beat for musical precision</li>
+                <li>Once you have splits, <strong>"M" buttons</strong> appear on hover for each section</li>
             </ul>
             
-            <h4>Section Mute Behavior</h4>
+            <h4>Managing Mute Sections</h4>
+            <table>
+                <tr>
+                    <th>Action</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td><kbd>Ctrl</kbd> + Click on waveform</td>
+                    <td>Add a split at that position (snaps to beat)</td>
+                </tr>
+                <tr>
+                    <td><kbd>Alt</kbd> + Click on cyan divider</td>
+                    <td>Remove the split (merge sections)</td>
+                </tr>
+                <tr>
+                    <td>Drag cyan divider</td>
+                    <td>Move the split position (snaps to beat)</td>
+                </tr>
+                <tr>
+                    <td>Click "M" button</td>
+                    <td>Toggle mute for that section</td>
+                </tr>
+            </table>
+            
+            <h4>Mute Section Behavior</h4>
             <table>
                 <tr>
                     <th>Feature</th>
@@ -617,24 +641,27 @@
                 </tr>
                 <tr>
                     <td><strong>Per-Track</strong></td>
-                    <td>Each track has independent section mutes</td>
+                    <td>Each track has independent mute sections (different from arrangement sections)</td>
                 </tr>
                 <tr>
                     <td><strong>Smooth Transitions</strong></td>
                     <td>~50ms gain ramps prevent audio clicks when entering/leaving muted sections</td>
                 </tr>
                 <tr>
-                    <td><strong>Persistence</strong></td>
-                    <td>Section mutes are saved and persist across browser sessions</td>
+                    <td><strong>Visual Feedback</strong></td>
+                    <td>Muted sections appear grey/dimmed in the waveform; unmuted sections are cyan</td>
                 </tr>
                 <tr>
-                    <td><strong>Arrangement-Aware</strong></td>
-                    <td>Mutes apply to the source section, affecting all instances when the section repeats in an arrangement</td>
+                    <td><strong>Track Mute Priority</strong></td>
+                    <td>Track-level mute button takes precedence over section mutes</td>
                 </tr>
             </table>
             
+            <h4>Saving Mute Sets</h4>
+            <p>Your mute section configurations can be saved as <strong>Mute Sets</strong> via the dropdown menu (Mutes submenu). See the <a href="#mute-sets">Mute Sets</a> section for details.</p>
+            
             <div class="tip">
-                <strong>Tip:</strong> Use section muting to focus on specific parts during practice. For example, if there are multiple electric guitar tracks, mute the sections on all tracks that you do not wish to play - effectively creating a single electric guitar track.
+                <strong>Tip:</strong> Use mute sections to create custom practice configurations. For example, mute the guide vocal during verses but keep it for choruses, or mute all electric guitars except during the solo.
             </div>
         </section>
         
@@ -685,146 +712,157 @@
         <!-- Section 8: Arrangements -->
         <section id="arrangements">
             <h2>8. Arrangements</h2>
-            <p>Arrangements allow you to change the order in which sections of a song play back. This is useful when your worship team uses a different structure than the original recording—for example, adding an extra chorus, skipping a bridge, or extending the outro.</p>
+            <p>Arrangements allow you to enable or disable sections of a song during playback. This is useful when your worship team uses a different structure than the original recording—for example, skipping a bridge, shortening an intro, or removing an instrumental section.</p>
             
             <h3>Understanding Arrangements</h3>
-            <p>Every song has <strong>source sections</strong> derived from its markers (Intro, Verse 1, Chorus, Bridge, etc.). An arrangement defines which sections play and in what order.</p>
+            <p>Arrangements work by dividing the song timeline into sections that can be individually enabled or disabled:</p>
             
             <ul>
-                <li><strong>Original:</strong> The default arrangement plays all sections in their original order</li>
-                <li><strong>Published Arrangements:</strong> Pre-defined variations included with the song (e.g., "Shortened", "Christmas")</li>
-                <li><strong>Custom Arrangements:</strong> Your own arrangements created using the Arrangement Editor</li>
+                <li><strong>Original (Full Song):</strong> The default arrangement with no divisions—the entire song plays</li>
+                <li><strong>Saved Arrangements:</strong> Custom arrangements saved to the cloud for sharing across devices and users</li>
+                <li><strong>Enabled sections:</strong> Play normally during playback</li>
+                <li><strong>Disabled sections:</strong> Are skipped during playback with a smooth 50ms crossfade</li>
             </ul>
             
-            <h3>Selecting an Arrangement</h3>
-            <ol>
-                <li>Locate the <strong>arrangement dropdown</strong> in the tab bar (top right in the tab bar)</li>
-                <li>Click the dropdown to see available arrangements</li>
-                <li>Select an arrangement to apply it immediately</li>
-            </ol>
+            <h3>The Arrangement Bar</h3>
+            <p>The <strong>arrangement bar</strong> appears directly below the timeline. It shows all arrangement sections as clickable regions with yellow dividers marking the boundaries.</p>
             
-            <p>The dropdown shows:</p>
             <ul>
-                <li><strong>Refresh</strong> — If the Worship Leader has published new or changed arrangements, you may need to click this to see those changes.</li>
-                <li><strong>Original</strong> — Always available, plays sections in their natural order</li>
-                <li><strong>Published arrangements</strong> — Pre-defined by the worship leader or music director</li>
-                <li><strong>Manage Published...</strong> — Opens the editor to modify or delete existing custom arrangements (secret key protected)
-                <li><strong>Your custom arrangements</strong> — Arrangements you've created</li>
-                <li><strong>New Custom...</strong> — Opens the Arrangement Editor to create a new arrangement</li>
-                <li><strong>Manage Custom...</strong> — Opens the editor to modify or delete existing custom arrangements (only shown if you have custom arrangements)</li>
+                <li><strong>Enabled sections:</strong> Appear in their normal color</li>
+                <li><strong>Disabled sections:</strong> Appear with a dark (70%) overlay, and waveforms below also show the overlay</li>
             </ul>
+            
+            <h3>Creating and Editing Arrangement Sections</h3>
+            <table>
+                <tr>
+                    <th>Action</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td><kbd>Ctrl</kbd> + Click on arrangement bar</td>
+                    <td>Add a split at that position (snaps to beat)</td>
+                </tr>
+                <tr>
+                    <td><kbd>Alt</kbd> + Click on yellow divider</td>
+                    <td>Remove the split (merge sections)</td>
+                </tr>
+                <tr>
+                    <td>Drag yellow divider</td>
+                    <td>Move the split position (snaps to beat)</td>
+                </tr>
+                <tr>
+                    <td>Click on a section</td>
+                    <td>Toggle enabled/disabled state</td>
+                </tr>
+            </table>
+            
+            <div class="note">
+                <strong>Note:</strong> At least one section must remain enabled. You cannot disable all sections.
+            </div>
             
             <h3>How Arrangements Affect Playback</h3>
-            <p>When an arrangement is active:</p>
             <ul>
-                <li>The <strong>timeline</strong> displays a "virtual" timeline showing sections in their arranged order</li>
-                <li>The <strong>waveform</strong> displays sections in the arrangement order</li>
-                <li><strong>Markers</strong> appear at their positions within the virtual timeline</li>
-                <li><strong>Loops</strong> work within the virtual timeline</li>
-                <li><strong>Seeking</strong> works within the virtual timeline</li>
-                <li><strong>Measure numbers</strong> continue sequentially across sections (they don't restart at each section)</li>
+                <li>When playback enters a <strong>disabled section</strong>, it automatically jumps to the next enabled section</li>
+                <li>A smooth <strong>50ms crossfade</strong> is applied during the skip to prevent audio artifacts</li>
+                <li>If the playhead starts in a disabled section, it jumps to the next enabled section before playing</li>
+                <li><strong>Loop regions</strong> respect arrangement sections—disabled sections within a loop are skipped</li>
+            </ul>
+            
+            <h3>Using the Dropdown Menu</h3>
+            <p>Click the dropdown button in the tab bar (top right) to access arrangements:</p>
+            
+            <ul>
+                <li><strong>Refresh</strong> — Reload the list of saved arrangements from the cloud</li>
+                <li><strong>Arrangements ></strong> — Opens the arrangements submenu:
+                    <ul>
+                        <li><strong>Original (Full Song)</strong> — Reset to the default (no splits)</li>
+                        <li><strong>Saved arrangements</strong> — Load a previously saved arrangement</li>
+                        <li><strong>Save</strong> — Save changes to the current arrangement (disabled if unchanged)</li>
+                        <li><strong>Save As...</strong> — Save as a new arrangement with a name</li>
+                        <li><strong>Delete ></strong> — Delete a saved arrangement</li>
+                    </ul>
+                </li>
+            </ul>
+            
+            <h3>Saving Arrangements</h3>
+            <ol>
+                <li>Create your arrangement sections using Ctrl+Click to add splits</li>
+                <li>Click sections to enable/disable them as needed</li>
+                <li>Open the dropdown menu and select <strong>Arrangements > Save As...</strong></li>
+                <li>Enter a name for your arrangement</li>
+                <li>Optionally check <strong>"Mark as protected"</strong> to require a secret to edit/delete</li>
+                <li>Click <strong>Save</strong></li>
+            </ol>
+            
+            <h3>Loading an Arrangement</h3>
+            <ol>
+                <li>Open the dropdown menu and hover over <strong>Arrangements</strong></li>
+                <li>Click on any saved arrangement name to load it</li>
+                <li>The arrangement sections and their enabled/disabled states will be applied</li>
+            </ol>
+            
+            <h3>Deleting an Arrangement</h3>
+            <ol>
+                <li>Open the dropdown menu</li>
+                <li>Navigate to <strong>Arrangements > Delete</strong></li>
+                <li>Click on the arrangement you want to delete</li>
+                <li>If the arrangement is protected, enter the admin secret</li>
+                <li>Confirm the deletion</li>
+            </ol>
+            
+            <h3>Unsaved Changes</h3>
+            <p>When you have unsaved changes to an arrangement:</p>
+            <ul>
+                <li>An asterisk (*) appears next to the arrangement name in the dropdown button</li>
+                <li>If you try to switch arrangements or songs, you'll be prompted to <strong>Discard</strong>, <strong>Save</strong>, or <strong>Cancel</strong></li>
+                <li>Closing the browser tab will also trigger a warning if there are unsaved changes</li>
+            </ul>
+            
+            <div class="tip">
+                <strong>Tip:</strong> Arrangements are independent of mute sets. You can combine a custom arrangement with a custom mute set for ultimate practice flexibility.
+            </div>
+        </section>
+        
+        <!-- Section 8.5: Mute Sets -->
+        <section id="mute-sets">
+            <h2>8.5 Mute Sets</h2>
+            <p>Mute Sets allow you to save and share per-track mute section configurations. While arrangements control which parts of the song are skipped entirely, mute sets control which tracks are muted during specific time ranges.</p>
+            
+            <h3>Understanding Mute Sets</h3>
+            <ul>
+                <li><strong>None (All Unmuted):</strong> The default state—no tracks have muted sections</li>
+                <li><strong>Saved Mute Sets:</strong> Custom configurations saved to the cloud</li>
+                <li>Mute sets are <strong>independent</strong> of arrangements—they work together</li>
+            </ul>
+            
+            <h3>Creating a Mute Set</h3>
+            <ol>
+                <li>Use <kbd>Ctrl</kbd> + Click on track waveforms to create mute section splits</li>
+                <li>Click the "M" buttons on each section to toggle mutes</li>
+                <li>Open the dropdown menu and select <strong>Mutes > Save As...</strong></li>
+                <li>Enter a name and optionally protect it with a secret</li>
+                <li>Click <strong>Save</strong></li>
+            </ol>
+            
+            <h3>Using the Mutes Submenu</h3>
+            <ul>
+                <li><strong>None (All Unmuted)</strong> — Clear all mute sections</li>
+                <li><strong>Saved mute sets</strong> — Load a previously saved mute set</li>
+                <li><strong>Save</strong> — Save changes to the current mute set</li>
+                <li><strong>Save As...</strong> — Save as a new mute set with a name</li>
+                <li><strong>Delete ></strong> — Delete a saved mute set</li>
+            </ul>
+            
+            <h3>How Mute Sets Work</h3>
+            <ul>
+                <li>Mute sections are applied <strong>per-track</strong>—each track can have different mute configurations</li>
+                <li>When loading a mute set, only tracks that exist in both the song and the mute set are affected</li>
+                <li>Track-level mute (the "M" button in track controls) takes precedence over section mutes</li>
+                <li>Smooth 50ms gain ramps prevent audio clicks at mute boundaries</li>
             </ul>
             
             <div class="note">
-                <strong>Note:</strong> When sections are non-consecutive in the source audio, the app automatically applies a smooth ~50ms crossfade to prevent audio artifacts during transitions.
-            </div>
-            
-            <h3>Creating a Custom Arrangement</h3>
-            <ol>
-                <li>Click the arrangement dropdown and select <strong>"New Custom..."</strong></li>
-                <li>The <strong>Arrangement Editor</strong> dialog opens</li>
-            </ol>
-            
-            <h4>The Arrangement Editor</h4>
-            <p>The editor has a two-panel layout:</p>
-            
-            <table>
-                <tr>
-                    <th>Panel</th>
-                    <th>Description</th>
-                </tr>
-                <tr>
-                    <td><strong>Source Sections (Left)</strong></td>
-                    <td>Lists all sections from the original song. Click the <strong>+</strong> button next to a section to add it to your arrangement.</td>
-                </tr>
-                <tr>
-                    <td><strong>Your Arrangement (Right)</strong></td>
-                    <td>Shows the sections you've added in their current order. Use the controls to reorder or remove sections.</td>
-                </tr>
-            </table>
-            
-            <h4>Editor Controls</h4>
-            <table>
-                <tr>
-                    <th>Control</th>
-                    <th>Function</th>
-                </tr>
-                <tr>
-                    <td><strong>Name field</strong></td>
-                    <td>Enter a name for your arrangement (e.g., "Sunday Version")</td>
-                </tr>
-                <tr>
-                    <td><strong>Add All</strong></td>
-                    <td>Adds all source sections to your arrangement in order</td>
-                </tr>
-                <tr>
-                    <td><strong>Remove All</strong></td>
-                    <td>Clears all sections from your arrangement</td>
-                </tr>
-                <tr>
-                    <td><strong>+ (per section)</strong></td>
-                    <td>Add that section to the end of your arrangement</td>
-                </tr>
-                <tr>
-                    <td><strong>&#9650; / &#9660; arrows</strong></td>
-                    <td>Move a section up or down in your arrangement</td>
-                </tr>
-                <tr>
-                    <td><strong>&times; (remove)</strong></td>
-                    <td>Remove a section from your arrangement</td>
-                </tr>
-                <tr>
-                    <td><strong>Save &amp; Apply</strong></td>
-                    <td>Saves the arrangement and sets it as active</td>
-                </tr>
-                <tr>
-                    <td><strong>Cancel</strong></td>
-                    <td>Closes the editor without saving changes</td>
-                </tr>
-            </table>
-            
-            <div class="tip">
-                <strong>Tip:</strong> You can add the same section multiple times. For example, add Chorus twice in a row for an extended chorus section.
-            </div>
-            
-            <h3>Editing a Custom Arrangement</h3>
-            <ol>
-                <li>Click the arrangement dropdown and select <strong>"Manage Custom..."</strong></li>
-                <li>The editor opens with your most recent custom arrangement loaded</li>
-                <li>Make your changes and click <strong>Save &amp; Apply</strong></li>
-            </ol>
-            
-            <h3>Deleting a Custom Arrangement</h3>
-            <ol>
-                <li>Open the Arrangement Editor via <strong>"Manage Custom..."</strong></li>
-                <li>Click the <strong>Delete</strong> button at the bottom of the dialog</li>
-                <li>Confirm the deletion when prompted</li>
-            </ol>
-            <p>After deletion, the song will revert to the "Original" arrangement.</p>
-            
-            <h3>Publishing an Arrangement</h3>
-            <p>If you create an arrangement that would be useful for others, you can publish it (<strong>secret key protected</strong>).</p>
-            
-            <ol>
-                <li>Open the Arrangement Editor with your arrangement</li>
-                <li>Click the <strong>Publish</strong> button</li>
-            </ol>
-            
-            <div class="note">
-                <strong>Note:</strong> Custom arrangements are stored in your browser's local storage and are specific to your device. Exporting and sharing allows arrangements to be added to the song's metadata for all users.
-            </div>
-            <div class="note">
-                <strong>Note:</strong> Published arrangements may be edited and deleted in the same way as Custom arrangements (via the Manage Published... option). However, these features are protected by a secret key and only available to Worship Leader, ect...
+                <strong>Note:</strong> Mute sets only save tracks that have at least one muted section. Tracks with no muted sections are treated as fully unmuted.
             </div>
         </section>
         
@@ -1023,8 +1061,15 @@
             <h3>Synchronized Scrolling</h3>
             <p>The track controls panel and waveform panel scroll together vertically, keeping them aligned.</p>
             
-            <h3>Arrangement Crossfades</h3>
-            <p>When playing through an arrangement with non-consecutive sections (e.g., jumping from Verse 1 directly to Chorus 2), the app automatically applies a smooth ~50ms crossfade to prevent audio pops or clicks during the transition.</p>
+            <h3>Arrangement Section Skipping</h3>
+            <p>When playback reaches a disabled arrangement section, the app automatically skips to the next enabled section with a smooth ~50ms crossfade to prevent audio pops or clicks.</p>
+            
+            <h3>Ctrl+Click / Alt+Click Modifiers</h3>
+            <ul>
+                <li><kbd>Ctrl</kbd> + Click on timeline bar: Add an arrangement split (snaps to beat)</li>
+                <li><kbd>Ctrl</kbd> + Click on waveform: Add a mute split for that track (snaps to beat)</li>
+                <li><kbd>Alt</kbd> + Click on divider: Remove that split (merge sections)</li>
+            </ul>
         </section>
         
         <!-- Section 12: Cache & Storage -->

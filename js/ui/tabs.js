@@ -524,6 +524,10 @@ class TabsUI {
                     }
                     submenu.appendChild(item);
                 });
+            } else {
+                // Show empty state when no saved arrangements
+                submenu.appendChild(this.createDivider());
+                submenu.appendChild(this.createEmptyState('No saved arrangements'));
             }
             
             // Divider and actions
@@ -930,6 +934,10 @@ class TabsUI {
                     }
                     submenu.appendChild(item);
                 });
+            } else {
+                // Show empty state when no saved mute sets
+                submenu.appendChild(this.createDivider());
+                submenu.appendChild(this.createEmptyState('No saved mute sets'));
             }
             
             // Divider and actions
