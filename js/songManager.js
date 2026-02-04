@@ -45,13 +45,50 @@ export function openSong(songName) {
 /**
  * Switch to a different song
  * @param {string} songId - Song ID to switch to
+ * @returns {Promise<boolean>} - true if switch succeeded, false if cancelled
  */
 export async function switchSong(songId) {
     const currentSong = State.getActiveSong();
     const targetSong = State.getSong(songId);
     
     if (!targetSong || (currentSong && currentSong.id === songId)) {
-        return;
+        return false;
+    }
+    
+    // Check for unsaved changes before switching (Phase 7)
+    if (State.hasAnyUnsavedChanges()) {
+        const modal = getModal();
+        
+        // Determine what has changes
+        let itemType, itemName;
+        if (State.hasUnsavedArrangementChanges()) {
+            itemType = 'arrangement';
+            itemName = State.getCurrentArrangementDisplayName() || 'Original';
+        } else {
+            itemType = 'mute set';
+            itemName = State.getCurrentMuteSetDisplayName() || 'None';
+        }
+        
+        const result = await modal.unsavedChangesWarning(itemType, itemName);
+        
+        if (result === 'cancel') {
+            return false;
+        }
+        
+        if (result === 'save') {
+            // Import tabs dynamically to avoid circular dependency
+            const { getTabs } = await import('./ui/tabs.js');
+            const tabs = getTabs();
+            
+            // Save the current changes
+            if (State.hasUnsavedArrangementChanges()) {
+                await tabs.saveCurrentArrangement(currentSong);
+            }
+            if (State.hasUnsavedMuteChanges()) {
+                await tabs.saveCurrentMuteSet(currentSong);
+            }
+        }
+        // 'discard' - continue without saving
     }
     
     // Stop any current playback
@@ -82,6 +119,8 @@ export async function switchSong(songId) {
             State.setLoading(false);
         }
     }
+    
+    return true;
 }
 
 /**

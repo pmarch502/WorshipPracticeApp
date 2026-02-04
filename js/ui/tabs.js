@@ -686,9 +686,22 @@ class TabsUI {
     }
     
     /**
-     * Select Original arrangement
+     * Select Original arrangement (Phase 7: with unsaved changes check)
      */
-    selectOriginalArrangement(song) {
+    async selectOriginalArrangement(song) {
+        // Check for unsaved arrangement changes first
+        if (State.hasUnsavedArrangementChanges()) {
+            const currentName = State.getCurrentArrangementDisplayName() || 'Original';
+            const modal = getModal();
+            const result = await modal.unsavedChangesWarning('arrangement', currentName);
+            
+            if (result === 'cancel') return;
+            if (result === 'save') {
+                await this.saveCurrentArrangement(song);
+            }
+            // 'discard' - continue
+        }
+        
         // Reset to original (full song, no splits)
         State.initializeOriginalArrangement();
         State.setArrangementModified(false);
@@ -702,9 +715,22 @@ class TabsUI {
     }
     
     /**
-     * Select a saved arrangement
+     * Select a saved arrangement (Phase 7: with unsaved changes check)
      */
     async selectArrangement(song, name) {
+        // Check for unsaved arrangement changes first
+        if (State.hasUnsavedArrangementChanges()) {
+            const currentName = State.getCurrentArrangementDisplayName() || 'Original';
+            const modal = getModal();
+            const result = await modal.unsavedChangesWarning('arrangement', currentName);
+            
+            if (result === 'cancel') return;
+            if (result === 'save') {
+                await this.saveCurrentArrangement(song);
+            }
+            // 'discard' - continue
+        }
+        
         try {
             const arrangement = await getArrangement(song.songName, name);
             
@@ -967,9 +993,22 @@ class TabsUI {
     }
     
     /**
-     * Select None (clear mutes)
+     * Select None (clear mutes) (Phase 7: with unsaved changes check)
      */
-    selectNoneMuteSet(song) {
+    async selectNoneMuteSet(song) {
+        // Check for unsaved mute set changes first
+        if (State.hasUnsavedMuteChanges()) {
+            const currentName = State.getCurrentMuteSetDisplayName() || 'None';
+            const modal = getModal();
+            const result = await modal.unsavedChangesWarning('mute set', currentName);
+            
+            if (result === 'cancel') return;
+            if (result === 'save') {
+                await this.saveCurrentMuteSet(song);
+            }
+            // 'discard' - continue
+        }
+        
         // Reset all mute sections to default unmuted state
         State.resetAllMuteSections();
         State.setMuteSetModified(false);
@@ -985,9 +1024,22 @@ class TabsUI {
     }
     
     /**
-     * Select a saved mute set
+     * Select a saved mute set (Phase 7: with unsaved changes check)
      */
     async selectMuteSet(song, name) {
+        // Check for unsaved mute set changes first
+        if (State.hasUnsavedMuteChanges()) {
+            const currentName = State.getCurrentMuteSetDisplayName() || 'None';
+            const modal = getModal();
+            const result = await modal.unsavedChangesWarning('mute set', currentName);
+            
+            if (result === 'cancel') return;
+            if (result === 'save') {
+                await this.saveCurrentMuteSet(song);
+            }
+            // 'discard' - continue
+        }
+        
         try {
             const muteSet = await getMuteSet(song.songName, name);
             

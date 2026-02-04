@@ -1012,6 +1012,34 @@ export function isMuteSetModified() {
     return song?.muteSetModified || false;
 }
 
+// ========================================
+// Phase 7: Unsaved Changes Detection
+// ========================================
+
+/**
+ * Check if arrangement has unsaved changes (alias for isArrangementModified)
+ * @returns {boolean}
+ */
+export function hasUnsavedArrangementChanges() {
+    return isArrangementModified();
+}
+
+/**
+ * Check if mute set has unsaved changes (alias for isMuteSetModified)
+ * @returns {boolean}
+ */
+export function hasUnsavedMuteChanges() {
+    return isMuteSetModified();
+}
+
+/**
+ * Check if either arrangement or mute set has unsaved changes
+ * @returns {boolean}
+ */
+export function hasAnyUnsavedChanges() {
+    return hasUnsavedArrangementChanges() || hasUnsavedMuteChanges();
+}
+
 /**
  * Set the mute set modified flag
  * @param {boolean} modified - Modified state

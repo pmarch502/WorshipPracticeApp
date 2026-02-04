@@ -1683,6 +1683,18 @@ body {
     background-color: #d32f2f;
 }
 
+/* 3-button layout for unsaved changes warning */
+.modal-buttons-three {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+}
+
+.modal-buttons-three .btn {
+    min-width: 80px;
+}
+
 .icon-btn {
     width: 28px;
     height: 28px;

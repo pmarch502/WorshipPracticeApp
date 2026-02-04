@@ -202,6 +202,65 @@ class ModalManager {
     }
 
     /**
+     * Show unsaved changes warning dialog with three buttons: Discard, Save, Cancel
+     * @param {string} itemType - 'arrangement' or 'mute set'
+     * @param {string} itemName - Name of the item with unsaved changes
+     * @returns {Promise<'discard'|'save'|'cancel'>}
+     */
+    unsavedChangesWarning(itemType, itemName) {
+        return new Promise((resolve) => {
+            this.titleEl.textContent = 'Unsaved Changes';
+            this.contentEl.innerHTML = `
+                <p>You have unsaved changes to the ${itemType} "<strong>${itemName}</strong>".</p>
+                <p>What would you like to do?</p>
+                <div class="modal-buttons-three">
+                    <button class="btn btn-danger" data-action="discard">Discard</button>
+                    <button class="btn btn-primary" data-action="save">Save</button>
+                    <button class="btn btn-secondary" data-action="cancel">Cancel</button>
+                </div>
+            `;
+            
+            // Hide default buttons
+            this.cancelBtn.style.display = 'none';
+            this.confirmBtn.style.display = 'none';
+            
+            // Handle button clicks
+            const buttonsDiv = this.contentEl.querySelector('.modal-buttons-three');
+            const handleClick = (e) => {
+                const action = e.target.dataset.action;
+                if (action) {
+                    buttonsDiv.removeEventListener('click', handleClick);
+                    this.overlay.classList.add('hidden');
+                    this.cancelBtn.style.display = '';
+                    this.confirmBtn.style.display = '';
+                    resolve(action);
+                }
+            };
+            buttonsDiv.addEventListener('click', handleClick);
+            
+            // Handle Escape key - same as Cancel
+            const handleKeydown = (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    buttonsDiv.removeEventListener('click', handleClick);
+                    document.removeEventListener('keydown', handleKeydown);
+                    this.overlay.classList.add('hidden');
+                    this.cancelBtn.style.display = '';
+                    this.confirmBtn.style.display = '';
+                    resolve('cancel');
+                }
+            };
+            document.addEventListener('keydown', handleKeydown);
+            
+            this.overlay.classList.remove('hidden');
+            
+            // Focus the Save button as the safest default
+            const saveBtn = buttonsDiv.querySelector('[data-action="save"]');
+            if (saveBtn) saveBtn.focus();
+        });
+    }
+
+    /**
      * Show a custom modal with custom content and return value extraction
      * @param {Object} options - Modal options
      * @param {string} options.title - Dialog title

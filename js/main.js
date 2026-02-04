@@ -289,9 +289,16 @@ class App {
             this.saveState();
         });
 
-        // Save before page unload
-        window.addEventListener('beforeunload', () => {
+        // Save before page unload, and warn if unsaved changes
+        window.addEventListener('beforeunload', (e) => {
             this.saveStateImmediate();
+            
+            // Show browser warning if unsaved arrangement/mute changes
+            if (State.hasAnyUnsavedChanges()) {
+                e.preventDefault();
+                e.returnValue = ''; // Required for Chrome
+                return ''; // Required for older browsers
+            }
         });
     }
 
