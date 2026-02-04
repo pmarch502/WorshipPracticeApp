@@ -1,6 +1,6 @@
 *** WARNING
 
-You cannot paste this code into the Lambda console. When you do, it strips all of the ${...} items from the code.
+You can paste this code into the Lambda console - if it is from a plain text editor. Otherwise, it may strip all of the ${...} items from the code.
 
 
 === ENDPOINTS ===

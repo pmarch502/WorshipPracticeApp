@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-cloudfront';
 const s3 = new S3Client({ region: process.env.AWS_REGION });
 const cloudfront = new CloudFrontClient({ region: process.env.AWS_REGION });
@@ -9,7 +9,7 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET;
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS'
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
 };
 export const handler = async (event) => {
     console.log('Event:', JSON.stringify(event, null, 2));
@@ -26,25 +26,125 @@ export const handler = async (event) => {
             return response(500, { error: 'Internal server error', details: err.message });
         }
     }
-    try {
-        const body = JSON.parse(event.body || '{}');
-        const { secret } = body;
-        // Validate secret
-        if (secret !== ADMIN_SECRET) {
-            return response(401, { error: 'Invalid secret' });
+
+    // Handle GET /arrangements/{songName} - list arrangements (public, no auth required)
+    if (event.httpMethod === 'GET' && event.resource === '/arrangements/{songName}') {
+        try {
+            const { songName } = event.pathParameters;
+            return await handleListArrangements(decodeURIComponent(songName));
+        } catch (err) {
+            console.error('Error in handleListArrangements:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
         }
-        if (event.httpMethod === 'POST' && event.resource === '/arrangements') {
-            return await handlePublish(body);
-        }
-        if (event.httpMethod === 'DELETE' && event.resource === '/arrangements/{songName}/{arrangementName}') {
-            const { songName, arrangementName } = event.pathParameters;
-            return await handleDelete(decodeURIComponent(songName), decodeURIComponent(arrangementName));
-        }
-        return response(400, { error: 'Invalid request' });
-    } catch (err) {
-        console.error('Error:', err);
-        return response(500, { error: 'Internal server error', details: err.message });
     }
+
+    // Handle GET /arrangements/{songName}/{name} - get specific arrangement (public, no auth required)
+    if (event.httpMethod === 'GET' && event.resource === '/arrangements/{songName}/{name}') {
+        try {
+            const { songName, name } = event.pathParameters;
+            return await handleGetArrangement(
+                decodeURIComponent(songName),
+                decodeURIComponent(name)
+            );
+        } catch (err) {
+            console.error('Error in handleGetArrangement:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle PUT /arrangements/{songName}/{name} - save arrangement
+    if (event.httpMethod === 'PUT' && event.resource === '/arrangements/{songName}/{name}') {
+        try {
+            const { songName, name } = event.pathParameters;
+            const body = JSON.parse(event.body || '{}');
+            return await handleSaveArrangement(
+                decodeURIComponent(songName),
+                decodeURIComponent(name),
+                body
+            );
+        } catch (err) {
+            console.error('Error in handleSaveArrangement:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle DELETE /arrangements/{songName}/{name} - delete arrangement
+    if (event.httpMethod === 'DELETE' && event.resource === '/arrangements/{songName}/{name}') {
+        try {
+            const { songName, name } = event.pathParameters;
+            const body = JSON.parse(event.body || '{}');
+            const { secret } = body;
+            return await handleDeleteArrangement(
+                decodeURIComponent(songName),
+                decodeURIComponent(name),
+                secret
+            );
+        } catch (err) {
+            console.error('Error in handleDeleteArrangement:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle GET /mutes/{songName} - list mute sets (public, no auth required)
+    if (event.httpMethod === 'GET' && event.resource === '/mutes/{songName}') {
+        try {
+            const { songName } = event.pathParameters;
+            return await handleListMuteSets(decodeURIComponent(songName));
+        } catch (err) {
+            console.error('Error in handleListMuteSets:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle GET /mutes/{songName}/{name} - get specific mute set (public, no auth required)
+    if (event.httpMethod === 'GET' && event.resource === '/mutes/{songName}/{name}') {
+        try {
+            const { songName, name } = event.pathParameters;
+            return await handleGetMuteSet(
+                decodeURIComponent(songName),
+                decodeURIComponent(name)
+            );
+        } catch (err) {
+            console.error('Error in handleGetMuteSet:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle PUT /mutes/{songName}/{name} - save mute set
+    if (event.httpMethod === 'PUT' && event.resource === '/mutes/{songName}/{name}') {
+        try {
+            const { songName, name } = event.pathParameters;
+            const body = JSON.parse(event.body || '{}');
+            return await handleSaveMuteSet(
+                decodeURIComponent(songName),
+                decodeURIComponent(name),
+                body
+            );
+        } catch (err) {
+            console.error('Error in handleSaveMuteSet:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle DELETE /mutes/{songName}/{name} - delete mute set
+    if (event.httpMethod === 'DELETE' && event.resource === '/mutes/{songName}/{name}') {
+        try {
+            const { songName, name } = event.pathParameters;
+            const body = JSON.parse(event.body || '{}');
+            const { secret } = body;
+            return await handleDeleteMuteSet(
+                decodeURIComponent(songName),
+                decodeURIComponent(name),
+                secret
+            );
+        } catch (err) {
+            console.error('Error in handleDeleteMuteSet:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // No matching route
+    return response(400, { error: 'Invalid request' });
 };
 async function handleGetManifest() {
     console.log('handleGetManifest called, bucket:', BUCKET);
@@ -130,112 +230,386 @@ async function handleGetManifest() {
     return response(200, manifest);
 }
 
-async function handlePublish({ songName, arrangement }) {
-    console.log('handlePublish called with:', { songName, arrangement });
-    // Validate input
-    if (!songName || !arrangement || !arrangement.name || !Array.isArray(arrangement.sections)) {
-        return response(400, { error: 'Missing required fields: songName, arrangement.name, arrangement.sections' });
-    }
-    if (arrangement.sections.length === 0) {
-        return response(400, { error: 'Arrangement must have at least one section' });
-    }
-    // Fetch current metadata
-    const metadataKey = `audio/${songName}/metadata.json`;
-    let metadata;
+async function handleGetArrangement(songName, name) {
+    console.log('handleGetArrangement called for:', songName, name);
+    
+    const key = `audio/${songName}/Arrangements/${name}.json`;
     
     try {
-        metadata = await getMetadata(metadataKey);
+        const command = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(command);
+        const bodyString = await result.Body.transformToString();
+        const arrangement = JSON.parse(bodyString);
+        
+        return response(200, arrangement);
     } catch (err) {
-        console.log('getMetadata error:', err.name, err.Code, err.message);
         if (err.name === 'NoSuchKey') {
-            return response(404, { error: `Song '${songName}' not found` });
+            return response(404, { error: `Arrangement '${name}' not found for song '${songName}'` });
         }
-        throw err;
+        console.error('Error getting arrangement:', err);
+        return response(500, { error: 'Failed to get arrangement', details: err.message });
     }
-    // Ensure arrangements array exists
-    if (!metadata.arrangements) {
-        metadata.arrangements = [];
-    }
-    // Check for name conflict
-    const existingIndex = metadata.arrangements.findIndex(
-        a => a.name.toLowerCase() === arrangement.name.toLowerCase()
-    );
-    if (existingIndex !== -1) {
-        return response(409, { error: `Arrangement '${arrangement.name}' already exists for '${songName}'` });
-    }
-    // Validate section indices (must be valid marker indices)
-    const maxSectionIndex = (metadata.markers?.length || 0) - 1;
-    for (const idx of arrangement.sections) {
-        if (!Number.isInteger(idx) || idx < 0 || idx > maxSectionIndex) {
-            return response(400, { 
-                error: `Invalid section index: ${idx}. Must be between 0 and ${maxSectionIndex}` 
-            });
-        }
-    }
-    // Add the new arrangement
-    metadata.arrangements.push({
-        name: arrangement.name,
-        sections: arrangement.sections
-    });
-    // Write back to S3
-    await putMetadata(metadataKey, metadata);
-    // Invalidate CloudFront cache
-    await invalidateCache(`/audio/${songName}/metadata.json`);
-    return response(200, { 
-        success: true, 
-        message: `Arrangement '${arrangement.name}' published to '${songName}'` 
-    });
 }
-async function handleDelete(songName, arrangementName) {
-    // Fetch current metadata
-    const metadataKey = `audio/${songName}/metadata.json`;
-    let metadata;
+
+async function handleSaveArrangement(songName, name, body) {
+    console.log('handleSaveArrangement called for:', songName, name);
     
-    try {
-        metadata = await getMetadata(metadataKey);
-    } catch (err) {
-        if (err.name === 'NoSuchKey') {
-            return response(404, { error: `Song '${songName}' not found` });
+    const { sections, protected: isProtected, secret } = body;
+    
+    // Validate required fields
+    if (!sections || !Array.isArray(sections) || sections.length === 0) {
+        return response(400, { error: 'Missing or invalid sections array' });
+    }
+    
+    // Validate sections have required fields
+    for (const section of sections) {
+        if (typeof section.start !== 'number' || 
+            typeof section.end !== 'number' || 
+            typeof section.enabled !== 'boolean') {
+            return response(400, { error: 'Each section must have start (number), end (number), and enabled (boolean)' });
         }
-        throw err;
     }
-    if (!metadata.arrangements || metadata.arrangements.length === 0) {
-        return response(404, { error: `No arrangements found for '${songName}'` });
+    
+    // Validate at least one section is enabled
+    if (!sections.some(s => s.enabled)) {
+        return response(400, { error: 'At least one section must be enabled' });
     }
-    // Find the arrangement
-    const index = metadata.arrangements.findIndex(
-        a => a.name.toLowerCase() === arrangementName.toLowerCase()
-    );
-    if (index === -1) {
-        return response(404, { error: `Arrangement '${arrangementName}' not found in '${songName}'` });
+    
+    const key = `audio/${songName}/Arrangements/${name}.json`;
+    
+    // Check if arrangement already exists
+    let existingArrangement = null;
+    try {
+        const getCommand = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(getCommand);
+        const bodyString = await result.Body.transformToString();
+        existingArrangement = JSON.parse(bodyString);
+    } catch (err) {
+        if (err.name !== 'NoSuchKey') {
+            throw err; // Unexpected error
+        }
+        // NoSuchKey means it's a new arrangement - that's fine
     }
-    // Remove it
-    metadata.arrangements.splice(index, 1);
-    // Write back to S3
-    await putMetadata(metadataKey, metadata);
-    // Invalidate CloudFront cache
-    await invalidateCache(`/audio/${songName}/metadata.json`);
-    return response(200, { 
-        success: true, 
-        message: `Arrangement '${arrangementName}' deleted from '${songName}'` 
-    });
-}
-async function getMetadata(key) {
-    console.log('getMetadata called with key:', key, 'bucket:', BUCKET);
-    const command = new GetObjectCommand({ Bucket: BUCKET, Key: key });
-    const result = await s3.send(command);
-    const bodyString = await result.Body.transformToString();
-    return JSON.parse(bodyString);
-}
-async function putMetadata(key, metadata) {
-    const command = new PutObjectCommand({
+    
+    // If existing arrangement is protected, require secret
+    if (existingArrangement?.protected) {
+        if (secret !== ADMIN_SECRET) {
+            return response(403, { error: 'This arrangement is protected. Valid secret required to overwrite.' });
+        }
+    }
+    
+    // Build the arrangement object
+    const now = new Date().toISOString();
+    const arrangement = {
+        name: name,
+        sections: sections,
+        protected: isProtected || false,
+        createdAt: existingArrangement?.createdAt || now,
+        modifiedAt: now
+    };
+    
+    // Save to S3
+    const putCommand = new PutObjectCommand({
         Bucket: BUCKET,
         Key: key,
-        Body: JSON.stringify(metadata, null, '\t'),
+        Body: JSON.stringify(arrangement, null, '\t'),
         ContentType: 'application/json'
     });
-    await s3.send(command);
+    await s3.send(putCommand);
+    
+    // Invalidate CloudFront cache
+    await invalidateCache(`/audio/${encodeURIComponent(songName)}/Arrangements/${encodeURIComponent(name)}.json`);
+    
+    return response(200, { 
+        success: true, 
+        message: existingArrangement ? `Arrangement '${name}' updated` : `Arrangement '${name}' created`,
+        arrangement: arrangement
+    });
 }
+
+async function handleListArrangements(songName) {
+    console.log('handleListArrangements called for:', songName);
+    
+    const prefix = `audio/${songName}/Arrangements/`;
+    
+    try {
+        const command = new ListObjectsV2Command({
+            Bucket: BUCKET,
+            Prefix: prefix
+        });
+        
+        const result = await s3.send(command);
+        
+        // If no Contents, folder doesn't exist or is empty - return empty array
+        if (!result.Contents || result.Contents.length === 0) {
+            return response(200, { arrangements: [] });
+        }
+        
+        // Extract arrangement names from keys
+        // Key format: audio/{songName}/Arrangements/{name}.json
+        const arrangements = [];
+        
+        for (const obj of result.Contents) {
+            const key = obj.Key;
+            
+            // Skip if not a .json file
+            if (!key.endsWith('.json')) {
+                continue;
+            }
+            
+            // Extract filename from key
+            const filename = key.slice(prefix.length); // Remove prefix
+            
+            // Skip if empty or contains subdirectories
+            if (!filename || filename.includes('/')) {
+                continue;
+            }
+            
+            // Remove .json extension and URL-decode the name
+            const name = decodeURIComponent(filename.slice(0, -5));
+            arrangements.push(name);
+        }
+        
+        // Sort alphabetically
+        arrangements.sort((a, b) => a.localeCompare(b));
+        
+        return response(200, { arrangements });
+    } catch (err) {
+        console.error('Error listing arrangements:', err);
+        return response(500, { error: 'Failed to list arrangements', details: err.message });
+    }
+}
+
+async function handleDeleteArrangement(songName, name, secret) {
+    console.log('handleDeleteArrangement called for:', songName, name);
+    
+    const key = `audio/${songName}/Arrangements/${name}.json`;
+    
+    // First, check if arrangement exists and if it's protected
+    let existingArrangement = null;
+    try {
+        const getCommand = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(getCommand);
+        const bodyString = await result.Body.transformToString();
+        existingArrangement = JSON.parse(bodyString);
+    } catch (err) {
+        if (err.name === 'NoSuchKey') {
+            return response(404, { error: `Arrangement '${name}' not found for song '${songName}'` });
+        }
+        throw err;
+    }
+    
+    // If arrangement is protected, require secret
+    if (existingArrangement.protected) {
+        if (secret !== ADMIN_SECRET) {
+            return response(403, { error: 'This arrangement is protected. Valid secret required to delete.' });
+        }
+    }
+    
+    // Delete from S3
+    const deleteCommand = new DeleteObjectCommand({ Bucket: BUCKET, Key: key });
+    await s3.send(deleteCommand);
+    
+    // Invalidate CloudFront cache
+    await invalidateCache(`/audio/${encodeURIComponent(songName)}/Arrangements/${encodeURIComponent(name)}.json`);
+    
+    return response(200, { 
+        success: true, 
+        message: `Arrangement '${name}' deleted from '${songName}'`
+    });
+}
+
+// ============ Mute Set Handlers ============
+
+async function handleListMuteSets(songName) {
+    console.log('handleListMuteSets called for:', songName);
+    
+    const prefix = `audio/${songName}/Mutes/`;
+    
+    try {
+        const command = new ListObjectsV2Command({
+            Bucket: BUCKET,
+            Prefix: prefix
+        });
+        
+        const result = await s3.send(command);
+        
+        // If no Contents, folder doesn't exist or is empty - return empty array
+        if (!result.Contents || result.Contents.length === 0) {
+            return response(200, { muteSets: [] });
+        }
+        
+        // Extract mute set names from keys
+        // Key format: audio/{songName}/Mutes/{name}.json
+        const muteSets = [];
+        
+        for (const obj of result.Contents) {
+            const key = obj.Key;
+            
+            // Skip if not a .json file
+            if (!key.endsWith('.json')) {
+                continue;
+            }
+            
+            // Extract filename from key
+            const filename = key.slice(prefix.length); // Remove prefix
+            
+            // Skip if empty or contains subdirectories
+            if (!filename || filename.includes('/')) {
+                continue;
+            }
+            
+            // Remove .json extension and URL-decode the name
+            const name = decodeURIComponent(filename.slice(0, -5));
+            muteSets.push(name);
+        }
+        
+        // Sort alphabetically
+        muteSets.sort((a, b) => a.localeCompare(b));
+        
+        return response(200, { muteSets });
+    } catch (err) {
+        console.error('Error listing mute sets:', err);
+        return response(500, { error: 'Failed to list mute sets', details: err.message });
+    }
+}
+
+async function handleGetMuteSet(songName, name) {
+    console.log('handleGetMuteSet called for:', songName, name);
+    
+    const key = `audio/${songName}/Mutes/${name}.json`;
+    
+    try {
+        const command = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(command);
+        const bodyString = await result.Body.transformToString();
+        const muteSet = JSON.parse(bodyString);
+        
+        return response(200, muteSet);
+    } catch (err) {
+        if (err.name === 'NoSuchKey') {
+            return response(404, { error: `Mute set '${name}' not found for song '${songName}'` });
+        }
+        console.error('Error getting mute set:', err);
+        return response(500, { error: 'Failed to get mute set', details: err.message });
+    }
+}
+
+async function handleSaveMuteSet(songName, name, body) {
+    console.log('handleSaveMuteSet called for:', songName, name);
+    
+    const { tracks, protected: isProtected, secret } = body;
+    
+    // Validate required fields
+    if (!tracks || typeof tracks !== 'object' || Object.keys(tracks).length === 0) {
+        return response(400, { error: 'Missing or invalid tracks object' });
+    }
+    
+    // Validate each track's sections
+    for (const [trackName, sections] of Object.entries(tracks)) {
+        if (!Array.isArray(sections) || sections.length === 0) {
+            return response(400, { error: `Track '${trackName}' must have at least one section` });
+        }
+        for (const section of sections) {
+            if (typeof section.start !== 'number' || 
+                typeof section.end !== 'number' || 
+                typeof section.muted !== 'boolean') {
+                return response(400, { error: `Each section in track '${trackName}' must have start (number), end (number), and muted (boolean)` });
+            }
+        }
+    }
+    
+    const key = `audio/${songName}/Mutes/${name}.json`;
+    
+    // Check if mute set already exists
+    let existingMuteSet = null;
+    try {
+        const getCommand = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(getCommand);
+        const bodyString = await result.Body.transformToString();
+        existingMuteSet = JSON.parse(bodyString);
+    } catch (err) {
+        if (err.name !== 'NoSuchKey') {
+            throw err; // Unexpected error
+        }
+        // NoSuchKey means it's a new mute set - that's fine
+    }
+    
+    // If existing mute set is protected, require secret
+    if (existingMuteSet?.protected) {
+        if (secret !== ADMIN_SECRET) {
+            return response(403, { error: 'This mute set is protected. Valid secret required to overwrite.' });
+        }
+    }
+    
+    // Build the mute set object
+    const now = new Date().toISOString();
+    const muteSet = {
+        name: name,
+        tracks: tracks,
+        protected: isProtected || false,
+        createdAt: existingMuteSet?.createdAt || now,
+        modifiedAt: now
+    };
+    
+    // Save to S3
+    const putCommand = new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+        Body: JSON.stringify(muteSet, null, '\t'),
+        ContentType: 'application/json'
+    });
+    await s3.send(putCommand);
+    
+    // Invalidate CloudFront cache
+    await invalidateCache(`/audio/${encodeURIComponent(songName)}/Mutes/${encodeURIComponent(name)}.json`);
+    
+    return response(200, { 
+        success: true, 
+        message: existingMuteSet ? `Mute set '${name}' updated` : `Mute set '${name}' created`,
+        muteSet: muteSet
+    });
+}
+
+async function handleDeleteMuteSet(songName, name, secret) {
+    console.log('handleDeleteMuteSet called for:', songName, name);
+    
+    const key = `audio/${songName}/Mutes/${name}.json`;
+    
+    // First, check if mute set exists and if it's protected
+    let existingMuteSet = null;
+    try {
+        const getCommand = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(getCommand);
+        const bodyString = await result.Body.transformToString();
+        existingMuteSet = JSON.parse(bodyString);
+    } catch (err) {
+        if (err.name === 'NoSuchKey') {
+            return response(404, { error: `Mute set '${name}' not found for song '${songName}'` });
+        }
+        throw err;
+    }
+    
+    // If mute set is protected, require secret
+    if (existingMuteSet.protected) {
+        if (secret !== ADMIN_SECRET) {
+            return response(403, { error: 'This mute set is protected. Valid secret required to delete.' });
+        }
+    }
+    
+    // Delete from S3
+    const deleteCommand = new DeleteObjectCommand({ Bucket: BUCKET, Key: key });
+    await s3.send(deleteCommand);
+    
+    // Invalidate CloudFront cache
+    await invalidateCache(`/audio/${encodeURIComponent(songName)}/Mutes/${encodeURIComponent(name)}.json`);
+    
+    return response(200, { 
+        success: true, 
+        message: `Mute set '${name}' deleted from '${songName}'`
+    });
+}
+
 async function invalidateCache(path) {
     const command = new CreateInvalidationCommand({
         DistributionId: DISTRIBUTION_ID,
