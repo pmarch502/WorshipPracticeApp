@@ -80,7 +80,8 @@ class TimelineSections {
                     State.initializeOriginalArrangement(song.id);
                 }
             }
-            this.render();
+            // Defer render to next frame to ensure DOM/state is ready
+            requestAnimationFrame(() => this.render());
         });
 
         // Re-render when tracks are added/removed (duration may change)
@@ -160,11 +161,26 @@ class TimelineSections {
     }
 
     /**
-     * Get the effective zoom level
+     * Get effective zoom level (handles null = auto-fit)
      */
     getEffectiveZoom() {
         const song = State.getActiveSong();
-        return song?.timeline?.zoom || 1;
+        let zoom = song?.timeline?.zoom;
+        
+        if (zoom === null || zoom === undefined) {
+            // Calculate fit-to-window zoom (same logic as timeline.js)
+            const maxDuration = State.getMaxDuration();
+            if (maxDuration > 0) {
+                const waveformScrollArea = document.getElementById('waveform-scroll-area');
+                const viewportWidth = waveformScrollArea ? waveformScrollArea.clientWidth - 20 : 800;
+                zoom = (viewportWidth * 0.9) / (maxDuration * BASE_PIXELS_PER_SECOND);
+                zoom = Math.max(0.01, Math.min(4.0, zoom));
+            } else {
+                zoom = 1;
+            }
+        }
+        
+        return zoom;
     }
 
     /**

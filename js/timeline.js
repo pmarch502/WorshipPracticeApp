@@ -300,7 +300,7 @@ class Timeline {
         const song = State.getActiveSong();
         if (!song) return 0;
         
-        const zoom = song.timeline.zoom || 1;
+        const zoom = this.getEffectiveZoom();
         const offset = song.timeline.offset || 0;
         
         return (time + offset) * BASE_PIXELS_PER_SECOND * zoom - this.scrollOffset;
@@ -642,6 +642,20 @@ class Timeline {
         return Math.max(0.01, Math.min(4.0, fitZoom));
     }
 
+    /**
+     * Get effective zoom level (handles null = auto-fit)
+     */
+    getEffectiveZoom() {
+        const song = State.getActiveSong();
+        let zoom = song?.timeline?.zoom;
+        
+        if (zoom === null || zoom === undefined) {
+            zoom = this.calculateFitZoom();
+        }
+        
+        return zoom;
+    }
+
     fitToWindow() {
         const zoom = this.calculateFitZoom();
         State.updateTimeline({ zoom });
@@ -786,7 +800,7 @@ class Timeline {
         const song = State.getActiveSong();
         if (!song) return;
         
-        const zoom = song.timeline?.zoom || 1;
+        const zoom = this.getEffectiveZoom();
         const offset = song.timeline?.offset || 0;
         const tempos = song.metadata?.tempos;
         const timeSigs = song.metadata?.['time-sigs'];
@@ -878,7 +892,7 @@ class Timeline {
         const song = State.getActiveSong();
         if (!song) return;
         
-        const zoom = song.timeline?.zoom || 1;
+        const zoom = this.getEffectiveZoom();
         const offset = song.timeline?.offset || 0;
         
         const pixelsPerSecond = BASE_PIXELS_PER_SECOND * zoom;
