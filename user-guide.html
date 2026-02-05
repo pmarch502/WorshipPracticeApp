@@ -453,6 +453,10 @@
                     <td>Mute this track - silences the track (red when active)</td>
                 </tr>
                 <tr>
+                    <td><strong>&#9835; (Pitch Exempt)</strong></td>
+                    <td>Toggle pitch exemption - when active (slashed note icon), track bypasses pitch shifting and plays at original pitch. Auto-detected for drums, click, percussion tracks. Appears between track name and delete button.</td>
+                </tr>
+                <tr>
                     <td><strong>X (Delete)</strong></td>
                     <td>Remove track from the song (appears on hover)</td>
                 </tr>
@@ -892,6 +896,19 @@
                 <li><strong>Key display:</strong> The label shows the transposed key (e.g., "PITCH (Bb)")</li>
             </ul>
             
+            <h4>Pitch-Exempt Tracks</h4>
+            <p>Some tracks (like drums, click tracks, and percussion) should not be pitch-shifted. The app attempts to handle this automatically:</p>
+            <ul>
+                <li><strong>Auto-detection:</strong> Tracks with names containing "click", "drum", "perc", "guide", "loop", "tambourine", "shaker", "cymbal", or "clap" are automatically marked as pitch-exempt</li>
+                <li><strong>Manual override:</strong> Click the musical note icon (&#9835;) next to any track name to toggle pitch exemption</li>
+                <li><strong>Visual indicator:</strong> Pitch-exempt tracks show a slashed note icon; the icon appears dimmer when auto-detected</li>
+                <li><strong>Synchronized playback:</strong> Exempt tracks remain in perfect sync with pitched tracks (both go through the same audio processing pipeline, but exempt tracks have pitch locked at 0)</li>
+            </ul>
+            
+            <div class="tip">
+                <strong>Tip:</strong> If a track is incorrectly auto-detected (or not detected when it should be), simply click the pitch-exempt icon to manually override.
+            </div>
+            
             <h3>Tempo Display</h3>
             <ul>
                 <li><strong>Function:</strong> Displays the song's tempo at the current playhead position</li>
@@ -1077,6 +1094,9 @@
                 <li><kbd>Ctrl</kbd> + Click on waveform: Add a mute split for that track (snaps to beat)</li>
                 <li><kbd>Alt</kbd> + Click on divider: Remove that split (merge sections)</li>
             </ul>
+            
+            <h3>Pitch-Exempt Track Auto-Detection</h3>
+            <p>Tracks with names containing certain keywords (click, drum, perc, guide, loop, tambourine, shaker, cymbal, clap) are automatically marked as pitch-exempt and will not be affected by pitch changes. You can override this by clicking the musical note icon next to the track name.</p>
         </section>
         
         <!-- Section 13: Cache & Storage -->
