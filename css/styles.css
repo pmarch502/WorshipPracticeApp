@@ -796,6 +796,63 @@ body {
     color: var(--text-primary);
 }
 
+/* Pitch Exempt Button */
+.track-pitch-exempt-btn {
+    width: 18px;
+    height: 18px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    flex-shrink: 0;
+    margin-right: 4px;
+    transition: opacity var(--transition-fast), color var(--transition-fast);
+}
+
+.track-pitch-exempt-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Always visible when exempt (important indicator) */
+.track-pitch-exempt-btn.exempt {
+    opacity: 1;
+    color: var(--text-secondary);
+}
+
+/* Auto-detected state: slightly dimmer */
+.track-pitch-exempt-btn.auto {
+    opacity: 0.6;
+}
+
+/* Show on hover when not exempt */
+.track-pitch-exempt-btn:not(.exempt) {
+    opacity: 0;
+}
+
+.track-control:hover .track-pitch-exempt-btn {
+    opacity: 1;
+}
+
+.track-pitch-exempt-btn:hover {
+    color: var(--accent-primary);
+}
+
+/* Slash through the note icon when exempt */
+.pitch-exempt-slash {
+    position: absolute;
+    width: 16px;
+    height: 2px;
+    background-color: var(--accent-danger);
+    transform: rotate(-45deg);
+    pointer-events: none;
+}
+
 /* Volume & Pan Row */
 .track-control-row {
     display: flex;

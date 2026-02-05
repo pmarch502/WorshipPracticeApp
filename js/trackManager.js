@@ -223,6 +223,39 @@ export function toggleMute(trackId) {
 }
 
 /**
+ * Toggle track pitch-exempt status
+ * Cycles through: auto-detected state -> opposite of auto -> back to auto (null)
+ * @param {string} trackId - Track ID
+ */
+export function togglePitchExempt(trackId) {
+    const track = State.getTrack(trackId);
+    if (!track) return;
+    
+    // Get current effective state
+    const currentEffective = State.isTrackPitchExempt(trackId);
+    const isAutoDetected = track.pitchExempt === null || track.pitchExempt === undefined;
+    const autoDetectedValue = State.isPitchExemptByName(track.name);
+    
+    let newValue;
+    if (isAutoDetected) {
+        // Currently auto-detected, switch to manual opposite
+        newValue = !autoDetectedValue;
+    } else if (track.pitchExempt !== autoDetectedValue) {
+        // Manual override that differs from auto, reset to auto (null)
+        newValue = null;
+    } else {
+        // Manual value same as auto would be, toggle to opposite
+        newValue = !currentEffective;
+    }
+    
+    State.updateTrack(trackId, { pitchExempt: newValue });
+    
+    // Update audio routing for this track
+    const audioEngine = getAudioEngine();
+    audioEngine.updateTrackPitchRouting(trackId);
+}
+
+/**
  * Load tracks for a song from their file paths
  * Used when switching back to a song that already has tracks loaded
  * Uses cache-first strategy: memory -> OPFS -> server

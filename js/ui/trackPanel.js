@@ -341,9 +341,21 @@ class TrackPanel {
             element.classList.add('inactive');
         }
 
+        // Determine pitch-exempt status for display
+        const isPitchExempt = State.isTrackPitchExempt(track.id);
+        const isAutoDetected = track.pitchExempt === null || track.pitchExempt === undefined;
+        const pitchExemptClasses = this.getPitchExemptClasses(isPitchExempt, isAutoDetected);
+        const pitchExemptTooltip = this.getPitchExemptTooltip(isPitchExempt, isAutoDetected);
+
         element.innerHTML = `
             <div class="track-control-header">
                 <span class="track-name" title="${track.name}">${track.name}</span>
+                <button class="track-pitch-exempt-btn ${pitchExemptClasses}" title="${pitchExemptTooltip}">
+                    <svg viewBox="0 0 24 24" width="14" height="14">
+                        <path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                    </svg>
+                    ${isPitchExempt ? '<span class="pitch-exempt-slash"></span>' : ''}
+                </button>
                 <button class="track-delete-btn" title="Delete track">
                     <svg viewBox="0 0 24 24" width="14" height="14">
                         <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
@@ -422,6 +434,13 @@ class TrackPanel {
             TrackManager.deleteTrack(trackId, false);// false = No confirmation needed
         });
 
+        // Pitch-exempt button
+        const pitchExemptBtn = element.querySelector('.track-pitch-exempt-btn');
+        pitchExemptBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            TrackManager.togglePitchExempt(trackId);
+        });
+
         // Solo button
         const soloBtn = element.querySelector('.track-btn.solo');
         soloBtn.addEventListener('click', (e) => {
@@ -493,8 +512,72 @@ class TrackPanel {
             muteBtn.classList.toggle('active', updates.mute);
         }
 
+        if ('pitchExempt' in updates) {
+            this.updatePitchExemptButton(trackId, element);
+        }
+
         // Update audibility
         this.updateTrackAudibility(trackId);
+    }
+
+    /**
+     * Update the pitch-exempt button state
+     */
+    updatePitchExemptButton(trackId, element = null) {
+        element = element || this.trackElements.get(trackId);
+        if (!element) return;
+
+        const track = State.getTrack(trackId);
+        if (!track) return;
+
+        const isPitchExempt = State.isTrackPitchExempt(trackId);
+        const isAutoDetected = track.pitchExempt === null || track.pitchExempt === undefined;
+        
+        const btn = element.querySelector('.track-pitch-exempt-btn');
+        if (!btn) return;
+
+        // Update classes
+        btn.className = `track-pitch-exempt-btn ${this.getPitchExemptClasses(isPitchExempt, isAutoDetected)}`;
+        
+        // Update tooltip
+        btn.title = this.getPitchExemptTooltip(isPitchExempt, isAutoDetected);
+        
+        // Update slash indicator
+        let slash = btn.querySelector('.pitch-exempt-slash');
+        if (isPitchExempt && !slash) {
+            slash = document.createElement('span');
+            slash.className = 'pitch-exempt-slash';
+            btn.appendChild(slash);
+        } else if (!isPitchExempt && slash) {
+            slash.remove();
+        }
+    }
+
+    /**
+     * Get CSS classes for pitch-exempt button
+     */
+    getPitchExemptClasses(isPitchExempt, isAutoDetected) {
+        const classes = [];
+        if (isPitchExempt) classes.push('exempt');
+        if (isAutoDetected) classes.push('auto');
+        return classes.join(' ');
+    }
+
+    /**
+     * Get tooltip text for pitch-exempt button
+     */
+    getPitchExemptTooltip(isPitchExempt, isAutoDetected) {
+        if (isPitchExempt) {
+            if (isAutoDetected) {
+                return 'Pitch exempt (auto-detected). Click to include in pitch control.';
+            }
+            return 'Pitch exempt (manual). Click to reset to auto-detect.';
+        } else {
+            if (isAutoDetected) {
+                return 'Pitch applied. Click to exempt from pitch control.';
+            }
+            return 'Pitch applied (manual). Click to reset to auto-detect.';
+        }
     }
 
     /**

@@ -50,6 +50,39 @@ export function createDefaultSong(songName) {
     };
 }
 
+// Keywords that indicate a track should be exempt from pitch shifting (case-insensitive contains)
+const PITCH_EXEMPT_KEYWORDS = ['click', 'drum', 'perc', 'guide', 'loop', 'tambourine', 'shaker', 'cymbal', 'clap'];
+
+/**
+ * Check if a track name matches pitch-exempt keywords
+ * @param {string} trackName - Track name to check
+ * @returns {boolean} True if track name contains a pitch-exempt keyword
+ */
+export function isPitchExemptByName(trackName) {
+    if (!trackName) return false;
+    const lower = trackName.toLowerCase();
+    return PITCH_EXEMPT_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+/**
+ * Get the effective pitch-exempt status for a track
+ * If pitchExempt is null, auto-detect by name; otherwise use manual override
+ * @param {string} trackId - Track ID
+ * @returns {boolean} True if track should be exempt from pitch shifting
+ */
+export function isTrackPitchExempt(trackId) {
+    const track = getTrack(trackId);
+    if (!track) return false;
+    
+    // If manually set, use that value
+    if (track.pitchExempt !== null && track.pitchExempt !== undefined) {
+        return track.pitchExempt;
+    }
+    
+    // Otherwise auto-detect by name
+    return isPitchExemptByName(track.name);
+}
+
 // Create default track
 // filePath is the path to the static audio file
 // peaks can be null initially - they'll be loaded from IndexedDB cache or extracted
@@ -63,7 +96,8 @@ export function createDefaultTrack(name, filePath, duration, peaks = null) {
         volume: 100,
         pan: 0,
         solo: false,
-        mute: false
+        mute: false,
+        pitchExempt: null // null = auto-detect by name, true = manually exempt, false = manually include
     };
 }
 

@@ -19,7 +19,8 @@ class AudioEngine {
     constructor() {
         this.audioContext = null;
         this.masterGain = null;
-        this.pitchShifter = null; // PitchShifterWorklet for tempo/pitch processing
+        this.pitchShifter = null; // PitchShifterWorklet for tempo/pitch processing (normal tracks)
+        this.bypassPitchShifter = null; // PitchShifterWorklet for pitch-exempt tracks (pitch always 0, same tempo)
         this.trackNodes = new Map(); // trackId -> { source, gainNode, panNode, audioBuffer }
         this.audioBuffers = new Map(); // trackId -> AudioBuffer (persists across song switches)
         
@@ -52,22 +53,30 @@ class AudioEngine {
         
         this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         
-        // Initialize the SoundTouch pitch shifter worklet
+        // Initialize the SoundTouch pitch shifter worklet for normal tracks
         // PitchShifterWorklet is loaded from soundtouch.js (global)
         this.pitchShifter = new PitchShifterWorklet(this.audioContext);
         await this.pitchShifter.init();
         
+        // Initialize a second pitch shifter for pitch-exempt tracks
+        // This ensures exempt tracks have the same latency as pitched tracks (staying in sync)
+        // but with pitch always set to 0 semitones
+        this.bypassPitchShifter = new PitchShifterWorklet(this.audioContext);
+        await this.bypassPitchShifter.init();
+        this.bypassPitchShifter.pitchSemitones = 0; // Always keep at 0
+        
         // Create master gain node
         this.masterGain = this.audioContext.createGain();
         
-        // Connect: pitchShifter -> masterGain -> destination
+        // Connect both pitch shifters to master gain -> destination
         this.pitchShifter.connect(this.masterGain);
+        this.bypassPitchShifter.connect(this.masterGain);
         this.masterGain.connect(this.audioContext.destination);
         
         // Listen for tab visibility changes to pause/resume playback
         document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
         
-        console.log('Audio engine initialized with SoundTouch worklet, sample rate:', this.audioContext.sampleRate);
+        console.log('Audio engine initialized with SoundTouch worklets (primary + bypass), sample rate:', this.audioContext.sampleRate);
     }
 
     /**
@@ -104,7 +113,7 @@ class AudioEngine {
     }
 
     /**
-     * Reset the pitch shifter by creating a fresh instance
+     * Reset both pitch shifters by creating fresh instances
      * This clears all internal SoundTouch buffers to prevent stale audio
      * from playing after stop/seek operations when speed != 1.0
      */
@@ -115,30 +124,48 @@ class AudioEngine {
         const currentSpeed = this._speed;
         const currentPitch = this._pitch;
         
-        // Disconnect old pitch shifter from master gain
+        // Disconnect old pitch shifters from master gain
         this.pitchShifter.disconnect();
+        if (this.bypassPitchShifter) {
+            this.bypassPitchShifter.disconnect();
+        }
         
-        // Create a new PitchShifterWorklet instance
+        // Create new PitchShifterWorklet instances
         this.pitchShifter = new PitchShifterWorklet(this.audioContext);
         await this.pitchShifter.init();
         
-        // Restore tempo/pitch settings
+        this.bypassPitchShifter = new PitchShifterWorklet(this.audioContext);
+        await this.bypassPitchShifter.init();
+        
+        // Restore settings: primary gets tempo + pitch, bypass gets tempo only (pitch=0)
         this.pitchShifter.tempo = currentSpeed;
         this.pitchShifter.pitchSemitones = currentPitch;
         
-        // Reconnect: pitchShifter -> masterGain
-        this.pitchShifter.connect(this.masterGain);
+        this.bypassPitchShifter.tempo = currentSpeed;
+        this.bypassPitchShifter.pitchSemitones = 0; // Always 0 for exempt tracks
         
-        // Reconnect all track panNodes to the new pitchShifter.inputNode
+        // Reconnect both pitch shifters to masterGain
+        this.pitchShifter.connect(this.masterGain);
+        this.bypassPitchShifter.connect(this.masterGain);
+        
+        // Reconnect all track panNodes - respecting pitch-exempt status
         this.trackNodes.forEach((nodes, trackId) => {
             if (nodes.panNode) {
                 // Disconnect from old (now defunct) pitchShifter input
                 try {
                     nodes.panNode.disconnect();
                 } catch (e) {}
-                // Reconnect gain -> pan -> new pitchShifter
+                // Reconnect gain -> pan
                 nodes.gainNode.connect(nodes.panNode);
-                nodes.panNode.connect(this.pitchShifter.inputNode);
+                
+                // Route based on pitch-exempt status
+                const isPitchExempt = State.isTrackPitchExempt(trackId);
+                if (isPitchExempt) {
+                    nodes.panNode.connect(this.bypassPitchShifter.inputNode);
+                } else {
+                    nodes.panNode.connect(this.pitchShifter.inputNode);
+                }
+                nodes.isPitchExempt = isPitchExempt;
             }
         });
     }
@@ -252,20 +279,61 @@ class AudioEngine {
         gainNode.gain.value = track.volume / 100;
         panNode.pan.value = track.pan / 100;
 
-        // Connect chain: gainNode -> panNode -> pitchShifter (-> masterGain -> destination)
-        // All tracks go through the shared pitchShifter for tempo/pitch processing
+        // Connect chain: gainNode -> panNode -> [pitchShifter OR bypassPitchShifter] -> masterGain -> destination
+        // Pitch-exempt tracks go through bypassPitchShifter (pitch=0) to maintain same latency as pitched tracks
         gainNode.connect(panNode);
-        panNode.connect(this.pitchShifter.inputNode);
+        
+        const isPitchExempt = State.isTrackPitchExempt(trackId);
+        if (isPitchExempt) {
+            // Route through bypass pitch shifter (pitch=0, same tempo) for consistent latency
+            panNode.connect(this.bypassPitchShifter.inputNode);
+        } else {
+            // Normal: route through primary pitch shifter
+            panNode.connect(this.pitchShifter.inputNode);
+        }
 
         const nodes = {
             audioBuffer,
             gainNode,
             panNode,
-            source: null
+            source: null,
+            isPitchExempt // Track current routing state for updateTrackPitchRouting
         };
 
         this.trackNodes.set(trackId, nodes);
         return nodes;
+    }
+
+    /**
+     * Update pitch routing for a track (when pitch-exempt status changes)
+     * Disconnects from current destination and reconnects to the appropriate one
+     * @param {string} trackId - Track ID
+     */
+    updateTrackPitchRouting(trackId) {
+        const nodes = this.trackNodes.get(trackId);
+        if (!nodes || !nodes.panNode) return;
+        
+        const isPitchExempt = State.isTrackPitchExempt(trackId);
+        
+        // Check if routing actually changed
+        if (nodes.isPitchExempt === isPitchExempt) return;
+        
+        // Disconnect from current destination
+        nodes.panNode.disconnect();
+        
+        // Reconnect to appropriate destination
+        if (isPitchExempt) {
+            // Route through bypass pitch shifter (pitch=0, same tempo) for consistent latency
+            nodes.panNode.connect(this.bypassPitchShifter.inputNode);
+        } else {
+            // Normal: route through primary pitch shifter
+            nodes.panNode.connect(this.pitchShifter.inputNode);
+        }
+        
+        // Update tracked state
+        nodes.isPitchExempt = isPitchExempt;
+        
+        console.log(`Track ${trackId} pitch routing: ${isPitchExempt ? 'bypass (pitch=0)' : 'primary'} pitch shifter`);
     }
 
     /**
@@ -937,20 +1005,25 @@ class AudioEngine {
     setSpeed(speed) {
         this._speed = speed;
         
-        // Update the SoundTouch worklet tempo
+        // Update tempo on BOTH pitch shifters to keep all tracks in sync
         if (this.pitchShifter) {
             this.pitchShifter.tempo = speed;
+        }
+        if (this.bypassPitchShifter) {
+            this.bypassPitchShifter.tempo = speed;
         }
     }
 
     /**
      * Set pitch (semitones)
      * Uses SoundTouch worklet for pitch shifting without speed change
+     * Note: Only affects primary pitchShifter, not bypassPitchShifter (which stays at 0)
      */
     setPitch(semitones) {
         this._pitch = semitones;
         
-        // Update the SoundTouch worklet pitch
+        // Update only the primary pitch shifter
+        // bypassPitchShifter stays at 0 for pitch-exempt tracks
         if (this.pitchShifter) {
             this.pitchShifter.pitchSemitones = semitones;
         }
