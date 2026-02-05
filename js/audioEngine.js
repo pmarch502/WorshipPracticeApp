@@ -104,6 +104,46 @@ class AudioEngine {
     }
 
     /**
+     * Reset the pitch shifter by creating a fresh instance
+     * This clears all internal SoundTouch buffers to prevent stale audio
+     * from playing after stop/seek operations when speed != 1.0
+     */
+    async resetPitchShifter() {
+        if (!this.pitchShifter || !this.audioContext) return;
+        
+        // Store current settings
+        const currentSpeed = this._speed;
+        const currentPitch = this._pitch;
+        
+        // Disconnect old pitch shifter from master gain
+        this.pitchShifter.disconnect();
+        
+        // Create a new PitchShifterWorklet instance
+        this.pitchShifter = new PitchShifterWorklet(this.audioContext);
+        await this.pitchShifter.init();
+        
+        // Restore tempo/pitch settings
+        this.pitchShifter.tempo = currentSpeed;
+        this.pitchShifter.pitchSemitones = currentPitch;
+        
+        // Reconnect: pitchShifter -> masterGain
+        this.pitchShifter.connect(this.masterGain);
+        
+        // Reconnect all track panNodes to the new pitchShifter.inputNode
+        this.trackNodes.forEach((nodes, trackId) => {
+            if (nodes.panNode) {
+                // Disconnect from old (now defunct) pitchShifter input
+                try {
+                    nodes.panNode.disconnect();
+                } catch (e) {}
+                // Reconnect gain -> pan -> new pitchShifter
+                nodes.gainNode.connect(nodes.panNode);
+                nodes.panNode.connect(this.pitchShifter.inputNode);
+            }
+        });
+    }
+
+    /**
      * Mute/unmute master output to prevent audio bursts from stale SoundTouch buffers
      * @param {boolean} muted - Whether to mute
      * @param {number} fadeTime - Fade duration in seconds (0 for immediate)
@@ -250,7 +290,7 @@ class AudioEngine {
      * Start playback from a position
      * @param {number} position - Position in seconds (virtual time for arrangements)
      */
-    play(position = null) {
+    async play(position = null) {
         const song = State.getActiveSong();
         if (!song || song.tracks.length === 0) return;
 
@@ -258,6 +298,10 @@ class AudioEngine {
 
         // Mute master output to prevent stale SoundTouch buffer audio from playing
         this.setMasterMuted(true, 0);
+
+        // Reset pitch shifter to clear any stale audio in SoundTouch buffers
+        // This prevents audio from old position playing when speed != 1.0
+        await this.resetPitchShifter();
 
         // Use provided position or current position (always virtual time)
         let virtualPos = position !== null ? position : song.transport.position;
@@ -388,11 +432,6 @@ class AudioEngine {
             }
         });
 
-        // Clear pitch shifter buffers
-        if (this.pitchShifter) {
-            this.pitchShifter.clear();
-        }
-
         // Clear section mute tracking state
         this.trackSectionState.clear();
         this.isInCrossfade = false;
@@ -425,11 +464,6 @@ class AudioEngine {
                 nodes.source = null;
             }
         });
-
-        // Clear pitch shifter buffers
-        if (this.pitchShifter) {
-            this.pitchShifter.clear();
-        }
 
         // Clear section mute tracking state
         this.trackSectionState.clear();
@@ -483,11 +517,6 @@ class AudioEngine {
                     nodes.source = null;
                 }
             });
-        }
-
-        // Clear the pitch shifter buffers to avoid stale audio
-        if (this.pitchShifter) {
-            this.pitchShifter.clear();
         }
 
         // Position stored in state is always virtual time
@@ -544,11 +573,6 @@ class AudioEngine {
                     nodes.source = null;
                 }
             });
-            
-            // Clear pitch shifter
-            if (this.pitchShifter) {
-                this.pitchShifter.clear();
-            }
             
             // Update tracking state
             this.startTime = this.audioContext.currentTime;
