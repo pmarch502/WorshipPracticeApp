@@ -35,6 +35,7 @@ class TransportBar {
         // Time display
         this.currentTimeEl = document.getElementById('current-time');
         this.totalTimeEl = document.getElementById('total-time');
+        this.arrangementDurationEl = document.getElementById('arrangement-duration');
         
         // Value displays
         this.speedValueEl = document.getElementById('speed-value');
@@ -259,6 +260,11 @@ class TransportBar {
         State.subscribe(State.Events.SECTIONS_UPDATED, () => {
             this.updateTotalTime();
         });
+        
+        // Update arrangement duration when arrangement sections change
+        State.subscribe(State.Events.ARRANGEMENT_SECTIONS_CHANGED, () => {
+            this.updateArrangementDuration();
+        });
     }
 
     updateButtonStates(playbackState) {
@@ -280,6 +286,32 @@ class TransportBar {
     updateTotalTime() {
         const duration = State.getMaxDuration();
         this.totalTimeEl.textContent = this.transport.formatTime(duration);
+    }
+
+    updateArrangementDuration() {
+        const song = State.getActiveSong();
+        if (!song || !this.arrangementDurationEl) {
+            if (this.arrangementDurationEl) {
+                this.arrangementDurationEl.textContent = '';
+            }
+            return;
+        }
+        
+        const sections = song.arrangementSections || [];
+        const hasDisabledSections = sections.some(s => !s.enabled);
+        
+        if (!hasDisabledSections) {
+            // Hide when no disabled sections (arrangement time = source time)
+            this.arrangementDurationEl.textContent = '';
+            return;
+        }
+        
+        // Calculate total enabled duration
+        const enabledDuration = sections
+            .filter(s => s.enabled)
+            .reduce((sum, s) => sum + (s.end - s.start), 0);
+        
+        this.arrangementDurationEl.textContent = `Arrangement: ${this.transport.formatTime(enabledDuration)}`;
     }
 
     updateFromSong(song) {
@@ -313,6 +345,7 @@ class TransportBar {
         // Update time display
         this.updateTimeDisplay(transport.position);
         this.updateTotalTime();
+        this.updateArrangementDuration();
 
         // Update loop button
         this.updateLoopButton(transport.loopEnabled);
