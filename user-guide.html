@@ -119,6 +119,11 @@
             color: var(--text-secondary);
         }
         
+        p a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        
         table {
             width: 100%;
             border-collapse: collapse;
@@ -320,12 +325,12 @@
                 <li><a href="#timeline-waveform">6. Timeline &amp; Waveform</a></li>
                 <li><a href="#loop-functionality">7. Loop Functionality</a></li>
                 <li><a href="#arrangements">8. Arrangements</a></li>
-                <li><a href="#mute-sets">8.5 Mute Sets</a></li>
-                <li><a href="#audio-controls">9. Audio Controls</a></li>
-                <li><a href="#keyboard-shortcuts">10. Keyboard Shortcuts</a></li>
-                <li><a href="#hidden-features">11. Hidden Features</a></li>
-                <li><a href="#cache-storage">12. Cache &amp; Storage</a></li>
-                <li><a href="#browser-requirements">13. Browser Requirements</a></li>
+                <li><a href="#mute-sets">9 Mute Sets</a></li>
+                <li><a href="#audio-controls">10. Audio Controls</a></li>
+                <li><a href="#keyboard-shortcuts">11. Keyboard Shortcuts</a></li>
+                <li><a href="#hidden-features">12. Hidden Features</a></li>
+                <li><a href="#cache-storage">13. Cache &amp; Storage</a></li>
+                <li><a href="#browser-requirements">14. Browser Requirements</a></li>
                 <li><a href="#quick-reference">Quick Reference</a></li>
             </ul>
         </nav>
@@ -357,19 +362,19 @@
             <div class="interface-layout">
                 <div class="feature-card full-width">
                     <h4>Tab Bar (Top)</h4>
-                    <p>Spans the full width at the top. Displays open songs as tabs. Click tabs to switch between songs. Use the + button at the far left to open new songs. The dropdown menu on the far right provides access to Arrangements and Mute Sets for the current song.</p>
+                    <p>Spans the full width at the top. Displays open songs as tabs. Click tabs to switch between songs. Drag tabs to reorder songs. Use the + button at the far left to open new songs. The dropdown menu on the far right provides access to Arrangements and Mute Sets for the current song.</p>
                 </div>
                 <div class="feature-card">
                     <h4>Track Controls (Left)</h4>
-                    <p>A narrower panel on the left side. Shows track name, volume, pan, solo, and mute controls for each loaded track. The header includes a cache usage indicator, a link to this user guide, and a button to open the <strong>Track Picker</strong>.</p>
+                    <p>A narrower panel on the left side. Shows track name, volume, pan, solo, and mute controls for each loaded track. The header includes a cache usage indicator, a link to this user guide, waveform zoom controls, and a button to open the <strong>Track Picker</strong>.</p>
                 </div>
                 <div class="feature-card">
                     <h4>Waveform Panel (Right)</h4>
-                    <p>A wider panel on the right side. Displays the timeline and waveforms for all tracks. Includes zoom controls and playhead. The individual track waveforms display section markers and allow for muting individual sections on individual tracks.</p>
+                    <p>A wider panel on the right side. Displays the timeline (Measures:Beats and Time) and waveforms for all tracks. Song section markers appear in the timeline and extend across all tracks. The timeline also has an arrangement bar for dynamically creating sections that can be turned on/off (off = skipped) - an Arrangement. Each individual track's waveform allows for dynamically creating track sections that may be muted/unmuted - a Mute Set. Arrangements and Mute Sets may be managed in the dropdown in the upper right.</p>
                 </div>
                 <div class="feature-card full-width">
                     <h4>Transport Bar (Bottom)</h4>
-                    <p>Spans the full width at the bottom. Contains playback controls, time display, speed, pitch, tempo, and time signature settings.</p>
+                    <p>Spans the full width at the bottom. Contains playback controls, time display, speed, pitch, tempo, and time signature settings. You can also see which version of the app you are currently running.</p>
                 </div>
             </div>
         </section>
@@ -433,15 +438,15 @@
                 </tr>
                 <tr>
                     <td><strong>Volume Knob</strong></td>
-                    <td>Adjusts track volume from 0 to 100 (drag up/down)</td>
+                    <td>Adjusts track volume (drag up/down) from 0% to 100%. Hold <kbd>Shift</kbd> while dragging for fine control. Double-click returns to 100%.</td>
                 </tr>
                 <tr>
                     <td><strong>Pan Knob</strong></td>
-                    <td>Adjusts stereo position from -100 (left) to +100 (right)</td>
+                    <td>Adjusts stereo position (drag up/down) from 100L (left) to 100R (right) with C (center) in the middle. Hold <kbd>Shift</kbd> while dragging for fine control. Double-click returns to C.</td>
                 </tr>
                 <tr>
                     <td><strong>S (Solo)</strong></td>
-                    <td>Solo this track - only soloed tracks will play (yellow when active) - overrides Mute</td>
+                    <td>Solo this track - only soloed tracks will play when any track is soloed (yellow when active) - overrides all Mutes</td>
                 </tr>
                 <tr>
                     <td><strong>M (Mute)</strong></td>
@@ -454,11 +459,11 @@
             </table>
             
             <h3>Selecting Tracks</h3>
-            <p>Click anywhere on a track's control row (not on buttons or sliders) to select it. The selected track is highlighted with a cyan left border.</p>
+            <p>Click anywhere on a track's control panel (not on buttons or knobs) to select it. The selected track is highlighted with a cyan left border.</p>
             
             <h3>Deleting Tracks</h3>
             <ul>
-                <li>Click the <strong>X</strong> button that appears when hovering over a track</li>
+                <li>Click the <strong>X</strong> button that appears when hovering over a track's control panel</li>
                 <li>Or select a track and press <kbd>Delete</kbd> or <kbd>Backspace</kbd></li>
             </ul>
             
@@ -472,7 +477,7 @@
             <h3>Reordering Tracks</h3>
             <p>Tracks can be reordered by dragging them within the track controls panel.</p>
             <ol>
-                <li><strong>Click and hold</strong> on a track's control row (not on buttons or sliders)</li>
+                <li><strong>Click and hold</strong> on a track's control panel (not on buttons or knobs)</li>
                 <li><strong>Drag</strong> up or down to the desired position</li>
                 <li>A <strong>drop indicator</strong> shows where the track will be placed</li>
                 <li><strong>Release</strong> to drop the track in its new position</li>
@@ -512,7 +517,7 @@
                 </tr>
                 <tr>
                     <td><strong>Pause</strong></td>
-                    <td>Pauses at current position; can resume from pause</td>
+                    <td>Pauses at current position; can resume from pause with <kbd>Space</kbd></td>
                     <td><kbd>Ctrl</kbd> + <kbd>Space</kbd></td>
                 </tr>
                 <tr>
@@ -581,6 +586,7 @@
             <p>The cyan vertical line with a triangle at the top indicates the current playback position. During playback, the view automatically scrolls to keep the playhead visible.</p>
             
             <h3>Zoom Controls</h3>
+            <p>The zoom controls are located in the track controls header panel.</p>
             <table>
                 <tr>
                     <th>Control</th>
@@ -591,16 +597,8 @@
                     <td>Zooms to fit the entire song in the viewport</td>
                 </tr>
                 <tr>
-                    <td><strong>- (Zoom Out)</strong></td>
-                    <td>Decreases zoom by 1.25x - with <kbd>Shift</kbd>, a 10X finer adjustment</td>
-                </tr>
-                <tr>
-                    <td><strong>Slider</strong></td>
-                    <td>Drag to adjust zoom level</td>
-                </tr>
-                <tr>
-                    <td><strong>+ (Zoom In)</strong></td>
-                    <td>Increases zoom by 1.25x - with <kbd>Shift</kbd>, a 10X finer adjustment</td>
+                    <td><strong>Knob</strong></td>
+                    <td>Drag up/down to adjust zoom level. Hold <kbd>Shift</kbd> for fine control. Zoom range is from 1 to 400.</td>
                 </tr>
                 <tr>
                     <td><strong>Percentage</strong></td>
@@ -609,7 +607,7 @@
             </table>
             
             <h3>Mute Sections (Per-Track)</h3>
-            <p>You can create custom mute sections on each track independently, allowing you to mute specific time ranges on individual tracks. This is useful for practicing specific parts without certain instruments.</p>
+            <p>You can create custom mute sections on each track independently, allowing you to mute specific time ranges on individual tracks. This is especially useful for creating a virtual single part from multiple tracks. (E.g. A lead guitar part derived from the seven guitar tracks in the song.)</p>
             
             <h4>Creating Mute Sections</h4>
             <ul>
@@ -667,10 +665,10 @@
             </table>
             
             <h4>Saving Mute Sets</h4>
-            <p>Your mute section configurations can be saved as <strong>Mute Sets</strong> via the dropdown menu (Mutes submenu). See the <a href="#mute-sets">Mute Sets</a> section for details.</p>
+            <p>Your mute section configurations can be saved as a <strong>Mute Set</strong> via the dropdown menu in the upper right (Mutes submenu). See the <a href="#mute-sets">Mute Sets</a> section for details.</p>
             
             <div class="tip">
-                <strong>Tip:</strong> Use mute sections to create custom practice configurations. For example, mute the guide vocal during verses but keep it for choruses, or mute all electric guitars except during the solo.
+                <strong>Tip:</strong> Use mute sections to create custom practice configurations. For example, make selections (unmuted sections) between the Bass and Synth Bass tracks - or among the Drums, Loop, and Percussion tracks - or among the 5 Keyboard and 2 Piano tracks.
             </div>
         </section>
         
@@ -704,7 +702,7 @@
                     <th>Result</th>
                 </tr>
                 <tr>
-                    <td>Click Loop button</td>
+                    <td>Click Loop button (transport)</td>
                     <td>Toggle loop mode on/off</td>
                 </tr>
                 <tr>
@@ -734,7 +732,7 @@
             </ul>
             
             <h3>The Arrangement Bar</h3>
-            <p>The <strong>arrangement bar</strong> appears directly below the timeline. It shows all arrangement sections as clickable regions with yellow dividers marking the boundaries.</p>
+            <p>The <strong>arrangement bar</strong> appears between the timeline and the track waveforms. It shows all arrangement sections as clickable regions with yellow dividers marking the boundaries.</p>
             
             <ul>
                 <li><strong>Enabled sections:</strong> Appear in their normal color</li>
@@ -782,30 +780,30 @@
             
             <ul>
                 <li><strong>Refresh</strong> — Reload the list of saved arrangements from the cloud</li>
-                <li><strong>Arrangements ></strong> — Opens the arrangements submenu:
+                <li><strong>&lt; Arrangements</strong> — Opens the arrangements submenu:
                     <ul>
                         <li><strong>Original (Full Song)</strong> — Reset to the default (no splits)</li>
                         <li><strong>Saved arrangements</strong> — Load a previously saved arrangement</li>
                         <li><strong>Save</strong> — Save changes to the current arrangement (disabled if unchanged)</li>
                         <li><strong>Save As...</strong> — Save as a new arrangement with a name</li>
-                        <li><strong>Delete ></strong> — Delete a saved arrangement</li>
+                        <li><strong>&lt; Delete</strong> — Delete a saved arrangement</li>
                     </ul>
                 </li>
             </ul>
             
             <h3>Saving Arrangements</h3>
             <ol>
-                <li>Create your arrangement sections using Ctrl+Click to add splits</li>
+                <li>Create your arrangement sections using <kbd>Ctrl</kbd> + Click to add splits</li>
                 <li>Click sections to enable/disable them as needed</li>
                 <li>Open the dropdown menu and select <strong>Arrangements > Save As...</strong></li>
                 <li>Enter a name for your arrangement</li>
-                <li>Optionally check <strong>"Mark as protected"</strong> to require a secret to edit/delete</li>
+                <li>Optionally check <strong>"Mark as protected"</strong> to require an admin password to edit/delete</li>
                 <li>Click <strong>Save</strong></li>
             </ol>
             
             <h3>Loading an Arrangement</h3>
             <ol>
-                <li>Open the dropdown menu and hover over <strong>Arrangements</strong></li>
+                <li>Open the dropdown menu and select <strong>Arrangements</strong></li>
                 <li>Click on any saved arrangement name to load it</li>
                 <li>The arrangement sections and their enabled/disabled states will be applied</li>
             </ol>
@@ -815,14 +813,14 @@
                 <li>Open the dropdown menu</li>
                 <li>Navigate to <strong>Arrangements > Delete</strong></li>
                 <li>Click on the arrangement you want to delete</li>
-                <li>If the arrangement is protected, enter the admin secret</li>
+                <li>If the arrangement is protected, enter the admin password</li>
                 <li>Confirm the deletion</li>
             </ol>
             
             <h3>Unsaved Changes</h3>
             <p>When you have unsaved changes to an arrangement:</p>
             <ul>
-                <li>An asterisk (*) appears next to the arrangement name in the dropdown button</li>
+                <li>An asterisk (*) appears next to the arrangement name in the dropdown button (upper right)</li>
                 <li>If you try to switch arrangements or songs, you'll be prompted to <strong>Discard</strong>, <strong>Save</strong>, or <strong>Cancel</strong></li>
                 <li>Closing the browser tab will also trigger a warning if there are unsaved changes</li>
             </ul>
@@ -832,9 +830,9 @@
             </div>
         </section>
         
-        <!-- Section 8.5: Mute Sets -->
+        <!-- Section 9: Mute Sets -->
         <section id="mute-sets">
-            <h2>8.5 Mute Sets</h2>
+            <h2>9 Mute Sets</h2>
             <p>Mute Sets allow you to save and share per-track mute section configurations. While arrangements control which parts of the song are skipped entirely, mute sets control which tracks are muted during specific time ranges.</p>
             
             <h3>Understanding Mute Sets</h3>
@@ -849,7 +847,7 @@
                 <li>Use <kbd>Ctrl</kbd> + Click on track waveforms to create mute section splits</li>
                 <li>Click the "M" buttons on each section to toggle mutes</li>
                 <li>Open the dropdown menu and select <strong>Mutes > Save As...</strong></li>
-                <li>Enter a name and optionally protect it with a secret</li>
+                <li>Enter a name and optionally check <strong>"Mark as protected"</strong> to require an admin password to edit/delete</li>
                 <li>Click <strong>Save</strong></li>
             </ol>
             
@@ -875,9 +873,9 @@
             </div>
         </section>
         
-        <!-- Section 9: Audio Controls -->
+        <!-- Section 10: Audio Controls -->
         <section id="audio-controls">
-            <h2>9. Audio Controls</h2>
+            <h2>10. Audio Controls</h2>
             
             <h3>Speed Control (Time Stretch)</h3>
             <ul>
@@ -891,7 +889,7 @@
                 <li><strong>Range:</strong> -6 to +6 semitones</li>
                 <li><strong>Function:</strong> Shifts pitch up or down without affecting speed</li>
                 <li><strong>To adjust:</strong> Use the dropdown selector</li>
-                <li><strong>Key display:</strong> If the song has a defined key, the label shows the transposed key (e.g., "PITCH (Bb)")</li>
+                <li><strong>Key display:</strong> The label shows the transposed key (e.g., "PITCH (Bb)")</li>
             </ul>
             
             <h3>Tempo Display</h3>
@@ -908,8 +906,8 @@
                 <li><strong>Variable time signature:</strong> Songs can have time signature changes; the display updates as the playhead moves through different sections</li>
             </ul>
             
-            <h3>Knob Controls (Volume &amp; Pan)</h3>
-            <p>Both the volume and pan knobs in the track controls use the same interaction model:</p>
+            <h3>Knob Controls (Zoom, Volume &amp; Pan)</h3>
+            <p>All knobs use the same interaction model:</p>
             <table>
                 <tr>
                     <th>Interaction</th>
@@ -925,7 +923,7 @@
                 </tr>
                 <tr>
                     <td>Double-click</td>
-                    <td>Reset to default (Volume: 100, Pan: 0)</td>
+                    <td>Reset to default (Zoom: 200, Volume: 100, Pan: 0)</td>
                 </tr>
                 <tr>
                     <td>Mouse wheel</td>
@@ -938,9 +936,9 @@
             </table>
         </section>
         
-        <!-- Section 10: Keyboard Shortcuts -->
+        <!-- Section 11: Keyboard Shortcuts -->
         <section id="keyboard-shortcuts">
-            <h2>10. Keyboard Shortcuts</h2>
+            <h2>11. Keyboard Shortcuts</h2>
             <p>Master these keyboard shortcuts to speed up your workflow.</p>
             
             <h3>Playback Controls</h3>
@@ -1020,23 +1018,21 @@
             </div>
         </section>
         
-        <!-- Section 11: Hidden Features -->
+        <!-- Section 12: Hidden Features -->
         <section id="hidden-features">
-            <h2>11. Hidden Features</h2>
+            <h2>12. Hidden Features</h2>
             <p>These features aren't immediately obvious but can greatly enhance your workflow.</p>
             
             <h3>Shift-Modified Controls</h3>
             <ul>
                 <li><kbd>Shift</kbd> + <kbd>Arrow Keys</kbd> - Jump 10 seconds instead of 1</li>
                 <li>Mouse wheel on waveform - Zoom in/out</li>
-                <li><kbd>Shift</kbd> + Mouse wheel on Zoom control - Fine adjustment</li>
-                <li><kbd>Shift</kbd> + Drag pan knob - Fine adjustment (10x more precise)</li>
-                <li><kbd>Shift</kbd> + Mouse wheel on knob - Fine adjustment</li>
+                <li><kbd>Shift</kbd> + Mouse wheel on any knob - Fine adjustment</li>
             </ul>
             
             <h3>Double-Click Actions</h3>
             <ul>
-                <li><strong>Double-click pan knob:</strong> Reset to center (0)</li>
+                <li><strong>Double-click any knob:</strong> Reset to default (Zoom: 200, Volume: 100, Pan: 0)</li>
             </ul>
             
             <h3>Click-to-Edit Values</h3>
@@ -1055,7 +1051,7 @@
             <p>Instead of dragging, you can use the mouse wheel to adjust pan knobs.</p>
             
             <h3>Touch Support</h3>
-            <p>Pan knobs support touch gestures - touch and drag up/down to adjust.</p>
+            <p>All knobs support touch gestures - touch and drag up/down to adjust.</p>
             
             <h3>Transposed Key Display</h3>
             <p>When you change the pitch and the song has a defined key, the pitch label dynamically shows the resulting transposed key.</p>
@@ -1077,15 +1073,15 @@
             
             <h3>Ctrl+Click / Alt+Click Modifiers</h3>
             <ul>
-                <li><kbd>Ctrl</kbd> + Click on timeline bar: Add an arrangement split (snaps to beat)</li>
+                <li><kbd>Ctrl</kbd> + Click on arrangement bar: Add an arrangement split (snaps to beat)</li>
                 <li><kbd>Ctrl</kbd> + Click on waveform: Add a mute split for that track (snaps to beat)</li>
                 <li><kbd>Alt</kbd> + Click on divider: Remove that split (merge sections)</li>
             </ul>
         </section>
         
-        <!-- Section 12: Cache & Storage -->
+        <!-- Section 13: Cache & Storage -->
         <section id="cache-storage">
-            <h2>12. Cache &amp; Storage</h2>
+            <h2>13. Cache &amp; Storage</h2>
             
             <h3>Cache Indicator</h3>
             <p>The storage indicator in the track controls header shows current cache usage (e.g., "45.2 MB / 2.0 GB").</p>
@@ -1125,9 +1121,9 @@
             </div>
         </section>
         
-        <!-- Section 13: Browser Requirements -->
+        <!-- Section 14: Browser Requirements -->
         <section id="browser-requirements">
-            <h2>13. Browser Requirements</h2>
+            <h2>14. Browser Requirements</h2>
             <p>The Worship Practice App requires a modern browser with support for advanced Web APIs.</p>
             
             <h3>Supported Browsers</h3>

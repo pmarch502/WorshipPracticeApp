@@ -207,6 +207,7 @@ class TransportBar {
         State.subscribe(State.Events.SONG_METADATA_UPDATED, ({ song }) => {
             if (song.id === State.state.activeSongId) {
                 this.updatePitchLabel(song);
+                this.updatePitchSelectOptions(song);
                 this.updateFromSong(song);
             }
         });
@@ -278,6 +279,9 @@ class TransportBar {
 
         // Update pitch label with transposed key
         this.updatePitchLabel(song);
+        
+        // Update pitch select dropdown options with transposed keys
+        this.updatePitchSelectOptions(song);
     }
 
     /**
@@ -319,6 +323,31 @@ class TransportBar {
             this.pitchLabel.textContent = `PITCH (${transposedKey})`;
         } else {
             this.pitchLabel.textContent = 'PITCH';
+        }
+    }
+
+    /**
+     * Update pitch select dropdown options to show transposed keys
+     * @param {Object} song - Song object
+     */
+    updatePitchSelectOptions(song) {
+        const originalKey = song?.metadata?.key;
+        const options = this.pitchSelect.options;
+        
+        for (let i = 0; i < options.length; i++) {
+            const semitones = parseInt(options[i].value);
+            const sign = semitones > 0 ? '+' : '';
+            const simpleText = `${sign}${semitones}`;
+            
+            if (originalKey && KEYS.includes(originalKey)) {
+                const transposedKey = transposeKey(originalKey, semitones);
+                // Show key in dropdown options, but not for the selected value
+                options[i].textContent = options[i].selected 
+                    ? simpleText 
+                    : `${simpleText} (${transposedKey})`;
+            } else {
+                options[i].textContent = simpleText;
+            }
         }
     }
 
