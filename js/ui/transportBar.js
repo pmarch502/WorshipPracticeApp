@@ -134,6 +134,12 @@ class TransportBar {
         this.pitchSelect.addEventListener('change', () => {
             this.transport.setPitch(parseInt(this.pitchSelect.value));
         });
+
+        // Total time click - log exact duration to console
+        this.totalTimeEl.addEventListener('click', () => {
+            const duration = State.getMaxDuration();
+            console.log(`Song duration: ${duration}`);
+        });
     }
 
     /**

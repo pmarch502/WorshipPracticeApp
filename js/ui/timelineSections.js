@@ -477,18 +477,12 @@ class TimelineSections {
 
         const zoom = this.getEffectiveZoom();
         const offset = song.timeline?.offset || 0;
-        const containerWidth = this.container.offsetWidth;
 
         // Render each section
         sections.forEach((section, index) => {
             const startX = this.timeToPixel(section.start, zoom, offset);
             const endX = this.timeToPixel(section.end, zoom, offset);
             const width = endX - startX;
-
-            // Skip if completely outside visible area
-            if (endX < 0 || startX > containerWidth + this.scrollOffset) {
-                return;
-            }
 
             // Create section element
             const sectionEl = document.createElement('div');
