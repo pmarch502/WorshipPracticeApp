@@ -1402,12 +1402,18 @@ body {
 }
 
 .knob-container {
-    width: var(--knob-size);
-    height: var(--knob-size);
+    width: 28px;
+    height: 28px;
 }
 
 .knob-value {
     font-size: 15px;
+    color: var(--text-secondary);
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.speed-knob-value {
+    font-size: 10px;
     color: var(--text-secondary);
     font-family: 'Consolas', 'Monaco', monospace;
 }

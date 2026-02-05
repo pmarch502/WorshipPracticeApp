@@ -6,6 +6,7 @@
 import * as State from '../state.js';
 import { getTransport } from '../transport.js';
 import { getTempoAtTime, getTimeSigAtTime } from '../metadata.js';
+import { Knob } from './knob.js';
 
 // Key names in chromatic order starting from A
 const KEYS = ['A', 'Bb', 'B', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab'];
@@ -39,6 +40,10 @@ class TransportBar {
         this.speedValueEl = document.getElementById('speed-value');
         this.tempoValueEl = document.getElementById('tempo-value');
         
+        // Knob containers
+        this.speedKnobContainer = document.getElementById('speed-knob-container');
+        this.speedKnob = null;
+        
         // Selects
         this.pitchSelect = document.getElementById('pitch-select');
         
@@ -57,8 +62,46 @@ class TransportBar {
     async init() {
         this.transport = getTransport();
         
+        this.createSpeedKnob();
         this.attachEventListeners();
         this.attachStateListeners();
+    }
+
+    /**
+     * Create the speed control knob
+     * Uses bipolar mode with center at 1.0x
+     * Internal mapping: -50 to +100 where 0 = 1.0x
+     */
+    createSpeedKnob() {
+        this.speedKnob = new Knob(this.speedKnobContainer, {
+            min: -50,           // Represents 0.5x
+            max: 100,           // Represents 2.0x
+            value: 0,           // Represents 1.0x (centered)
+            step: 1,            // 0.01x increments
+            size: 28,
+            bipolar: true,      // Arc fills from center
+            defaultValue: 0,    // Double-click resets to 1.0x
+            onChange: (knobValue) => {
+                const speed = this.knobValueToSpeed(knobValue);
+                this.transport.setSpeed(speed);
+                this.speedValueEl.textContent = this.transport.formatSpeed(speed);
+            }
+        });
+    }
+
+    /**
+     * Convert knob internal value (-50 to +100) to speed (0.5x to 2.0x)
+     * -50 → 0.5x, 0 → 1.0x, +100 → 2.0x
+     */
+    knobValueToSpeed(knobValue) {
+        return 1.0 + (knobValue / 100);
+    }
+
+    /**
+     * Convert speed (0.5x to 2.0x) to knob internal value (-50 to +100)
+     */
+    speedToKnobValue(speed) {
+        return (speed - 1.0) * 100;
     }
 
     attachEventListeners() {
@@ -90,18 +133,6 @@ class TransportBar {
         // Pitch select
         this.pitchSelect.addEventListener('change', () => {
             this.transport.setPitch(parseInt(this.pitchSelect.value));
-        });
-
-        // Editable value fields - click to edit
-        this.setupEditableValue(this.speedValueEl, 'speed', {
-            parse: (text) => parseFloat(text.replace('x', '')),
-            format: (val) => this.transport.formatSpeed(val),
-            validate: (val) => !isNaN(val),
-            apply: (val) => {
-                const clamped = Math.max(0.5, Math.min(2.0, val));
-                this.transport.setSpeed(clamped);
-                return clamped;
-            }
         });
     }
 
@@ -252,6 +283,9 @@ class TransportBar {
 
         // Update value displays
         this.speedValueEl.textContent = this.transport.formatSpeed(transport.speed);
+        if (this.speedKnob) {
+            this.speedKnob.setValue(this.speedToKnobValue(transport.speed), false);
+        }
         
         // Tempo always comes from metadata or defaults to 120 BPM
         const tempo = getTempoAtTime(transport.position, song.metadata?.tempos);
