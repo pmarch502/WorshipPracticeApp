@@ -335,6 +335,12 @@ class TrackPanel {
         element.dataset.trackId = track.id;
         element.draggable = true;
         
+        // Assign track color based on position in song's track list (cycles through 6 colors)
+        const song = State.getActiveSong();
+        const trackIndex = song?.tracks?.findIndex(t => t.id === track.id) ?? 0;
+        const colorIndex = (trackIndex % 6) + 1;
+        element.classList.add(`track-color-${colorIndex}`);
+        
         // Check if track is active
         const isAudible = State.isTrackAudible(track.id);
         if (!isAudible) {

@@ -249,6 +249,12 @@ class WaveformPanel {
         wrapper.className = 'waveform-track';
         wrapper.dataset.trackId = track.id;
         
+        // Assign track color based on position in song's track list (cycles through 6 colors)
+        const song = State.getActiveSong();
+        const trackIndex = song?.tracks?.findIndex(t => t.id === track.id) ?? 0;
+        const colorIndex = (trackIndex % 6) + 1;
+        wrapper.classList.add(`track-color-${colorIndex}`);
+        
         // Check audibility
         const isAudible = State.isTrackAudible(track.id);
         if (!isAudible) {

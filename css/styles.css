@@ -22,8 +22,16 @@
     --accent-warning: #ff9800;
     --accent-danger: #f44336;
     
-    --waveform-active: #00d4ff;
+    --waveform-active: #005488; /* #00d4ff */
     --waveform-inactive: #4a4a4a;
+    
+    /* Track background colors (subtle tints for visual differentiation) */
+    --track-color-1: rgba(0, 212, 255, 0.08);   /* Cyan */
+    --track-color-2: rgba(255, 107, 107, 0.08); /* Coral */
+    --track-color-3: rgba(150, 255, 0, 0.08);   /* Bright Green */
+    --track-color-4: rgba(200, 200, 0, 0.08);   /* Gold */
+    --track-color-5: rgba(199, 125, 255, 0.08); /* Purple */
+    --track-color-6: rgba(107, 255, 148, 0.08); /* Dark Green */
     
     --border-color: #404040;
     --border-light: #505050;
@@ -707,7 +715,7 @@ body {
     min-height: var(--track-height);
     max-height: var(--track-height);
     padding: 8px 12px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 2px solid #000000;
     background-color: var(--bg-secondary);
     transition: background-color var(--transition-fast);
     box-sizing: border-box;
@@ -1139,7 +1147,7 @@ body {
     height: var(--track-height);
     min-height: var(--track-height);
     max-height: var(--track-height);
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 2px solid #000000;
     position: relative;
     background-color: var(--bg-primary);
     box-sizing: border-box;
@@ -1148,6 +1156,15 @@ body {
 .waveform-track.inactive {
     background-color: var(--bg-secondary);
 }
+
+/* Track color classes for visual differentiation */
+/* Applied to both .track-control and .waveform-track */
+.track-color-1 { background-color: var(--track-color-1) !important; }
+.track-color-2 { background-color: var(--track-color-2) !important; }
+.track-color-3 { background-color: var(--track-color-3) !important; }
+.track-color-4 { background-color: var(--track-color-4) !important; }
+.track-color-5 { background-color: var(--track-color-5) !important; }
+.track-color-6 { background-color: var(--track-color-6) !important; }
 
 .waveform-canvas {
     position: sticky;

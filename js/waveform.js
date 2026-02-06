@@ -7,7 +7,7 @@
  * custom arrangements (Phase 3) define splits.
  */
 
-const ACTIVE_COLOR = '#00d4ff';
+const ACTIVE_COLOR = '#00a8cc';
 const INACTIVE_COLOR = '#4a4a4a';
 const BACKGROUND_COLOR = '#1a1a1a';
 const SECTION_DIVIDER_COLOR = 'rgba(255, 255, 0, 0.4)'; // Matches marker color
@@ -16,7 +16,7 @@ const SECTION_DIVIDER_COLOR = 'rgba(255, 255, 0, 0.4)'; // Matches marker color
  * Render waveform to a canvas
  * @deprecated Use renderWaveformGradient() instead - this function has precision issues at high zoom levels
  * @param {HTMLCanvasElement} canvas - Target canvas
- * @param {Float32Array|Array} peaks - Peak values (0-1)
+ * @param {Float32Array|Array|{left: Float32Array, right: Float32Array|null, isStereo: boolean}} peaks - Peak values (0-1)
  * @param {Object} options - Rendering options
  */
 export function renderWaveform(canvas, peaks, options = {}) {
@@ -32,15 +32,17 @@ export function renderWaveform(canvas, peaks, options = {}) {
     const ctx = canvas.getContext('2d');
     const { width, height } = canvas;
     
-    // Clear canvas
-    ctx.fillStyle = backgroundColor;
-    ctx.fillRect(0, 0, width, height);
+    // Clear canvas with transparency (CSS background color shows through)
+    ctx.clearRect(0, 0, width, height);
     
-    if (!peaks || peaks.length === 0) return;
+    // Handle stereo format - extract left channel for this deprecated function
+    const peaksArray = peaks?.left !== undefined ? peaks.left : peaks;
+    
+    if (!peaksArray || peaksArray.length === 0) return;
 
     // Calculate visible region
     const totalWidth = duration * pixelsPerSecond * zoom;
-    const peaksPerPixel = peaks.length / totalWidth;
+    const peaksPerPixel = peaksArray.length / totalWidth;
     
     const startPixel = scrollOffset;
     const endPixel = Math.min(startPixel + width, totalWidth);
@@ -57,7 +59,7 @@ export function renderWaveform(canvas, peaks, options = {}) {
         
         // Get peak value for this pixel
         const peakIndex = Math.floor(sourcePixel * peaksPerPixel);
-        const peak = peaks[Math.min(peakIndex, peaks.length - 1)] || 0;
+        const peak = peaksArray[Math.min(peakIndex, peaksArray.length - 1)] || 0;
         
         // Draw symmetric bar
         const barHeight = peak * amplitude;
@@ -75,6 +77,7 @@ export function renderWaveform(canvas, peaks, options = {}) {
  * Render waveform with gradient effect
  * Uses MAX-POOLING when zoomed out to preserve transients (important for click tracks)
  * Uses interpolation when zoomed in for smoother appearance
+ * Supports stereo (split L/R view) and mono waveforms
  */
 export function renderWaveformGradient(canvas, peaks, options = {}) {
     const {
@@ -91,38 +94,51 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
     const ctx = canvas.getContext('2d');
     const { width: canvasWidth, height } = canvas;
     
-    // Clear canvas
-    ctx.fillStyle = backgroundColor;
-    ctx.fillRect(0, 0, canvasWidth, height);
+    // Clear canvas with transparency (CSS background color shows through)
+    ctx.clearRect(0, 0, canvasWidth, height);
     
-    if (!peaks || peaks.length === 0 || duration <= 0) return;
+    // Detect stereo vs mono/legacy format
+    // New format: { left: Float32Array, right: Float32Array|null, isStereo: boolean }
+    // Legacy format: Float32Array or Array
+    const isStereoFormat = peaks && peaks.left !== undefined;
+    const leftPeaks = isStereoFormat ? peaks.left : peaks;
+    const rightPeaks = isStereoFormat ? peaks.right : null;
+    const isStereo = isStereoFormat && peaks.isStereo && rightPeaks;
+    
+    if (!leftPeaks || leftPeaks.length === 0 || duration <= 0) return;
 
     // VIEWPORT-BASED APPROACH: Calculate using time instead of massive pixel values
     // This avoids floating-point precision loss at high zoom levels (>64K virtual pixels)
     const pixelsPerSecondZoomed = pixelsPerSecond * zoom;
     
-    const centerY = height / 2;
-    const amplitude = height / 2 - 2;
-
-    // Create gradient
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, adjustColorAlpha(color, 0.3));
-    gradient.addColorStop(0.5, color);
-    gradient.addColorStop(1, adjustColorAlpha(color, 0.3));
+    // Phase 4: Check for time-based mute sections
+    const hasMuteSections = muteSections && muteSections.length > 0 &&
+        muteSections.some(s => s.muted);
     
-    ctx.fillStyle = gradient;
+    // Helper to get time from pixel X (used for mute sections)
+    const getTimeAtPixel = (pixelX) => {
+        const screenPixel = scrollOffset + pixelX;
+        return (screenPixel / pixelsPerSecondZoomed) - offset;
+    };
+    
+    // Helper to check if a time is in a muted section
+    const isTimeInMutedSection = (time) => {
+        for (const section of muteSections) {
+            if (time >= section.start && time < section.end) {
+                return section.muted;
+            }
+        }
+        return false;
+    };
     
     /**
      * Pre-calculate peak index ranges for each pixel to ensure NO GAPS.
      * This is critical for click tracks where missing a single peak index
      * can cause a click to disappear entirely.
      * 
-     * The approach:
-     * 1. Calculate initial ranges based on time-to-index mapping
-     * 2. Fix gaps by ensuring each pixel's start equals previous pixel's end
-     * 3. This guarantees every peak index is included in exactly one pixel's range
+     * @param {Float32Array|Array} peaksArray - The peaks array to calculate ranges for
      */
-    const calculatePeakRanges = () => {
+    const calculatePeakRanges = (peaksArray) => {
         const ranges = new Array(canvasWidth);
         let lastValidEnd = 0;
         
@@ -136,12 +152,12 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
             }
             
             const timeRatio = time / duration;
-            let startIndex = Math.floor(timeRatio * peaks.length);
+            let startIndex = Math.floor(timeRatio * peaksArray.length);
             
             // End index is based on the next pixel's time position
             const nextTime = ((screenPixel + 1) / pixelsPerSecondZoomed) - offset;
             const nextTimeRatio = Math.min(nextTime / duration, 1);
-            let endIndex = Math.floor(nextTimeRatio * peaks.length);
+            let endIndex = Math.floor(nextTimeRatio * peaksArray.length);
             
             // FIX GAPS: If there's a gap from the last valid pixel, extend backward
             // This ensures no peak indices are skipped between pixels
@@ -161,110 +177,90 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
         return ranges;
     };
     
-    const peakRanges = calculatePeakRanges();
-    
     /**
-     * Get peak value for a pixel position using MAX-POOLING with gap-free ranges.
-     * Uses pre-calculated ranges to ensure all peaks are represented.
+     * Create a getPeakAt function for a specific peaks array and pre-calculated ranges
+     * @param {Float32Array|Array} peaksArray - The peaks array
+     * @param {Array} peakRanges - Pre-calculated ranges from calculatePeakRanges
      */
-    const getPeakAt = (pixelX) => {
-        const range = peakRanges[pixelX];
-        if (!range) return 0;
-        
-        let maxPeak = 0;
-        for (let i = range.start; i < range.end && i < peaks.length; i++) {
-            const p = peaks[i] || 0;
-            if (p > maxPeak) maxPeak = p;
-        }
-        return maxPeak;
-    };
-    
-    /**
-     * Get peak value using interpolation (for zoomed-in smooth rendering)
-     * Uses time-based conversion to avoid precision loss at high zoom levels
-     */
-    const getPeakAtSmooth = (pixelX) => {
-        // Convert screen pixel to time (accounting for offset like timeline does)
-        const screenPixel = scrollOffset + pixelX;
-        const time = (screenPixel / pixelsPerSecondZoomed) - offset;
-        
-        // Clamp to valid time range
-        if (time < 0 || time >= duration) return 0;
-        
-        // Convert time to exact peak index with sub-index precision for interpolation
-        const exactIndex = (time / duration) * peaks.length;
-        const index1 = Math.floor(exactIndex);
-        const index2 = Math.min(index1 + 1, peaks.length - 1);
-        const fraction = exactIndex - index1;
-        
-        // Linear interpolation between adjacent peaks
-        const peak1 = peaks[Math.min(index1, peaks.length - 1)] || 0;
-        const peak2 = peaks[index2] || 0;
-        
-        return peak1 + (peak2 - peak1) * fraction;
-    };
-    
-    // Choose rendering strategy based on zoom level
-    // Calculate peaks per pixel using viewport-based approach
-    // Use smooth curves when zoomed in (fewer than 2 peaks per pixel)
-    const secondsPerPixel = 1 / pixelsPerSecondZoomed;
-    const peaksPerSecond = peaks.length / duration;
-    const peaksPerPixel = secondsPerPixel * peaksPerSecond;
-    const useSmoothing = false; // Always use max-pooling to preserve transients (clicks, etc.)
-    
-    // Phase 4: Check for time-based mute sections
-    const hasMuteSections = muteSections && muteSections.length > 0 &&
-        muteSections.some(s => s.muted);
-    
-    if (hasMuteSections) {
-        // Create inactive gradient for muted sections
-        const inactiveGradient = ctx.createLinearGradient(0, 0, 0, height);
-        inactiveGradient.addColorStop(0, adjustColorAlpha(INACTIVE_COLOR, 0.3));
-        inactiveGradient.addColorStop(0.5, INACTIVE_COLOR);
-        inactiveGradient.addColorStop(1, adjustColorAlpha(INACTIVE_COLOR, 0.3));
-        
-        // Helper to get time from pixel X
-        const getTimeAtPixel = (pixelX) => {
-            const screenPixel = scrollOffset + pixelX;
-            return (screenPixel / pixelsPerSecondZoomed) - offset;
-        };
-        
-        // Helper to check if a time is in a muted section
-        const isTimeInMutedSection = (time) => {
-            for (const section of muteSections) {
-                if (time >= section.start && time < section.end) {
-                    return section.muted;
-                }
+    const createGetPeakAt = (peaksArray, peakRanges) => {
+        return (pixelX) => {
+            const range = peakRanges[pixelX];
+            if (!range) return 0;
+            
+            let maxPeak = 0;
+            for (let i = range.start; i < range.end && i < peaksArray.length; i++) {
+                const p = peaksArray[i] || 0;
+                if (p > maxPeak) maxPeak = p;
             }
-            return false;
+            return maxPeak;
         };
+    };
+    
+    /**
+     * Create a gradient for a specific vertical region
+     * @param {number} topY - Top of the region
+     * @param {number} bottomY - Bottom of the region
+     * @param {string} baseColor - The color to use
+     */
+    const createRegionGradient = (topY, bottomY, baseColor) => {
+        const gradient = ctx.createLinearGradient(0, topY, 0, bottomY);
+        gradient.addColorStop(0, adjustColorAlpha(baseColor, 0.3));
+        gradient.addColorStop(0.5, baseColor);
+        gradient.addColorStop(1, adjustColorAlpha(baseColor, 0.3));
+        return gradient;
+    };
+    
+    /**
+     * Render a single channel's waveform
+     * @param {Float32Array|Array} peaksArray - The peaks data for this channel
+     * @param {number} centerY - Vertical center for this channel
+     * @param {number} amplitude - Max amplitude (half-height) for this channel
+     * @param {string} baseColor - Color to use
+     */
+    const renderChannel = (peaksArray, centerY, amplitude, baseColor) => {
+        const peakRanges = calculatePeakRanges(peaksArray);
+        const getPeakAt = createGetPeakAt(peaksArray, peakRanges);
         
-        // Render with section-aware coloring
-        if (useSmoothing) {
-            renderSmoothWaveformWithSections(ctx, canvasWidth, height, centerY, amplitude, 
-                getPeakAtSmooth, zoom, gradient, inactiveGradient, getTimeAtPixel, isTimeInMutedSection);
-        } else {
+        // Create gradients for this channel's region
+        const topY = centerY - amplitude;
+        const bottomY = centerY + amplitude;
+        const gradient = createRegionGradient(topY, bottomY, baseColor);
+        const inactiveGradient = createRegionGradient(topY, bottomY, INACTIVE_COLOR);
+        
+        if (hasMuteSections) {
             renderBarWaveformWithSections(ctx, canvasWidth, height, centerY, amplitude, 
                 getPeakAt, gradient, inactiveGradient, getTimeAtPixel, isTimeInMutedSection);
-        }
-    } else {
-        // Standard rendering without section mutes
-        if (useSmoothing) {
-            // Zoomed in: use smooth curve rendering with interpolation
-            renderSmoothWaveform(ctx, canvasWidth, height, centerY, amplitude, getPeakAtSmooth, zoom, gradient);
         } else {
-            // Zoomed out: use bar rendering with max-pooling (preserves transients)
             renderBarWaveform(ctx, canvasWidth, height, centerY, amplitude, getPeakAt, gradient);
         }
-    }
+        
+        // Draw center line for this channel
+        ctx.strokeStyle = adjustColorAlpha(baseColor, 0.5);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, centerY);
+        ctx.lineTo(canvasWidth, centerY);
+        ctx.stroke();
+    };
     
-    // Draw center line
-    ctx.strokeStyle = adjustColorAlpha(color, 0.5);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, centerY);
-    ctx.lineTo(canvasWidth, centerY);
-    ctx.stroke();
+    if (isStereo) {
+        // Stereo: render left channel in top half, right channel in bottom half
+        const channelHeight = height / 2;
+        const channelAmplitude = channelHeight / 2 - 1;
+        
+        // Left channel (top half)
+        const leftCenterY = channelHeight / 2;
+        renderChannel(leftPeaks, leftCenterY, channelAmplitude, color);
+        
+        // Right channel (bottom half)
+        const rightCenterY = channelHeight + channelHeight / 2;
+        renderChannel(rightPeaks, rightCenterY, channelAmplitude, color);
+    } else {
+        // Mono: render centered at full height (original behavior)
+        const centerY = height / 2;
+        const amplitude = height / 2 - 2;
+        renderChannel(leftPeaks, centerY, amplitude, color);
+    }
 }
 
 /**

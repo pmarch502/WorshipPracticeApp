@@ -1033,11 +1033,13 @@ class AudioEngine {
      * Extract waveform peaks from an audio buffer
      * @param {AudioBuffer} audioBuffer
      * @param {number} samplesPerSecond - Number of peak samples per second of audio
-     * @returns {Float32Array} - Peak values normalized to 0-1
+     * @returns {{left: Float32Array, right: Float32Array|null, isStereo: boolean}} - Peak values normalized to 0-1 for each channel
      */
     extractPeaks(audioBuffer, samplesPerSecond = 400) {
-        const channelData = audioBuffer.getChannelData(0);
-        const totalSamples = channelData.length;
+        const numChannels = audioBuffer.numberOfChannels;
+        const leftChannelData = audioBuffer.getChannelData(0);
+        const rightChannelData = numChannels > 1 ? audioBuffer.getChannelData(1) : null;
+        const totalSamples = leftChannelData.length;
         
         // Compute duration explicitly from sample count and sample rate
         // This avoids precision issues with audioBuffer.duration, especially for
@@ -1048,30 +1050,46 @@ class AudioEngine {
         // Use at least 2000 samples, or 200 samples per second, whichever is greater
         const peakCount = Math.max(2000, Math.ceil(duration * samplesPerSecond));
         
-        const peaks = new Float32Array(peakCount);
-        
-        for (let i = 0; i < peakCount; i++) {
-            // Use proportional indexing to ensure peaks exactly span the full duration
-            // This avoids drift caused by Math.floor(blockSize) truncation
-            // Peak i represents the time range: [i/peakCount * duration, (i+1)/peakCount * duration]
-            const start = Math.floor(i * totalSamples / peakCount);
-            const end = Math.floor((i + 1) * totalSamples / peakCount);
+        /**
+         * Extract peaks from a single channel
+         * @param {Float32Array} channelData
+         * @returns {Float32Array}
+         */
+        const extractChannelPeaks = (channelData) => {
+            const peaks = new Float32Array(peakCount);
             
-            let max = 0;
-            let min = 0;
-            
-            // Find both max and min for more accurate representation
-            for (let j = start; j < end; j++) {
-                const sample = channelData[j];
-                if (sample > max) max = sample;
-                if (sample < min) min = sample;
+            for (let i = 0; i < peakCount; i++) {
+                // Use proportional indexing to ensure peaks exactly span the full duration
+                // This avoids drift caused by Math.floor(blockSize) truncation
+                // Peak i represents the time range: [i/peakCount * duration, (i+1)/peakCount * duration]
+                const start = Math.floor(i * totalSamples / peakCount);
+                const end = Math.floor((i + 1) * totalSamples / peakCount);
+                
+                let max = 0;
+                let min = 0;
+                
+                // Find both max and min for more accurate representation
+                for (let j = start; j < end; j++) {
+                    const sample = channelData[j];
+                    if (sample > max) max = sample;
+                    if (sample < min) min = sample;
+                }
+                
+                // Use the larger absolute value for more accurate peaks
+                peaks[i] = Math.max(Math.abs(max), Math.abs(min));
             }
             
-            // Use the larger absolute value for more accurate peaks
-            peaks[i] = Math.max(Math.abs(max), Math.abs(min));
-        }
+            return peaks;
+        };
         
-        return peaks;
+        const leftPeaks = extractChannelPeaks(leftChannelData);
+        const rightPeaks = rightChannelData ? extractChannelPeaks(rightChannelData) : null;
+        
+        return {
+            left: leftPeaks,
+            right: rightPeaks,
+            isStereo: rightPeaks !== null
+        };
     }
 
     /**

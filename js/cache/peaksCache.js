@@ -62,7 +62,7 @@ export async function init() {
 /**
  * Store peaks data for a track
  * @param {string} trackId - Unique track identifier
- * @param {Float32Array|number[]} peaks - Peaks data
+ * @param {{left: Float32Array, right: Float32Array|null, isStereo: boolean}} peaks - Stereo peaks data
  * @returns {Promise<boolean>} True if stored successfully
  */
 export async function store(trackId, peaks) {
@@ -74,17 +74,21 @@ export async function store(trackId, peaks) {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
         
-        // Convert Float32Array to regular array for storage
-        const peaksArray = peaks instanceof Float32Array ? Array.from(peaks) : peaks;
+        // Convert Float32Arrays to regular arrays for storage
+        const peaksData = {
+            left: peaks.left instanceof Float32Array ? Array.from(peaks.left) : peaks.left,
+            right: peaks.right ? (peaks.right instanceof Float32Array ? Array.from(peaks.right) : peaks.right) : null,
+            isStereo: peaks.isStereo
+        };
         
         const request = store.put({
             trackId,
-            peaks: peaksArray,
+            peaks: peaksData,
             timestamp: Date.now()
         });
         
         request.onsuccess = () => {
-            console.log(`Cached peaks for track: ${trackId} (${peaksArray.length} samples)`);
+            console.log(`Cached peaks for track: ${trackId} (${peaksData.left.length} samples, stereo: ${peaksData.isStereo})`);
             resolve(true);
         };
         
@@ -98,7 +102,7 @@ export async function store(trackId, peaks) {
 /**
  * Retrieve peaks data for a track
  * @param {string} trackId - Unique track identifier
- * @returns {Promise<Float32Array|null>} Peaks data or null if not found
+ * @returns {Promise<{left: Float32Array, right: Float32Array|null, isStereo: boolean}|null>} Peaks data or null if not found
  */
 export async function retrieve(trackId) {
     if (!initialized || !db) {
@@ -114,8 +118,23 @@ export async function retrieve(trackId) {
             const result = event.target.result;
             if (result && result.peaks) {
                 console.log(`Retrieved peaks for track: ${trackId}`);
-                // Convert back to Float32Array
-                resolve(new Float32Array(result.peaks));
+                // Convert back to Float32Arrays (handle new stereo format)
+                const peaks = result.peaks;
+                if (peaks.left !== undefined) {
+                    // New stereo format
+                    resolve({
+                        left: new Float32Array(peaks.left),
+                        right: peaks.right ? new Float32Array(peaks.right) : null,
+                        isStereo: peaks.isStereo
+                    });
+                } else {
+                    // Legacy mono format - convert to new format
+                    resolve({
+                        left: new Float32Array(peaks),
+                        right: null,
+                        isStereo: false
+                    });
+                }
             } else {
                 resolve(null);
             }

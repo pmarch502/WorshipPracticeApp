@@ -79,8 +79,8 @@ export async function addTrackFromManifest(songName, trackFileName) {
             console.log(`Extracted peaks: ${songName}/${trackFileName}`);
         }
 
-        // 6. Create track with peaks
-        const track = State.createDefaultTrack(trackName, trackPath, computedDuration, Array.from(peaks));
+        // 6. Create track with peaks (peaks is now {left, right, isStereo} object)
+        const track = State.createDefaultTrack(trackName, trackPath, computedDuration, peaks);
 
         // 7. Add to state
         State.addTrack(track);
@@ -292,21 +292,23 @@ export async function loadTracksForSong(song) {
                     audioBuffer = await audioEngine.loadTrackAudio(track.id, blob);
                     
                     // Cache for future use (in background)
-                    const peaks = track.peaks ? new Float32Array(track.peaks) : audioEngine.extractPeaks(audioBuffer, 200);
+                    // peaks is now {left, right, isStereo} object
+                    const peaks = track.peaks?.left ? track.peaks : audioEngine.extractPeaks(audioBuffer, 200);
                     cacheManager.cacheTrack(song.songName, trackFileName, blob, peaks)
                         .catch(err => console.warn('Failed to cache track:', err));
                 }
                 
                 // 4. Load peaks from cache if track doesn't have them
-                if (!track.peaks || track.peaks.length === 0) {
+                // peaks is now {left, right, isStereo} object
+                if (!track.peaks || !track.peaks.left) {
                     const cachedPeaks = await cacheManager.getPeaks(song.songName, trackFileName);
                     if (cachedPeaks) {
-                        track.peaks = Array.from(cachedPeaks);
+                        track.peaks = cachedPeaks;
                         State.updateTrack(track.id, { peaks: track.peaks });
                     } else {
                         // Extract and cache peaks
                         const peaks = audioEngine.extractPeaks(audioBuffer, 200);
-                        track.peaks = Array.from(peaks);
+                        track.peaks = peaks;
                         State.updateTrack(track.id, { peaks: track.peaks });
                     }
                 }

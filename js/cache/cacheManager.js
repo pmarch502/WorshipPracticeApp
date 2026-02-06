@@ -58,7 +58,7 @@ export async function init() {
  * @param {string} songName - Song name (for OPFS directory)
  * @param {string} trackName - Track filename
  * @param {Blob} blob - Audio blob
- * @param {Float32Array} peaks - Peaks data
+ * @param {{left: Float32Array, right: Float32Array|null, isStereo: boolean}} peaks - Stereo peaks data
  * @returns {Promise<boolean>}
  */
 export async function cacheTrack(songName, trackName, blob, peaks) {
@@ -95,7 +95,7 @@ export async function getAudioBlob(songName, trackName) {
  * Get cached peaks for a track
  * @param {string} songName 
  * @param {string} trackName 
- * @returns {Promise<Float32Array|null>}
+ * @returns {Promise<{left: Float32Array, right: Float32Array|null, isStereo: boolean}|null>}
  */
 export async function getPeaks(songName, trackName) {
     if (!initialized) return null;
