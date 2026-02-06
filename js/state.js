@@ -26,12 +26,14 @@ export function createDefaultSong(songName) {
         arrangementModified: false,    // True if user has made unsaved changes
         currentArrangementId: null,    // null = "Original" arrangement
         currentArrangementName: null,  // Display name (null = "Original")
+        currentArrangementProtected: false,  // Whether current arrangement is protected
         // Phase 4: Waveform-based mute sections (per-track time-based muting)
         // Structure: { trackId: [{ start, end, muted }, ...] }
         muteSections: {},
         muteSetModified: false,      // True if user has made unsaved changes to mute sections
         currentMuteSetId: null,      // null = "None" (no mute set loaded)
         currentMuteSetName: null,    // Display name (null = "None")
+        currentMuteSetProtected: false,  // Whether current mute set is protected
         transport: {
             position: 0,
             lastPlayPosition: 0,
@@ -505,6 +507,26 @@ export function getCurrentArrangementDisplayName() {
 }
 
 /**
+ * Get whether the current arrangement is protected
+ * @returns {boolean} True if protected
+ */
+export function getCurrentArrangementProtected() {
+    const song = getActiveSong();
+    return song?.currentArrangementProtected || false;
+}
+
+/**
+ * Set whether the current arrangement is protected
+ * @param {boolean} isProtected - Protection status
+ */
+export function setCurrentArrangementProtected(isProtected) {
+    const song = getActiveSong();
+    if (song) {
+        song.currentArrangementProtected = isProtected;
+    }
+}
+
+/**
  * Add a split to the arrangement at a specific time
  * Splits the section containing that time into two sections
  * @param {number} splitTime - Time in seconds where to add the split
@@ -821,6 +843,26 @@ export function setMuteSetModified(modified) {
 export function getCurrentMuteSetDisplayName() {
     const song = getActiveSong();
     return song?.currentMuteSetName || 'None';
+}
+
+/**
+ * Get whether the current mute set is protected
+ * @returns {boolean} True if protected
+ */
+export function getCurrentMuteSetProtected() {
+    const song = getActiveSong();
+    return song?.currentMuteSetProtected || false;
+}
+
+/**
+ * Set whether the current mute set is protected
+ * @param {boolean} isProtected - Protection status
+ */
+export function setCurrentMuteSetProtected(isProtected) {
+    const song = getActiveSong();
+    if (song) {
+        song.currentMuteSetProtected = isProtected;
+    }
 }
 
 /**

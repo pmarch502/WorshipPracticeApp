@@ -18,9 +18,7 @@ import {
     getMuteSet,
     saveMuteSet,
     deleteMuteSet,
-    validateName,
-    checkArrangementExists,
-    checkMuteSetExists
+    validateName
 } from '../api.js';
 
 class TabsUI {
@@ -839,6 +837,7 @@ class TabsUI {
         if (activeSong) {
             activeSong.currentArrangementId = null;
             activeSong.currentArrangementName = null;
+            activeSong.currentArrangementProtected = false;
         }
         this.updateDropdownButtonText(song);
     }
@@ -872,6 +871,7 @@ class TabsUI {
             if (activeSong) {
                 activeSong.currentArrangementId = name;
                 activeSong.currentArrangementName = name;
+                activeSong.currentArrangementProtected = arrangement.protected || false;
             }
             
             this.updateDropdownButtonText(song);
@@ -892,19 +892,34 @@ class TabsUI {
         const currentName = State.getCurrentArrangementDisplayName();
         if (!currentName || currentName === 'Original') return;
         
+        const currentlyProtected = State.getCurrentArrangementProtected();
+        
+        // Show save dialog with protection option
+        const dialogResult = await this.showSaveCurrentDialog('arrangement', currentlyProtected);
+        if (!dialogResult) return;
+        
+        const { isProtected, secret } = dialogResult;
         const sections = State.getArrangementSections();
         
         try {
-            await saveArrangement(song.songName, currentName, { sections });
+            const data = { sections, protected: isProtected };
+            if (secret) data.secret = secret;
+            
+            await saveArrangement(song.songName, currentName, data);
+            
             State.setArrangementModified(false);
+            State.setCurrentArrangementProtected(isProtected);
             this.invalidateArrangementCache(song.songName);
             this.updateDropdownButtonText(song);
         } catch (error) {
             console.error('Failed to save arrangement:', error);
             const modal = getModal();
+            const errorMessage = error.status === 403 
+                ? 'Invalid admin secret. The arrangement is protected and cannot be saved without the correct secret.'
+                : `Failed to save arrangement: ${error.message}`;
             await modal.alert({
                 title: 'Error',
-                message: `Failed to save arrangement: ${error.message}`
+                message: errorMessage
             });
         }
     }
@@ -932,6 +947,7 @@ class TabsUI {
             if (activeSong) {
                 activeSong.currentArrangementId = name;
                 activeSong.currentArrangementName = name;
+                activeSong.currentArrangementProtected = isProtected;
             }
             
             State.setArrangementModified(false);
@@ -940,9 +956,12 @@ class TabsUI {
         } catch (error) {
             console.error('Failed to save arrangement:', error);
             const modal = getModal();
+            const errorMessage = error.status === 403 
+                ? 'Invalid admin secret. The arrangement is protected and cannot be overwritten without the correct secret.'
+                : `Failed to save arrangement: ${error.message}`;
             await modal.alert({
                 title: 'Error',
-                message: `Failed to save arrangement: ${error.message}`
+                message: errorMessage
             });
         }
     }
@@ -1151,6 +1170,7 @@ class TabsUI {
         if (activeSong) {
             activeSong.currentMuteSetId = null;
             activeSong.currentMuteSetName = null;
+            activeSong.currentMuteSetProtected = false;
         }
         
         this.updateDropdownButtonText(song);
@@ -1185,6 +1205,7 @@ class TabsUI {
             if (activeSong) {
                 activeSong.currentMuteSetId = name;
                 activeSong.currentMuteSetName = name;
+                activeSong.currentMuteSetProtected = muteSet.protected || false;
             }
             
             this.updateDropdownButtonText(song);
@@ -1245,19 +1266,34 @@ class TabsUI {
         const currentName = State.getCurrentMuteSetDisplayName();
         if (!currentName || currentName === 'None') return;
         
+        const currentlyProtected = State.getCurrentMuteSetProtected();
+        
+        // Show save dialog with protection option
+        const dialogResult = await this.showSaveCurrentDialog('mute', currentlyProtected);
+        if (!dialogResult) return;
+        
+        const { isProtected, secret } = dialogResult;
         const tracks = this.buildMuteSetTracksData(song);
         
         try {
-            await saveMuteSet(song.songName, currentName, { tracks });
+            const data = { tracks, protected: isProtected };
+            if (secret) data.secret = secret;
+            
+            await saveMuteSet(song.songName, currentName, data);
+            
             State.setMuteSetModified(false);
+            State.setCurrentMuteSetProtected(isProtected);
             this.invalidateMuteSetCache(song.songName);
             this.updateDropdownButtonText(song);
         } catch (error) {
             console.error('Failed to save mute set:', error);
             const modal = getModal();
+            const errorMessage = error.status === 403 
+                ? 'Invalid admin secret. The mute set is protected and cannot be saved without the correct secret.'
+                : `Failed to save mute set: ${error.message}`;
             await modal.alert({
                 title: 'Error',
-                message: `Failed to save mute set: ${error.message}`
+                message: errorMessage
             });
         }
     }
@@ -1285,6 +1321,7 @@ class TabsUI {
             if (activeSong) {
                 activeSong.currentMuteSetId = name;
                 activeSong.currentMuteSetName = name;
+                activeSong.currentMuteSetProtected = isProtected;
             }
             
             State.setMuteSetModified(false);
@@ -1293,9 +1330,12 @@ class TabsUI {
         } catch (error) {
             console.error('Failed to save mute set:', error);
             const modal = getModal();
+            const errorMessage = error.status === 403 
+                ? 'Invalid admin secret. The mute set is protected and cannot be overwritten without the correct secret.'
+                : `Failed to save mute set: ${error.message}`;
             await modal.alert({
                 title: 'Error',
-                message: `Failed to save mute set: ${error.message}`
+                message: errorMessage
             });
         }
     }
@@ -1419,10 +1459,6 @@ class TabsUI {
                             Mark as protected (requires secret to edit/delete)
                         </label>
                     </div>
-                    <div id="save-secret-field" class="save-dialog-field hidden">
-                        <label for="save-secret-input">Admin Secret</label>
-                        <input type="password" id="save-secret-input" placeholder="Enter admin secret...">
-                    </div>
                 </div>
             `;
             
@@ -1435,20 +1471,9 @@ class TabsUI {
                 showCancel: true,
                 onShow: () => {
                     const nameInput = document.getElementById('save-name-input');
-                    const protectedCheckbox = document.getElementById('save-protected-checkbox');
-                    const secretField = document.getElementById('save-secret-field');
                     
                     // Focus name input
                     setTimeout(() => nameInput?.focus(), 50);
-                    
-                    // Toggle secret field visibility
-                    protectedCheckbox?.addEventListener('change', () => {
-                        if (protectedCheckbox.checked) {
-                            secretField?.classList.remove('hidden');
-                        } else {
-                            secretField?.classList.add('hidden');
-                        }
-                    });
                     
                     // Enter key to submit
                     nameInput?.addEventListener('keydown', (e) => {
@@ -1461,12 +1486,11 @@ class TabsUI {
                 onConfirm: async () => {
                     const nameInput = document.getElementById('save-name-input');
                     const protectedCheckbox = document.getElementById('save-protected-checkbox');
-                    const secretInput = document.getElementById('save-secret-input');
                     const errorDiv = document.getElementById('save-name-error');
                     
                     const name = nameInput?.value?.trim() || '';
-                    const isProtected = protectedCheckbox?.checked || false;
-                    const secret = secretInput?.value || '';
+                    let isProtected = protectedCheckbox?.checked || false;
+                    let secret = undefined;
                     
                     // Validate name
                     const validation = validateName(name);
@@ -1479,31 +1503,200 @@ class TabsUI {
                         return false;
                     }
                     
-                    // Check for name collision
+                    // Check for name collision by trying to fetch the existing item
                     try {
-                        const exists = type === 'arrangement' 
-                            ? await checkArrangementExists(song.songName, name)
-                            : await checkMuteSetExists(song.songName, name);
+                        let existingItem = null;
+                        try {
+                            existingItem = type === 'arrangement' 
+                                ? await getArrangement(song.songName, name)
+                                : await getMuteSet(song.songName, name);
+                        } catch (fetchError) {
+                            // 404 means item doesn't exist, which is fine
+                            if (fetchError.status !== 404) {
+                                throw fetchError;
+                            }
+                        }
                         
-                        if (exists) {
-                            // Ask to overwrite
-                            const overwrite = await modal.confirm({
-                                title: 'Name Already Exists',
-                                message: `<p>A ${type} named "${this.escapeHtml(name)}" already exists.</p><p>Do you want to overwrite it?</p>`,
-                                confirmText: 'Overwrite',
-                                confirmClass: 'btn-danger'
-                            });
-                            
-                            if (!overwrite) {
-                                resolve(null);
-                                return;
+                        if (existingItem) {
+                            if (existingItem.protected) {
+                                // Existing item is protected - show overwrite dialog with secret field and protection option
+                                const overwriteResult = await this.showProtectedOverwriteDialog(type, name);
+                                
+                                if (!overwriteResult) {
+                                    resolve(null);
+                                    return;
+                                }
+                                
+                                secret = overwriteResult.secret;
+                                isProtected = overwriteResult.isProtected;
+                            } else {
+                                // Existing item is not protected - simple overwrite confirmation
+                                const overwrite = await modal.confirm({
+                                    title: 'Name Already Exists',
+                                    message: `<p>A ${type} named "${this.escapeHtml(name)}" already exists.</p><p>Do you want to overwrite it?</p>`,
+                                    confirmText: 'Overwrite',
+                                    confirmClass: 'btn-danger'
+                                });
+                                
+                                if (!overwrite) {
+                                    resolve(null);
+                                    return;
+                                }
                             }
                         }
                     } catch (error) {
                         console.error('Failed to check name existence:', error);
                     }
                     
-                    resolve({ name, isProtected, secret: isProtected ? secret : undefined });
+                    resolve({ name, isProtected, secret });
+                },
+                onCancel: () => {
+                    resolve(null);
+                }
+            });
+        });
+    }
+    
+    /**
+     * Show dialog for overwriting a protected item (includes secret input and protection checkbox)
+     * @param {string} type - 'arrangement' or 'muteSet'
+     * @param {string} name - Name of the existing item
+     * @returns {Promise<{secret: string, isProtected: boolean}|null>} - Object with secret and protection status, or null if cancelled
+     */
+    async showProtectedOverwriteDialog(type, name) {
+        const modal = getModal();
+        const typeLabel = type === 'arrangement' ? 'arrangement' : 'mute set';
+        
+        return new Promise((resolve) => {
+            const content = `
+                <p>A ${typeLabel} named "<strong>${this.escapeHtml(name)}</strong>" already exists and is <strong>protected</strong>.</p>
+                <p>Enter the admin secret to overwrite it:</p>
+                <div class="save-dialog-field save-dialog-checkbox" style="margin: 16px 0;">
+                    <label>
+                        <input type="checkbox" id="overwrite-protected-checkbox" checked>
+                        Mark as protected (requires secret to edit/delete)
+                    </label>
+                </div>
+                <div class="save-dialog-field">
+                    <label for="overwrite-secret-input">Admin Secret</label>
+                    <input type="password" 
+                           id="overwrite-secret-input" 
+                           placeholder="Admin secret"
+                           style="width: 100%; padding: 8px; margin-top: 4px; 
+                                  background: var(--bg-tertiary); 
+                                  border: 1px solid var(--border-color); 
+                                  border-radius: 4px; 
+                                  color: var(--text-primary);
+                                  font-size: 14px;">
+                </div>
+            `;
+            
+            modal.show({
+                title: 'Protected Item',
+                content: content,
+                confirmText: 'Overwrite',
+                cancelText: 'Cancel',
+                confirmClass: 'btn-danger',
+                showCancel: true,
+                onShow: () => {
+                    const secretInput = document.getElementById('overwrite-secret-input');
+                    setTimeout(() => secretInput?.focus(), 50);
+                    
+                    // Enter key to submit
+                    secretInput?.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            modal.close(true);
+                        }
+                    });
+                },
+                onConfirm: () => {
+                    const protectedCheckbox = document.getElementById('overwrite-protected-checkbox');
+                    const secretInput = document.getElementById('overwrite-secret-input');
+                    const isProtected = protectedCheckbox?.checked || false;
+                    const secret = secretInput?.value || '';
+                    resolve({ secret, isProtected });
+                },
+                onCancel: () => {
+                    resolve(null);
+                }
+            });
+        });
+    }
+    
+    /**
+     * Show dialog for saving current arrangement/mute set (with protection option)
+     * @param {string} type - 'arrangement' or 'mute'
+     * @param {boolean} currentlyProtected - Whether the item is currently protected
+     * @returns {Promise<{isProtected: boolean, secret?: string}|null>}
+     */
+    async showSaveCurrentDialog(type, currentlyProtected) {
+        const modal = getModal();
+        const typeLabel = type === 'arrangement' ? 'Arrangement' : 'Mute Set';
+        
+        return new Promise((resolve) => {
+            let content = '';
+            
+            if (currentlyProtected) {
+                // Currently protected - always require secret
+                content = `
+                    <p>This ${typeLabel.toLowerCase()} is protected. Enter the admin secret to save changes.</p>
+                    <div class="save-dialog-field save-dialog-checkbox" style="margin: 16px 0;">
+                        <label>
+                            <input type="checkbox" id="save-current-protected-checkbox" checked>
+                            Mark as protected (requires secret to edit/delete)
+                        </label>
+                    </div>
+                    <div class="save-dialog-field">
+                        <label for="save-current-secret-input">Admin Secret</label>
+                        <input type="password" id="save-current-secret-input" placeholder="Enter admin secret..."
+                               style="width: 100%; padding: 8px; margin-top: 4px; 
+                                      background: var(--bg-tertiary); 
+                                      border: 1px solid var(--border-color); 
+                                      border-radius: 4px; 
+                                      color: var(--text-primary);
+                                      font-size: 14px;">
+                    </div>
+                `;
+            } else {
+                // Not currently protected - no secret needed
+                content = `
+                    <div class="save-dialog-field save-dialog-checkbox">
+                        <label>
+                            <input type="checkbox" id="save-current-protected-checkbox">
+                            Mark as protected (requires secret to edit/delete)
+                        </label>
+                    </div>
+                `;
+            }
+            
+            modal.show({
+                title: `Save ${typeLabel}`,
+                content: content,
+                confirmText: 'Save',
+                cancelText: 'Cancel',
+                confirmClass: 'btn-primary',
+                showCancel: true,
+                onShow: () => {
+                    const secretInput = document.getElementById('save-current-secret-input');
+                    if (secretInput) {
+                        setTimeout(() => secretInput.focus(), 50);
+                        secretInput.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                modal.close(true);
+                            }
+                        });
+                    }
+                },
+                onConfirm: () => {
+                    const protectedCheckbox = document.getElementById('save-current-protected-checkbox');
+                    const secretInput = document.getElementById('save-current-secret-input');
+                    
+                    const isProtected = protectedCheckbox?.checked || false;
+                    const secret = secretInput?.value || undefined;
+                    
+                    resolve({ isProtected, secret });
                 },
                 onCancel: () => {
                     resolve(null);
