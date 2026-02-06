@@ -594,7 +594,9 @@ class Timeline {
      */
     updateZoomControls() {
         const song = State.getActiveSong();
-        let zoom = song?.timeline?.zoom;
+        if (!song) return; // No active song yet - wait for state to load
+        
+        let zoom = song.timeline?.zoom;
         
         // If zoom is null, calculate fit-to-window zoom dynamically (don't persist)
         // This allows auto-fit to respond to window resizing
