@@ -715,7 +715,7 @@ body {
     min-height: var(--track-height);
     max-height: var(--track-height);
     padding: 8px 12px;
-    border-bottom: 2px solid #000000;
+    border-bottom: 4px solid #000000;
     background-color: var(--bg-secondary);
     transition: background-color var(--transition-fast);
     box-sizing: border-box;
@@ -1147,7 +1147,7 @@ body {
     height: var(--track-height);
     min-height: var(--track-height);
     max-height: var(--track-height);
-    border-bottom: 2px solid #000000;
+    border-bottom: 4px solid #000000;
     position: relative;
     background-color: var(--bg-primary);
     box-sizing: border-box;
