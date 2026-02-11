@@ -1873,26 +1873,66 @@ class TabsUI {
     }
 
     /**
-     * Update empty state visibility
+     * Update empty state visibility and control enabled states
+     * Panels are always visible - only the empty state message and control states change
      */
     updateEmptyState() {
         const noSongEmptyState = document.getElementById('no-song-empty-state');
-        const trackControlsPanel = document.getElementById('track-controls-panel');
-        const waveformPanel = document.getElementById('waveform-panel');
+        const hasSongs = State.state.songs.length > 0;
         
-        if (State.state.songs.length === 0) {
-            // No songs open - show empty state, hide arrangement selector
-            if (noSongEmptyState) noSongEmptyState.classList.remove('hidden');
-            if (trackControlsPanel) trackControlsPanel.classList.add('hidden');
-            if (waveformPanel) waveformPanel.classList.add('hidden');
-            if (this.arrangementSelector) this.arrangementSelector.classList.add('hidden');
-        } else {
-            // Songs open - hide empty state
-            if (noSongEmptyState) noSongEmptyState.classList.add('hidden');
-            if (trackControlsPanel) trackControlsPanel.classList.remove('hidden');
-            if (waveformPanel) waveformPanel.classList.remove('hidden');
-            // Arrangement selector visibility handled by updateDropdownSelector
+        // Toggle empty state message visibility (now inside waveform container)
+        if (noSongEmptyState) {
+            noSongEmptyState.classList.toggle('hidden', hasSongs);
         }
+        
+        // Hide arrangement selector when no songs
+        if (this.arrangementSelector) {
+            this.arrangementSelector.classList.toggle('hidden', !hasSongs);
+        }
+        
+        // Update control enabled/disabled states
+        this.updateControlsEnabledState(hasSongs);
+    }
+    
+    /**
+     * Enable or disable controls based on whether songs are open
+     * @param {boolean} enabled - True to enable controls, false to disable
+     */
+    updateControlsEnabledState(enabled) {
+        // Zoom controls
+        const zoomFitBtn = document.getElementById('zoom-fit');
+        const zoomKnobContainer = document.getElementById('zoom-knob-container');
+        const zoomValue = document.getElementById('zoom-value');
+        
+        if (zoomFitBtn) zoomFitBtn.disabled = !enabled;
+        if (zoomKnobContainer) zoomKnobContainer.classList.toggle('disabled', !enabled);
+        if (zoomValue) zoomValue.classList.toggle('disabled', !enabled);
+        
+        // Add track button
+        const addTrackBtn = document.getElementById('add-track-btn');
+        if (addTrackBtn) addTrackBtn.disabled = !enabled;
+        
+        // Transport controls
+        const transportButtons = [
+            'btn-beginning',
+            'btn-stop',
+            'btn-play',
+            'btn-pause',
+            'btn-loop'
+        ];
+        
+        transportButtons.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) btn.disabled = !enabled;
+        });
+        
+        // Speed knob
+        const speedKnobContainer = document.getElementById('speed-knob-container');
+        if (speedKnobContainer) speedKnobContainer.classList.toggle('disabled', !enabled);
+        
+        // Pitch select
+        const pitchSelect = document.getElementById('pitch-select');
+        if (pitchSelect) pitchSelect.disabled = !enabled;
     }
 
     /**

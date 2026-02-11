@@ -629,13 +629,18 @@ class TrackPanel {
 
     /**
      * Update empty state visibility
+     * Shows "No tracks loaded" only when a song is open but has no tracks
+     * Hides when no song is open (the main "No song open" message handles that case)
      */
     updateEmptyState() {
         const song = State.getActiveSong();
+        const hasSong = !!song;
         const hasTracks = song && song.tracks && song.tracks.length > 0;
         
         if (this.emptyState) {
-            this.emptyState.classList.toggle('hidden', hasTracks);
+            // Show empty state only if we have a song but no tracks
+            // Hide if no song (main empty state shown) or if tracks exist
+            this.emptyState.classList.toggle('hidden', !hasSong || hasTracks);
         }
     }
 

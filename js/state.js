@@ -256,7 +256,9 @@ export function removeSong(songId) {
             state.activeSongId = state.songs[newIndex].id;
             emit(Events.SONG_SWITCHED, state.songs[newIndex]);
         } else {
+            // No songs left - emit SONG_SWITCHED with null so components can clear themselves
             state.activeSongId = null;
+            emit(Events.SONG_SWITCHED, null);
         }
     }
     

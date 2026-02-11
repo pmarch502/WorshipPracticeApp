@@ -1615,17 +1615,17 @@ body {
     opacity: 0.5;
 }
 
-.empty-state.full-screen {
+/* No song empty state - positioned within waveform container */
+#no-song-empty-state {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     background-color: var(--bg-primary);
-    z-index: 10;
+    z-index: 5;
 }
 
-/* Hide full-screen empty state when content is present */
 #no-song-empty-state.hidden {
     display: none;
 }
@@ -1812,6 +1812,40 @@ body {
 .zoom-fit-btn {
     width: auto;
     padding: 0 4px;
+}
+
+/* Disabled state for buttons */
+.icon-btn:disabled,
+.add-btn:disabled,
+.transport-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.icon-btn:disabled:hover,
+.add-btn:disabled:hover,
+.transport-btn:disabled:hover {
+    background-color: transparent;
+    color: var(--text-secondary);
+}
+
+/* Disabled state for knob containers */
+.knob-container.disabled,
+#zoom-knob-container.disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+/* Disabled state for selects */
+select:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Disabled state for zoom value display */
+#zoom-value.disabled {
+    opacity: 0.4;
 }
 
 /* ========================================
