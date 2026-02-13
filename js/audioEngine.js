@@ -43,6 +43,13 @@ class AudioEngine {
         
         // Tab visibility handling - auto-pause when tab is hidden
         this.autoPausedForVisibility = false;
+        
+        // Pre-scheduled event tracking for background tab support
+        this.scheduledSkipTimeout = null;   // setTimeout ID for section skip
+        this.scheduledLoopTimeout = null;   // setTimeout ID for loop
+        
+        // Guard flag to prevent concurrent play() calls
+        this.isPlayInProgress = false;
     }
 
     /**
@@ -98,20 +105,22 @@ class AudioEngine {
      * This behavior can be disabled in Preferences.
      */
     handleVisibilityChange() {
-        // Check if pause-on-blur is enabled in preferences
-        if (!getPreference('pauseOnBlur')) {
-            return;
-        }
-        
         if (document.hidden) {
-            // Tab became hidden - auto-pause if playing
-            if (this.isPlaying) {
-                this.autoPausedForVisibility = true;
-                this.pause();
-                console.log('Audio auto-paused due to tab visibility change');
+            // Tab became hidden - check if pause-on-blur is enabled
+            if (getPreference('pauseOnBlur')) {
+                if (this.isPlaying) {
+                    this.autoPausedForVisibility = true;
+                    this.pause();
+                    console.log('Audio auto-paused due to tab visibility change');
+                }
             }
+            // If pauseOnBlur is disabled, scheduled timeouts will handle skips/loops
         } else {
-            // Tab became visible - auto-resume if we auto-paused
+            // Tab became visible - cancel scheduled events, let RAF take over
+            // This prevents race conditions between scheduled timeouts and RAF
+            this.cancelScheduledEvents();
+            
+            // Auto-resume if we auto-paused
             if (this.autoPausedForVisibility) {
                 this.autoPausedForVisibility = false;
                 this.play();
@@ -120,10 +129,246 @@ class AudioEngine {
         }
     }
 
+    // =========================================================================
+    // Pre-scheduled Events (for background tab support)
+    // =========================================================================
+
+    /**
+     * Cancel any pending scheduled skip or loop events
+     */
+    cancelScheduledEvents() {
+        if (this.scheduledSkipTimeout) {
+            clearTimeout(this.scheduledSkipTimeout);
+            this.scheduledSkipTimeout = null;
+        }
+        if (this.scheduledLoopTimeout) {
+            clearTimeout(this.scheduledLoopTimeout);
+            this.scheduledLoopTimeout = null;
+        }
+    }
+
+    /**
+     * Calculate when the next section skip needs to happen
+     * @param {number} currentPosition - Current virtual position
+     * @returns {{ time: number, target: number|null }|null} - Skip time and target, or null if no skip needed
+     */
+    calculateNextSkip(currentPosition) {
+        const currentSection = State.getArrangementSectionAtTime(currentPosition);
+        
+        if (!currentSection) return null;
+        
+        if (!currentSection.enabled) {
+            // Already in disabled section - need immediate skip
+            const nextEnabled = State.getNextEnabledArrangementSection(currentPosition);
+            if (nextEnabled) {
+                return { time: currentPosition, target: nextEnabled.start };
+            }
+            // No more enabled sections - signal stop
+            return { time: currentPosition, target: null };
+        }
+        
+        // We're in an enabled section - find when next disabled section starts
+        let checkPosition = currentSection.end;
+        
+        while (checkPosition < State.getMaxDuration()) {
+            const nextSection = State.getArrangementSectionAtTime(checkPosition + 0.001);
+            
+            if (!nextSection) break;
+            
+            if (!nextSection.enabled) {
+                // Found a disabled section - we need to skip when we reach it
+                const nextEnabled = State.getNextEnabledArrangementSection(checkPosition);
+                if (nextEnabled) {
+                    return { time: checkPosition, target: nextEnabled.start };
+                } else {
+                    // No more enabled sections after this - will stop
+                    return { time: checkPosition, target: null };
+                }
+            }
+            
+            // This section is enabled, check the next one
+            checkPosition = nextSection.end;
+        }
+        
+        return null; // No skip needed
+    }
+
+    /**
+     * Calculate where to jump when loop triggers (accounting for disabled sections)
+     * @param {number} loopStart - Loop start position
+     * @param {number} loopEnd - Loop end position
+     * @returns {number|null} - Target position, or null if no valid target
+     */
+    calculateLoopTarget(loopStart, loopEnd) {
+        if (!State.hasDisabledArrangementSections()) {
+            return loopStart;
+        }
+        
+        const sectionAtLoopStart = State.getArrangementSectionAtTime(loopStart);
+        
+        if (sectionAtLoopStart && !sectionAtLoopStart.enabled) {
+            const nextEnabled = State.getEnabledArrangementSectionAtOrAfter(loopStart);
+            if (nextEnabled && nextEnabled.start < loopEnd) {
+                return nextEnabled.start;
+            }
+            return null; // No valid loop target
+        }
+        
+        return loopStart;
+    }
+
+    /**
+     * Schedule a section skip
+     * @param {number} skipTime - Virtual time when skip should occur
+     * @param {number|null} skipTarget - Target position to skip to, or null to stop
+     * @param {number} currentPosition - Current virtual position
+     */
+    scheduleSkip(skipTime, skipTarget, currentPosition) {
+        const timeUntilSkip = skipTime - currentPosition;
+        const realTimeUntilSkip = timeUntilSkip / this._speed;
+        
+        // Trigger slightly early to allow for crossfade
+        const delay = Math.max(0, (realTimeUntilSkip - SECTION_SKIP_CROSSFADE_MS / 1000) * 1000);
+        
+        this.scheduledSkipTimeout = setTimeout(() => {
+            this.scheduledSkipTimeout = null;
+            this.executeScheduledSkip(skipTarget);
+        }, delay);
+    }
+
+    /**
+     * Schedule a loop
+     * @param {number} loopTime - Virtual time when loop should trigger (loopEnd)
+     * @param {number} loopTarget - Target position to loop to
+     * @param {number} currentPosition - Current virtual position
+     */
+    scheduleLoop(loopTime, loopTarget, currentPosition) {
+        const timeUntilLoop = loopTime - currentPosition;
+        const realTimeUntilLoop = timeUntilLoop / this._speed;
+        const delay = Math.max(0, realTimeUntilLoop * 1000);
+        
+        this.scheduledLoopTimeout = setTimeout(() => {
+            this.scheduledLoopTimeout = null;
+            this.executeScheduledLoop(loopTarget);
+        }, delay);
+    }
+
+    /**
+     * Execute a scheduled section skip
+     * @param {number|null} target - Target position, or null to stop
+     */
+    executeScheduledSkip(target) {
+        if (!this.isPlaying) return;
+        
+        const song = State.getActiveSong();
+        if (!song) return;
+        
+        const { loopEnabled, loopStart, loopEnd } = song.transport;
+        const currentPosition = this.getCurrentPosition();
+        
+        // Check if loop end falls within the range we're about to skip
+        // If so, loop back instead of skipping forward (matches RAF behavior)
+        if (loopEnabled && loopEnd !== null && target !== null) {
+            // loopEnd is in skip range if it's between current position and skip target
+            if (loopEnd >= currentPosition && loopEnd < target) {
+                const loopTarget = this.calculateLoopTarget(loopStart, loopEnd);
+                if (loopTarget !== null) {
+                    this.seek(loopTarget);
+                    return;
+                }
+            }
+            // Also check if loopEnd is within a disabled section we're in or about to enter
+            const sectionAtLoopEnd = State.getArrangementSectionAtTime(loopEnd);
+            if (sectionAtLoopEnd && !sectionAtLoopEnd.enabled && loopEnd >= currentPosition) {
+                const loopTarget = this.calculateLoopTarget(loopStart, loopEnd);
+                if (loopTarget !== null) {
+                    this.seek(loopTarget);
+                    return;
+                }
+            }
+        }
+        
+        if (target === null) {
+            this.stop();
+            return;
+        }
+        
+        this.skipToPosition(target, SECTION_SKIP_CROSSFADE_MS / 1000);
+        // Note: skipToPosition will call scheduleNextEvents() after completing
+    }
+
+    /**
+     * Execute a scheduled loop
+     * @param {number} target - Target position to loop to
+     */
+    executeScheduledLoop(target) {
+        if (!this.isPlaying) return;
+        
+        this.seek(target);
+        // Note: seek() -> play() will call scheduleNextEvents()
+    }
+
+    /**
+     * Schedule the next section skip and/or loop event
+     * Called after play, seek, skip, speed change, or arrangement/loop change
+     */
+    scheduleNextEvents() {
+        this.cancelScheduledEvents();
+        
+        if (!this.isPlaying) return;
+        
+        const song = State.getActiveSong();
+        if (!song) return;
+        
+        const currentPosition = this.getCurrentPosition();
+        const { loopEnabled, loopStart, loopEnd } = song.transport;
+        const hasDisabledSections = State.hasDisabledArrangementSections();
+        
+        // Calculate next skip time (if applicable)
+        let skipInfo = null;
+        if (hasDisabledSections) {
+            skipInfo = this.calculateNextSkip(currentPosition);
+        }
+        
+        // Calculate next loop time (if applicable)
+        let loopInfo = null;
+        if (loopEnabled && loopStart !== null && loopEnd !== null && currentPosition < loopEnd) {
+            const loopTarget = this.calculateLoopTarget(loopStart, loopEnd);
+            if (loopTarget !== null) {
+                loopInfo = { time: loopEnd, target: loopTarget };
+            }
+        }
+        
+        // Determine which event comes first and schedule it
+        // Note: If loopEnd falls within a skip range or disabled section,
+        // executeScheduledSkip() will handle converting the skip to a loop at execution time.
+        // If a skip would happen before loop end, schedule the skip
+        // If loop end comes first, schedule the loop
+        
+        if (skipInfo && loopInfo) {
+            // Both events possible - which comes first?
+            if (skipInfo.time < loopInfo.time) {
+                // Skip comes first
+                this.scheduleSkip(skipInfo.time, skipInfo.target, currentPosition);
+            } else {
+                // Loop comes first (or at same time)
+                this.scheduleLoop(loopInfo.time, loopInfo.target, currentPosition);
+            }
+        } else if (skipInfo) {
+            // Only skip needed
+            this.scheduleSkip(skipInfo.time, skipInfo.target, currentPosition);
+        } else if (loopInfo) {
+            // Only loop needed
+            this.scheduleLoop(loopInfo.time, loopInfo.target, currentPosition);
+        }
+    }
+
     /**
      * Reset both pitch shifters by creating fresh instances
      * This clears all internal SoundTouch buffers to prevent stale audio
      * from playing after stop/seek operations when speed != 1.0
+     * 
+     * Note: This method is protected by the isPlayInProgress guard in play()
      */
     async resetPitchShifter() {
         if (!this.pitchShifter || !this.audioContext) return;
@@ -367,66 +612,77 @@ class AudioEngine {
      * @param {number} position - Position in seconds (virtual time for arrangements)
      */
     async play(position = null) {
-        const song = State.getActiveSong();
-        if (!song || song.tracks.length === 0) return;
-
-        this.resume();
-
-        // Mute master output to prevent stale SoundTouch buffer audio from playing
-        this.setMasterMuted(true, 0);
-
-        // Reset pitch shifter to clear any stale audio in SoundTouch buffers
-        // This prevents audio from old position playing when speed != 1.0
-        await this.resetPitchShifter();
-
-        // Use provided position or current position (always virtual time)
-        let virtualPos = position !== null ? position : song.transport.position;
+        // Guard against concurrent play calls
+        if (this.isPlayInProgress) return;
+        this.isPlayInProgress = true;
         
-        // Phase 3: Check if starting in a disabled arrangement section
-        // If so, skip to the next enabled section
-        if (State.hasDisabledArrangementSections()) {
-            const currentSection = State.getArrangementSectionAtTime(virtualPos);
-            if (currentSection && !currentSection.enabled) {
-                // Find next enabled section
-                const nextEnabled = State.getNextEnabledArrangementSection(virtualPos);
-                if (nextEnabled) {
-                    virtualPos = nextEnabled.start;
-                    console.log(`Skipping disabled section, starting at ${virtualPos.toFixed(3)}s`);
-                } else {
-                    // No more enabled sections - can't play
-                    console.log('No enabled sections to play');
-                    this.setMasterMuted(false, 0);
-                    return;
+        try {
+            const song = State.getActiveSong();
+            if (!song || song.tracks.length === 0) return;
+
+            this.resume();
+
+            // Mute master output to prevent stale SoundTouch buffer audio from playing
+            this.setMasterMuted(true, 0);
+
+            // Reset pitch shifter to clear any stale audio in SoundTouch buffers
+            // This prevents audio from old position playing when speed != 1.0
+            await this.resetPitchShifter();
+
+            // Use provided position or current position (always virtual time)
+            let virtualPos = position !== null ? position : song.transport.position;
+            
+            // Phase 3: Check if starting in a disabled arrangement section
+            // If so, skip to the next enabled section
+            if (State.hasDisabledArrangementSections()) {
+                const currentSection = State.getArrangementSectionAtTime(virtualPos);
+                if (currentSection && !currentSection.enabled) {
+                    // Find next enabled section
+                    const nextEnabled = State.getNextEnabledArrangementSection(virtualPos);
+                    if (nextEnabled) {
+                        virtualPos = nextEnabled.start;
+                        console.log(`Skipping disabled section, starting at ${virtualPos.toFixed(3)}s`);
+                    } else {
+                        // No more enabled sections - can't play
+                        console.log('No enabled sections to play');
+                        this.setMasterMuted(false, 0);
+                        return;
+                    }
                 }
             }
+            
+            // Store last play position for Stop
+            State.updateTransport({ lastPlayPosition: virtualPos });
+
+            // Position is now directly the source position (no virtual timeline)
+            const sourcePos = virtualPos;
+
+            this.isPlaying = true;
+            this.startTime = this.audioContext.currentTime;
+            this.startPosition = sourcePos;
+            this.sourceStartPosition = sourcePos;
+            this.isInCrossfade = false;
+
+            // Start all tracks at source position
+            song.tracks.forEach(track => {
+                this.startTrack(track.id, sourcePos);
+            });
+
+            State.setPlaybackState('playing');
+            this.startPositionUpdate();
+            
+            // Schedule next section skip and/or loop for background tab support
+            this.scheduleNextEvents();
+
+            // Unmute after short delay to let SoundTouch pipeline flush stale data
+            setTimeout(() => {
+                if (this.isPlaying) {
+                    this.setMasterMuted(false, 0.01); // Small fade to avoid clicks
+                }
+            }, 50);
+        } finally {
+            this.isPlayInProgress = false;
         }
-        
-        // Store last play position for Stop
-        State.updateTransport({ lastPlayPosition: virtualPos });
-
-        // Position is now directly the source position (no virtual timeline)
-        const sourcePos = virtualPos;
-
-        this.isPlaying = true;
-        this.startTime = this.audioContext.currentTime;
-        this.startPosition = sourcePos;
-        this.sourceStartPosition = sourcePos;
-        this.isInCrossfade = false;
-
-        // Start all tracks at source position
-        song.tracks.forEach(track => {
-            this.startTrack(track.id, sourcePos);
-        });
-
-        State.setPlaybackState('playing');
-        this.startPositionUpdate();
-
-        // Unmute after short delay to let SoundTouch pipeline flush stale data
-        setTimeout(() => {
-            if (this.isPlaying) {
-                this.setMasterMuted(false, 0.01); // Small fade to avoid clicks
-            }
-        }, 50);
     }
 
     /**
@@ -492,6 +748,9 @@ class AudioEngine {
         const song = State.getActiveSong();
         if (!song) return;
 
+        // Cancel any scheduled skip/loop events
+        this.cancelScheduledEvents();
+
         // Mute master output to ensure clean stop
         this.setMasterMuted(true, 0);
 
@@ -522,6 +781,9 @@ class AudioEngine {
      */
     pause() {
         if (!this.isPlaying) return;
+
+        // Cancel any scheduled skip/loop events
+        this.cancelScheduledEvents();
 
         // Mute master output to ensure clean pause
         this.setMasterMuted(true, 0);
@@ -682,6 +944,8 @@ class AudioEngine {
             // Restart the position update loop (it was stopped when we called skipToPosition)
             if (this.isPlaying) {
                 this.startPositionUpdate();
+                // Schedule next events after skip completes
+                this.scheduleNextEvents();
             }
         }, fadeDuration * 1000);
     }
@@ -1020,6 +1284,11 @@ class AudioEngine {
         if (this.bypassPitchShifter) {
             this.bypassPitchShifter.tempo = speed;
         }
+        
+        // Reschedule skip/loop events with new timing
+        if (this.isPlaying) {
+            this.scheduleNextEvents();
+        }
     }
 
     /**
@@ -1159,6 +1428,20 @@ State.subscribe(State.Events.MUTE_SECTIONS_CHANGED, ({ trackId }) => {
             // Multiple tracks changed - update all
             audioEngineInstance.updateAllTracksAudibility();
         }
+    }
+});
+
+// Re-schedule skip/loop events when arrangement sections change
+State.subscribe(State.Events.ARRANGEMENT_SECTIONS_CHANGED, () => {
+    if (audioEngineInstance && audioEngineInstance.isPlaying) {
+        audioEngineInstance.scheduleNextEvents();
+    }
+});
+
+// Re-schedule skip/loop events when loop settings change
+State.subscribe(State.Events.LOOP_UPDATED, () => {
+    if (audioEngineInstance && audioEngineInstance.isPlaying) {
+        audioEngineInstance.scheduleNextEvents();
     }
 });
 
