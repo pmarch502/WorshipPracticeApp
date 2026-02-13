@@ -3,6 +3,8 @@
  * Handles confirmation dialogs and other modal interactions
  */
 
+import { loadPreferences, setPreference } from '../storage.js';
+
 class ModalManager {
     constructor() {
         this.overlay = document.getElementById('modal-overlay');
@@ -322,6 +324,46 @@ class ModalManager {
         }).finally(() => {
             this.cancelBtn.style.display = '';
             this.dialog.classList.remove('modal-help');
+        });
+    }
+
+    /**
+     * Show the preferences dialog
+     */
+    showPreferences() {
+        return new Promise((resolve) => {
+            const prefs = loadPreferences();
+            
+            this.titleEl.textContent = 'Preferences';
+            this.contentEl.innerHTML = `
+                <div class="preferences-content">
+                    <div class="preference-item">
+                        <div class="preference-label">
+                            <span class="title">Pause playback when tab loses focus</span>
+                            <span class="description">Automatically pause when you switch to another tab or window</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="pref-pause-on-blur" ${prefs.pauseOnBlur ? 'checked' : ''}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            `;
+            
+            // Handle toggle changes immediately
+            const pauseToggle = document.getElementById('pref-pause-on-blur');
+            pauseToggle.addEventListener('change', (e) => {
+                setPreference('pauseOnBlur', e.target.checked);
+            });
+            
+            this.confirmBtn.textContent = 'Close';
+            this.confirmBtn.className = 'btn btn-primary';
+            this.cancelBtn.style.display = 'none';
+            
+            this.currentResolve = resolve;
+            this.show();
+        }).finally(() => {
+            this.cancelBtn.style.display = '';
         });
     }
 

@@ -5,6 +5,14 @@
  */
 
 const STATE_KEY = 'worshipPracticeApp_state';
+const PREFS_KEY = 'worshipPracticeApp_prefs';
+
+/**
+ * Default preferences
+ */
+const DEFAULT_PREFS = {
+    pauseOnBlur: true  // Pause playback when tab loses focus
+};
 
 /**
  * Initialize storage (no-op, kept for compatibility)
@@ -123,4 +131,55 @@ export function debouncedSaveState(state, delay = 1000) {
         saveState(state);
         saveTimeout = null;
     }, delay);
+}
+
+/**
+ * Load application preferences from LocalStorage
+ * @returns {Object} Preferences object with defaults applied
+ */
+export function loadPreferences() {
+    try {
+        const prefsJson = localStorage.getItem(PREFS_KEY);
+        if (prefsJson) {
+            const saved = JSON.parse(prefsJson);
+            // Merge with defaults to handle new preferences added in future versions
+            return { ...DEFAULT_PREFS, ...saved };
+        }
+    } catch (error) {
+        console.error('Failed to load preferences:', error);
+    }
+    return { ...DEFAULT_PREFS };
+}
+
+/**
+ * Save application preferences to LocalStorage
+ * @param {Object} prefs - Preferences object to save
+ */
+export function savePreferences(prefs) {
+    try {
+        localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    } catch (error) {
+        console.error('Failed to save preferences:', error);
+    }
+}
+
+/**
+ * Get a single preference value
+ * @param {string} key - Preference key
+ * @returns {*} Preference value or default
+ */
+export function getPreference(key) {
+    const prefs = loadPreferences();
+    return prefs[key];
+}
+
+/**
+ * Set a single preference value
+ * @param {string} key - Preference key
+ * @param {*} value - Preference value
+ */
+export function setPreference(key, value) {
+    const prefs = loadPreferences();
+    prefs[key] = value;
+    savePreferences(prefs);
 }

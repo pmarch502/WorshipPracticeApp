@@ -95,14 +95,70 @@ class App {
         getModal();
         getSongLoader();
         
-        // Help button
+        // Help menu dropdown
+        this.initHelpMenu();
+    }
+    
+    /**
+     * Initialize the help menu dropdown
+     */
+    initHelpMenu() {
         const helpBtn = document.getElementById('help-btn');
-        if (helpBtn) {
-            helpBtn.addEventListener('click', () => {
-                const modal = getModal();
+        const helpDropdown = document.getElementById('help-dropdown-menu');
+        
+        if (!helpBtn || !helpDropdown) return;
+        
+        let isOpen = false;
+        
+        const openDropdown = () => {
+            helpDropdown.classList.remove('hidden');
+            isOpen = true;
+        };
+        
+        const closeDropdown = () => {
+            helpDropdown.classList.add('hidden');
+            isOpen = false;
+        };
+        
+        // Toggle dropdown on button click
+        helpBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isOpen) {
+                closeDropdown();
+            } else {
+                openDropdown();
+            }
+        });
+        
+        // Handle dropdown item clicks
+        helpDropdown.addEventListener('click', (e) => {
+            const item = e.target.closest('.dropdown-item');
+            if (!item) return;
+            
+            const action = item.dataset.action;
+            closeDropdown();
+            
+            const modal = getModal();
+            if (action === 'preferences') {
+                modal.showPreferences();
+            } else if (action === 'user-guide') {
                 modal.showHelp();
-            });
-        }
+            }
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (isOpen && !helpDropdown.contains(e.target) && !helpBtn.contains(e.target)) {
+                closeDropdown();
+            }
+        });
+        
+        // Close dropdown on Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isOpen) {
+                closeDropdown();
+            }
+        });
     }
 
     async loadSavedState() {

@@ -11,6 +11,7 @@
 import * as State from './state.js';
 import { BASE_PIXELS_PER_SECOND } from './ui/waveformPanel.js';
 import { getWaveformPanel } from './ui/waveformPanel.js';
+import { getPreference } from './storage.js';
 
 // Crossfade duration for section skipping (Phase 3)
 const SECTION_SKIP_CROSSFADE_MS = 50;
@@ -93,8 +94,15 @@ class AudioEngine {
      * Pauses playback when tab is hidden to prevent:
      * 1. Custom arrangements playing wrong audio (section transitions rely on requestAnimationFrame)
      * 2. Position drift when returning to tab
+     * 
+     * This behavior can be disabled in Preferences.
      */
     handleVisibilityChange() {
+        // Check if pause-on-blur is enabled in preferences
+        if (!getPreference('pauseOnBlur')) {
+            return;
+        }
+        
         if (document.hidden) {
             // Tab became hidden - auto-pause if playing
             if (this.isPlaying) {
