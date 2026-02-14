@@ -347,6 +347,16 @@ class ModalManager {
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
+                    <div class="preference-item">
+                        <div class="preference-label">
+                            <span class="title">Enhanced waveform visibility</span>
+                            <span class="description">Scale quiet tracks so waveforms are always visible (not amplitude-accurate)</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="pref-enhanced-waveform" ${prefs.enhancedWaveformVisibility ? 'checked' : ''}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
                 </div>
             `;
             
@@ -354,6 +364,15 @@ class ModalManager {
             const pauseToggle = document.getElementById('pref-pause-on-blur');
             pauseToggle.addEventListener('change', (e) => {
                 setPreference('pauseOnBlur', e.target.checked);
+            });
+            
+            const waveformToggle = document.getElementById('pref-enhanced-waveform');
+            waveformToggle.addEventListener('change', (e) => {
+                setPreference('enhancedWaveformVisibility', e.target.checked);
+                // Dispatch event so waveform panel can re-render
+                window.dispatchEvent(new CustomEvent('preferenceChanged', {
+                    detail: { key: 'enhancedWaveformVisibility', value: e.target.checked }
+                }));
             });
             
             this.confirmBtn.textContent = 'Close';

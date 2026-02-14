@@ -95,6 +95,13 @@ class WaveformPanel {
         document.addEventListener('mouseup', (e) => {
             this.handleMuteDividerDragEnd(e);
         });
+        
+        // Listen for preference changes (e.g., enhanced waveform visibility)
+        window.addEventListener('preferenceChanged', (e) => {
+            if (e.detail?.key === 'enhancedWaveformVisibility') {
+                this.redrawAllWaveforms();
+            }
+        });
     }
 
     /**
@@ -398,6 +405,9 @@ class WaveformPanel {
         // Phase 4: Get time-based mute sections for this track
         const muteSections = State.getMuteSectionsForTrack(trackId);
         
+        // Get maxPeak for normalization (enhanced waveform visibility feature)
+        const maxPeak = track.peaks?.maxPeak ?? null;
+        
         // Standard waveform rendering
         Waveform.renderWaveformGradient(canvas, track.peaks, {
             color,
@@ -406,7 +416,8 @@ class WaveformPanel {
             duration: track.duration,
             pixelsPerSecond: BASE_PIXELS_PER_SECOND,
             offset,
-            muteSections  // Phase 4 time-based mutes
+            muteSections,  // Phase 4 time-based mutes
+            maxPeak        // For enhanced waveform visibility
         });
         
         // Render marker lines as visual guides (from metadata)

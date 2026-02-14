@@ -7,6 +7,8 @@
  * custom arrangements (Phase 3) define splits.
  */
 
+import { getPreference } from './storage.js';
+
 const ACTIVE_COLOR = '#00a8cc';
 const INACTIVE_COLOR = '#4a4a4a';
 const BACKGROUND_COLOR = '#1a1a1a';
@@ -88,8 +90,18 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
         duration = 0,
         pixelsPerSecond = 100,
         offset = 0,  // Timeline offset for beat alignment
-        muteSections = null  // Phase 4: Array of { start, end, muted } for per-track time-based muting
+        muteSections = null,  // Phase 4: Array of { start, end, muted } for per-track time-based muting
+        maxPeak = null  // Maximum peak value for normalization (from peaks data)
     } = options;
+    
+    // Check if enhanced waveform visibility is enabled
+    const enhancedVisibility = getPreference('enhancedWaveformVisibility');
+    
+    // Calculate normalization factor: if maxPeak is low, scale up to fill display
+    // Only apply when enhanced visibility is enabled and maxPeak is valid
+    const normalizationFactor = (enhancedVisibility && maxPeak && maxPeak > 0 && maxPeak < 0.95)
+        ? (1 / maxPeak)
+        : 1;
 
     const ctx = canvas.getContext('2d');
     const { width: canvasWidth, height } = canvas;
@@ -187,12 +199,15 @@ export function renderWaveformGradient(canvas, peaks, options = {}) {
             const range = peakRanges[pixelX];
             if (!range) return 0;
             
-            let maxPeak = 0;
+            let peakMax = 0;
             for (let i = range.start; i < range.end && i < peaksArray.length; i++) {
                 const p = peaksArray[i] || 0;
-                if (p > maxPeak) maxPeak = p;
+                if (p > peakMax) peakMax = p;
             }
-            return maxPeak;
+            
+            // Apply normalization factor for enhanced visibility
+            // Clamp to 1.0 to prevent overflow
+            return Math.min(peakMax * normalizationFactor, 1.0);
         };
     };
     

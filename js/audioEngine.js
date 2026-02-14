@@ -1310,7 +1310,7 @@ class AudioEngine {
      * Extract waveform peaks from an audio buffer
      * @param {AudioBuffer} audioBuffer
      * @param {number} samplesPerSecond - Number of peak samples per second of audio
-     * @returns {{left: Float32Array, right: Float32Array|null, isStereo: boolean}} - Peak values normalized to 0-1 for each channel
+     * @returns {{left: Float32Array, right: Float32Array|null, isStereo: boolean, maxPeak: number}} - Peak values normalized to 0-1 for each channel, plus maximum peak value across all channels
      */
     extractPeaks(audioBuffer, samplesPerSecond = 400) {
         const numChannels = audioBuffer.numberOfChannels;
@@ -1330,10 +1330,11 @@ class AudioEngine {
         /**
          * Extract peaks from a single channel
          * @param {Float32Array} channelData
-         * @returns {Float32Array}
+         * @returns {{peaks: Float32Array, maxPeak: number}}
          */
         const extractChannelPeaks = (channelData) => {
             const peaks = new Float32Array(peakCount);
+            let channelMaxPeak = 0;
             
             for (let i = 0; i < peakCount; i++) {
                 // Use proportional indexing to ensure peaks exactly span the full duration
@@ -1353,19 +1354,31 @@ class AudioEngine {
                 }
                 
                 // Use the larger absolute value for more accurate peaks
-                peaks[i] = Math.max(Math.abs(max), Math.abs(min));
+                const peakValue = Math.max(Math.abs(max), Math.abs(min));
+                peaks[i] = peakValue;
+                
+                // Track maximum peak for normalization
+                if (peakValue > channelMaxPeak) {
+                    channelMaxPeak = peakValue;
+                }
             }
             
-            return peaks;
+            return { peaks, maxPeak: channelMaxPeak };
         };
         
-        const leftPeaks = extractChannelPeaks(leftChannelData);
-        const rightPeaks = rightChannelData ? extractChannelPeaks(rightChannelData) : null;
+        const leftResult = extractChannelPeaks(leftChannelData);
+        const rightResult = rightChannelData ? extractChannelPeaks(rightChannelData) : null;
+        
+        // Maximum peak across all channels (for normalization)
+        const maxPeak = rightResult 
+            ? Math.max(leftResult.maxPeak, rightResult.maxPeak)
+            : leftResult.maxPeak;
         
         return {
-            left: leftPeaks,
-            right: rightPeaks,
-            isStereo: rightPeaks !== null
+            left: leftResult.peaks,
+            right: rightResult ? rightResult.peaks : null,
+            isStereo: rightResult !== null,
+            maxPeak: maxPeak
         };
     }
 

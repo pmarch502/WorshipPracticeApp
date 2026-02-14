@@ -62,7 +62,7 @@ export async function init() {
 /**
  * Store peaks data for a track
  * @param {string} trackId - Unique track identifier
- * @param {{left: Float32Array, right: Float32Array|null, isStereo: boolean}} peaks - Stereo peaks data
+ * @param {{left: Float32Array, right: Float32Array|null, isStereo: boolean, maxPeak?: number}} peaks - Stereo peaks data
  * @returns {Promise<boolean>} True if stored successfully
  */
 export async function store(trackId, peaks) {
@@ -78,7 +78,8 @@ export async function store(trackId, peaks) {
         const peaksData = {
             left: peaks.left instanceof Float32Array ? Array.from(peaks.left) : peaks.left,
             right: peaks.right ? (peaks.right instanceof Float32Array ? Array.from(peaks.right) : peaks.right) : null,
-            isStereo: peaks.isStereo
+            isStereo: peaks.isStereo,
+            maxPeak: peaks.maxPeak !== undefined ? peaks.maxPeak : null
         };
         
         const request = store.put({
@@ -88,7 +89,7 @@ export async function store(trackId, peaks) {
         });
         
         request.onsuccess = () => {
-            console.log(`Cached peaks for track: ${trackId} (${peaksData.left.length} samples, stereo: ${peaksData.isStereo})`);
+            console.log(`Cached peaks for track: ${trackId} (${peaksData.left.length} samples, stereo: ${peaksData.isStereo}, maxPeak: ${peaksData.maxPeak})`);
             resolve(true);
         };
         
@@ -100,9 +101,28 @@ export async function store(trackId, peaks) {
 }
 
 /**
+ * Calculate maxPeak from peaks arrays (for legacy cached data without maxPeak)
+ * @param {Float32Array} leftPeaks
+ * @param {Float32Array|null} rightPeaks
+ * @returns {number}
+ */
+function calculateMaxPeak(leftPeaks, rightPeaks) {
+    let maxPeak = 0;
+    for (let i = 0; i < leftPeaks.length; i++) {
+        if (leftPeaks[i] > maxPeak) maxPeak = leftPeaks[i];
+    }
+    if (rightPeaks) {
+        for (let i = 0; i < rightPeaks.length; i++) {
+            if (rightPeaks[i] > maxPeak) maxPeak = rightPeaks[i];
+        }
+    }
+    return maxPeak;
+}
+
+/**
  * Retrieve peaks data for a track
  * @param {string} trackId - Unique track identifier
- * @returns {Promise<{left: Float32Array, right: Float32Array|null, isStereo: boolean}|null>} Peaks data or null if not found
+ * @returns {Promise<{left: Float32Array, right: Float32Array|null, isStereo: boolean, maxPeak: number}|null>} Peaks data or null if not found
  */
 export async function retrieve(trackId) {
     if (!initialized || !db) {
@@ -122,17 +142,29 @@ export async function retrieve(trackId) {
                 const peaks = result.peaks;
                 if (peaks.left !== undefined) {
                     // New stereo format
+                    const leftPeaks = new Float32Array(peaks.left);
+                    const rightPeaks = peaks.right ? new Float32Array(peaks.right) : null;
+                    
+                    // Use stored maxPeak or calculate from peaks (for legacy cached data)
+                    const maxPeak = peaks.maxPeak !== undefined && peaks.maxPeak !== null
+                        ? peaks.maxPeak
+                        : calculateMaxPeak(leftPeaks, rightPeaks);
+                    
                     resolve({
-                        left: new Float32Array(peaks.left),
-                        right: peaks.right ? new Float32Array(peaks.right) : null,
-                        isStereo: peaks.isStereo
+                        left: leftPeaks,
+                        right: rightPeaks,
+                        isStereo: peaks.isStereo,
+                        maxPeak: maxPeak
                     });
                 } else {
                     // Legacy mono format - convert to new format
+                    const leftPeaks = new Float32Array(peaks);
+                    const maxPeak = calculateMaxPeak(leftPeaks, null);
                     resolve({
-                        left: new Float32Array(peaks),
+                        left: leftPeaks,
                         right: null,
-                        isStereo: false
+                        isStereo: false,
+                        maxPeak: maxPeak
                     });
                 }
             } else {

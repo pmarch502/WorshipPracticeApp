@@ -11,7 +11,8 @@ const PREFS_KEY = 'worshipPracticeApp_prefs';
  * Default preferences
  */
 const DEFAULT_PREFS = {
-    pauseOnBlur: false  // Pause playback when tab loses focus
+    pauseOnBlur: false,  // Pause playback when tab loses focus
+    enhancedWaveformVisibility: true  // Scale quiet tracks so waveforms are always visible
 };
 
 /**
