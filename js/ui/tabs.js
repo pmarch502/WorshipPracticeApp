@@ -215,18 +215,16 @@ class TabsUI {
         // Load manifest if not already loaded
         await Manifest.loadManifest();
         
-        // Get available songs (not already open)
-        const openSongNames = State.state.songs.map(s => s.songName);
+        // Get all available songs (duplicates allowed - same song can be opened multiple times)
         const allSongs = Manifest.getSongs();
-        const availableSongs = allSongs.filter(s => !openSongNames.includes(s.name));
         
         // Populate picker list
         this.songPickerList.innerHTML = '';
         
-        if (availableSongs.length === 0) {
-            this.songPickerList.innerHTML = '<div class="picker-empty">All songs are already open</div>';
+        if (allSongs.length === 0) {
+            this.songPickerList.innerHTML = '<div class="picker-empty">No songs available</div>';
         } else {
-            for (const song of availableSongs) {
+            for (const song of allSongs) {
                 const item = document.createElement('div');
                 item.className = 'picker-item';
                 item.textContent = song.name;

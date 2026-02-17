@@ -236,7 +236,7 @@ body {
     position: relative;
 }
 
-/* Arrangement/Mute Selector Dropdowns in Menu Bar */
+/* Set List/Arrangement/Mute Selector Dropdowns in Menu Bar */
 .menu-dropdown {
     flex-shrink: 0;
     position: relative;

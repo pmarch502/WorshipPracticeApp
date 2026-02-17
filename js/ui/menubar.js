@@ -1,12 +1,14 @@
 /**
  * MenuBar UI
- * Separate Arrangement and Mute Set dropdown menus in the menu bar.
+ * Set List, Arrangement, and Mute Set dropdown menus in the menu bar.
  * Each dropdown opens directly to its content (no nested submenu layer).
  * Delete actions use a nested submenu within each dropdown.
  */
 
 import * as State from '../state.js';
 import { getModal } from './modal.js';
+import * as SongManager from '../songManager.js';
+import { getTransport } from '../transport.js';
 import { 
     listArrangements, 
     getArrangement, 
@@ -16,6 +18,10 @@ import {
     getMuteSet,
     saveMuteSet,
     deleteMuteSet,
+    listSetLists,
+    getSetList,
+    saveSetList,
+    deleteSetList,
     validateName
 } from '../api.js';
 
@@ -33,14 +39,22 @@ class MenuBarUI {
         this.muteBtnText = this.muteBtn?.querySelector('.dropdown-btn-text');
         this.muteMenu = document.getElementById('mute-dropdown-menu');
         
+        // Set List dropdown elements
+        this.setlistSelector = document.getElementById('setlist-selector');
+        this.setlistBtn = document.getElementById('setlist-dropdown-btn');
+        this.setlistBtnText = this.setlistBtn?.querySelector('.dropdown-btn-text');
+        this.setlistMenu = document.getElementById('setlist-dropdown-menu');
+        
         // Dropdown state
         this.isArrangementOpen = false;
         this.isMuteOpen = false;
+        this.isSetListOpen = false;
         this._isRefreshing = false;
         
         // Cache for API data
         this.arrangementCache = new Map(); // songName -> { data: string[], timestamp: number }
         this.muteSetCache = new Map(); // songName -> { data: string[], timestamp: number }
+        this.setlistCache = null; // { data: string[], timestamp: number } (global, not per-song)
         this.CACHE_TTL = 60000; // 1 minute cache
         
         // Active submenu tracking (for Delete nested submenus)
@@ -64,6 +78,11 @@ class MenuBarUI {
                 !this.muteBtn?.contains(e.target)) {
                 this.closeMuteDropdown();
             }
+            if (this.isSetListOpen && 
+                !this.setlistMenu?.contains(e.target) && 
+                !this.setlistBtn?.contains(e.target)) {
+                this.closeSetListDropdown();
+            }
         });
 
         // Close dropdowns on Escape
@@ -71,6 +90,7 @@ class MenuBarUI {
             if (e.key === 'Escape') {
                 if (this.isArrangementOpen) this.closeArrangementDropdown();
                 if (this.isMuteOpen) this.closeMuteDropdown();
+                if (this.isSetListOpen) this.closeSetListDropdown();
             }
         });
         
@@ -87,6 +107,14 @@ class MenuBarUI {
             this.muteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.toggleMuteDropdown();
+            });
+        }
+        
+        // Set List dropdown button click
+        if (this.setlistBtn) {
+            this.setlistBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleSetListDropdown();
             });
         }
     }
@@ -125,6 +153,11 @@ class MenuBarUI {
                 this.updateMuteButtonText(song);
             }
         });
+        
+        // Update set list button when set list changes
+        State.subscribe(State.Events.SET_LIST_CHANGED, () => {
+            this.updateSetListButtonText();
+        });
     }
 
     // ========================================
@@ -156,8 +189,9 @@ class MenuBarUI {
         const song = State.getActiveSong();
         if (!song || !this.arrangementMenu) return;
         
-        // Close mute dropdown if open
+        // Close other dropdowns if open
         if (this.isMuteOpen) this.closeMuteDropdown();
+        if (this.isSetListOpen) this.closeSetListDropdown();
         
         this.isArrangementOpen = true;
         this.arrangementBtn?.classList.add('open');
@@ -189,8 +223,9 @@ class MenuBarUI {
         const song = State.getActiveSong();
         if (!song || !this.muteMenu) return;
         
-        // Close arrangement dropdown if open
+        // Close other dropdowns if open
         if (this.isArrangementOpen) this.closeArrangementDropdown();
+        if (this.isSetListOpen) this.closeSetListDropdown();
         
         this.isMuteOpen = true;
         this.muteBtn?.classList.add('open');
@@ -213,6 +248,7 @@ class MenuBarUI {
     closeAllDropdowns() {
         if (this.isArrangementOpen) this.closeArrangementDropdown();
         if (this.isMuteOpen) this.closeMuteDropdown();
+        if (this.isSetListOpen) this.closeSetListDropdown();
     }
 
     // ========================================
@@ -233,6 +269,8 @@ class MenuBarUI {
             this.arrangementSelector?.classList.add('hidden');
             this.muteSelector?.classList.add('hidden');
         }
+        // Set list selector is always visible - just update text
+        this.updateSetListButtonText();
     }
     
     /**
@@ -271,6 +309,14 @@ class MenuBarUI {
     updateDropdownButtonText(song) {
         this.updateArrangementButtonText(song);
         this.updateMuteButtonText(song);
+    }
+    
+    /**
+     * Update the set list dropdown button text
+     */
+    updateSetListButtonText() {
+        if (!this.setlistBtnText) return;
+        this.setlistBtnText.textContent = State.getCurrentSetListDisplayName();
     }
 
     // ========================================
@@ -1214,6 +1260,539 @@ class MenuBarUI {
      */
     invalidateMuteSetCache(songName) {
         this.muteSetCache.delete(songName);
+    }
+    
+    // ========================================
+    // Set List Dropdown
+    // ========================================
+    
+    toggleSetListDropdown() {
+        if (this.isSetListOpen) {
+            this.closeSetListDropdown();
+        } else {
+            this.openSetListDropdown();
+        }
+    }
+    
+    openSetListDropdown() {
+        if (!this.setlistMenu) return;
+        
+        // Close other dropdowns if open
+        if (this.isArrangementOpen) this.closeArrangementDropdown();
+        if (this.isMuteOpen) this.closeMuteDropdown();
+        
+        this.isSetListOpen = true;
+        this.setlistBtn?.classList.add('open');
+        this.setlistMenu.classList.remove('hidden');
+        
+        this.renderSetListMenu();
+    }
+    
+    closeSetListDropdown() {
+        this.isSetListOpen = false;
+        this.setlistBtn?.classList.remove('open');
+        this.setlistMenu?.classList.add('hidden');
+        this.closeAllSubmenus(this.setlistMenu);
+    }
+
+    // ========================================
+    // Set List Menu Rendering
+    // ========================================
+    
+    /**
+     * Render the set list dropdown menu content
+     */
+    async renderSetListMenu() {
+        if (!this.setlistMenu) return;
+        
+        this.setlistMenu.innerHTML = '';
+        
+        // Refresh option
+        const refreshItem = this.createMenuItem('Refresh', () => this.handleSetListRefresh(), false);
+        refreshItem.id = 'setlist-refresh-item';
+        this.setlistMenu.appendChild(refreshItem);
+        
+        this.setlistMenu.appendChild(this.createDivider());
+        
+        // Show loading indicator for the list
+        const loadingEl = this.createLoadingIndicator();
+        this.setlistMenu.appendChild(loadingEl);
+        
+        try {
+            const setLists = await this.fetchSetLists();
+            
+            // Remove loading indicator
+            loadingEl.remove();
+            
+            const currentSetListName = State.getCurrentSetListDisplayName();
+            
+            // "None" option -- just clears the active set list without closing songs
+            const noneItem = this.createMenuItem('None', () => this.selectNoneSetList());
+            if (!currentSetListName || currentSetListName === 'None') {
+                noneItem.classList.add('active');
+                const checkmark = noneItem.querySelector('.checkmark');
+                if (checkmark) checkmark.classList.remove('hidden');
+            }
+            this.setlistMenu.appendChild(noneItem);
+            
+            // List of saved set lists
+            if (setLists.length > 0) {
+                this.setlistMenu.appendChild(this.createDivider());
+                
+                setLists.forEach(name => {
+                    const item = this.createMenuItem(name, () => this.selectSetList(name));
+                    if (currentSetListName === name) {
+                        item.classList.add('active');
+                        const checkmark = item.querySelector('.checkmark');
+                        if (checkmark) checkmark.classList.remove('hidden');
+                    }
+                    this.setlistMenu.appendChild(item);
+                });
+            } else {
+                this.setlistMenu.appendChild(this.createDivider());
+                this.setlistMenu.appendChild(this.createEmptyState('No saved set lists'));
+            }
+            
+            // Divider and actions
+            this.setlistMenu.appendChild(this.createDivider());
+            
+            // Save Current As option (only if songs are open)
+            const hasSongs = State.state.songs.length > 0;
+            const saveAsItem = this.createMenuItem('Save Current As...', () => this.saveSetListAs(), false);
+            if (!hasSongs) {
+                saveAsItem.classList.add('disabled');
+            }
+            this.setlistMenu.appendChild(saveAsItem);
+            
+            // Only show Delete if there are set lists
+            if (setLists.length > 0) {
+                this.setlistMenu.appendChild(this.createDivider());
+                
+                const deleteItem = this.createNestedSubmenuItem('Delete', 'setlist-delete-submenu', async (nestedSubmenu) => {
+                    await this.populateDeleteSetListsSubmenu(nestedSubmenu, setLists);
+                });
+                this.setlistMenu.appendChild(deleteItem);
+            }
+            
+        } catch (error) {
+            console.error('Failed to load set lists:', error);
+            loadingEl.remove();
+            this.setlistMenu.appendChild(this.createEmptyState('Failed to load'));
+        }
+    }
+
+    // ========================================
+    // Set Lists: Selection, Save, Delete
+    // ========================================
+    
+    /**
+     * Populate delete set lists submenu
+     */
+    async populateDeleteSetListsSubmenu(submenu, setLists) {
+        submenu.innerHTML = '';
+        
+        setLists.forEach(name => {
+            const item = this.createMenuItem(name, () => this.deleteSetListWithConfirm(name), false);
+            submenu.appendChild(item);
+        });
+    }
+    
+    /**
+     * Fetch set lists with caching
+     * @param {boolean} forceRefresh - Force refresh from server
+     * @returns {Promise<string[]>}
+     */
+    async fetchSetLists(forceRefresh = false) {
+        const now = Date.now();
+        
+        if (!forceRefresh && this.setlistCache && (now - this.setlistCache.timestamp) < this.CACHE_TTL) {
+            return this.setlistCache.data;
+        }
+        
+        const data = await listSetLists();
+        this.setlistCache = { data, timestamp: now };
+        return data;
+    }
+    
+    /**
+     * Select "None" -- just clear the active set list without closing any songs
+     */
+    selectNoneSetList() {
+        State.clearCurrentSetList();
+        this.updateSetListButtonText();
+    }
+    
+    /**
+     * Select a saved set list -- close all songs and load the set list
+     */
+    async selectSetList(name) {
+        // Check for unsaved changes in any open song
+        if (State.hasAnyUnsavedChanges()) {
+            const modal = getModal();
+            let itemType, itemName;
+            if (State.hasUnsavedArrangementChanges()) {
+                itemType = 'arrangement';
+                itemName = State.getCurrentArrangementDisplayName() || 'Original';
+            } else {
+                itemType = 'mute set';
+                itemName = State.getCurrentMuteSetDisplayName() || 'None';
+            }
+            
+            const result = await modal.unsavedChangesWarning(itemType, itemName);
+            if (result === 'cancel') return;
+            if (result === 'save') {
+                const song = State.getActiveSong();
+                if (song) {
+                    if (State.hasUnsavedArrangementChanges()) {
+                        await this.saveCurrentArrangement(song);
+                    }
+                    if (State.hasUnsavedMuteChanges()) {
+                        await this.saveCurrentMuteSet(song);
+                    }
+                }
+            }
+        }
+        
+        const modal = getModal();
+        
+        try {
+            State.setLoading(true, `Loading set list "${name}"...`);
+            
+            // Fetch the set list
+            const setList = await getSetList(name);
+            
+            if (!setList.songs || setList.songs.length === 0) {
+                State.setLoading(false);
+                await modal.alert({
+                    title: 'Empty Set List',
+                    message: 'This set list contains no songs.'
+                });
+                return;
+            }
+            
+            // Close all currently open songs
+            await SongManager.closeAllSongs();
+            
+            // Open each song in the set list
+            const warnings = [];
+            let firstSongId = null;
+            
+            for (let i = 0; i < setList.songs.length; i++) {
+                const entry = setList.songs[i];
+                State.setLoading(true, `Loading "${entry.songName}" (${i + 1}/${setList.songs.length})...`);
+                
+                try {
+                    // Open the song with auto-loaded click/reference tracks
+                    const song = await SongManager.openSongWithAutoTracks(entry.songName);
+                    
+                    if (i === 0) {
+                        firstSongId = song.id;
+                    }
+                    
+                    // Wait for metadata to load (needed for arrangement initialization)
+                    await SongManager.waitForMetadata(song.id, 5000);
+                    
+                    // Apply pitch
+                    if (entry.pitch && entry.pitch !== 0) {
+                        song.transport.pitch = entry.pitch;
+                    }
+                    
+                    // Apply arrangement if specified
+                    if (entry.arrangementName) {
+                        try {
+                            const arrangement = await getArrangement(entry.songName, entry.arrangementName);
+                            State.setArrangementSections(arrangement.sections, false);
+                            State.setArrangementModified(false);
+                            song.currentArrangementId = entry.arrangementName;
+                            song.currentArrangementName = entry.arrangementName;
+                            song.currentArrangementProtected = arrangement.protected || false;
+                        } catch (arrError) {
+                            console.warn(`Arrangement "${entry.arrangementName}" not found for "${entry.songName}", using Original`);
+                            warnings.push(`"${entry.songName}": arrangement "${entry.arrangementName}" not found, using Original`);
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.warn(`Failed to open song "${entry.songName}":`, error);
+                    warnings.push(`"${entry.songName}": ${error.message}`);
+                }
+            }
+            
+            // Switch to the first song
+            if (firstSongId && State.state.activeSongId !== firstSongId) {
+                await SongManager.switchSong(firstSongId);
+            }
+            
+            // Apply pitch for the active song's transport
+            const activeSong = State.getActiveSong();
+            if (activeSong) {
+                const transport = getTransport();
+                transport.setPitch(activeSong.transport.pitch);
+                transport.setSpeed(activeSong.transport.speed);
+            }
+            
+            // Update set list state
+            State.setCurrentSetList(name);
+            this.updateSetListButtonText();
+            
+            State.setLoading(false);
+            
+            // Show warnings if any songs or arrangements couldn't be loaded
+            if (warnings.length > 0) {
+                await modal.alert({
+                    title: 'Set List Loaded with Warnings',
+                    message: `<p>Some items could not be loaded:</p><ul>${warnings.map(w => `<li>${this.escapeHtml(w)}</li>`).join('')}</ul>`
+                });
+            }
+            
+        } catch (error) {
+            State.setLoading(false);
+            console.error('Failed to load set list:', error);
+            await modal.alert({
+                title: 'Error',
+                message: `Failed to load set list: ${error.message}`
+            });
+        }
+    }
+    
+    /**
+     * Save current open songs as a new set list
+     */
+    async saveSetListAs() {
+        this.closeSetListDropdown();
+        
+        if (State.state.songs.length === 0) return;
+        
+        const result = await this.showSetListSaveDialog();
+        if (!result) return;
+        
+        const { name, isProtected, secret } = result;
+        const songs = this.buildSetListData();
+        
+        try {
+            const data = { songs, protected: isProtected };
+            if (secret) data.secret = secret;
+            
+            await saveSetList(name, data);
+            
+            State.setCurrentSetList(name);
+            this.invalidateSetListCache();
+            this.updateSetListButtonText();
+        } catch (error) {
+            console.error('Failed to save set list:', error);
+            const modal = getModal();
+            const errorMessage = error.status === 403 
+                ? 'Invalid admin secret. The set list is protected and cannot be overwritten without the correct secret.'
+                : `Failed to save set list: ${error.message}`;
+            await modal.alert({
+                title: 'Error',
+                message: errorMessage
+            });
+        }
+    }
+    
+    /**
+     * Build set list data from currently open songs
+     * @returns {Array} Array of { songName, arrangementName, pitch } objects
+     */
+    buildSetListData() {
+        return State.state.songs.map(song => ({
+            songName: song.songName,
+            arrangementName: song.currentArrangementName || null,
+            pitch: song.transport.pitch || 0
+        }));
+    }
+    
+    /**
+     * Delete set list with confirmation
+     */
+    async deleteSetListWithConfirm(name) {
+        this.closeSetListDropdown();
+        
+        const modal = getModal();
+        
+        let setListData;
+        try {
+            setListData = await getSetList(name);
+        } catch (error) {
+            await modal.alert({
+                title: 'Error',
+                message: `Failed to load set list: ${error.message}`
+            });
+            return;
+        }
+        
+        let secret = null;
+        if (setListData.protected) {
+            secret = await this.promptForSecret('Delete Protected Set List');
+            if (!secret) return;
+        }
+        
+        const confirmed = await modal.confirm({
+            title: 'Delete Set List',
+            message: `<p>Delete set list "<strong>${this.escapeHtml(name)}</strong>"?</p><p>This cannot be undone.</p>`,
+            confirmText: 'Delete',
+            confirmClass: 'btn-danger'
+        });
+        
+        if (!confirmed) return;
+        
+        try {
+            await deleteSetList(name, secret);
+            this.invalidateSetListCache();
+            
+            // If the deleted set list was the active one, clear it
+            if (State.getCurrentSetListDisplayName() === name) {
+                State.clearCurrentSetList();
+                this.updateSetListButtonText();
+            }
+        } catch (error) {
+            console.error('Failed to delete set list:', error);
+            if (error.status === 403) {
+                await modal.alert({
+                    title: 'Invalid Secret',
+                    message: 'The admin secret is incorrect.'
+                });
+            } else {
+                await modal.alert({
+                    title: 'Error',
+                    message: `Failed to delete set list: ${error.message}`
+                });
+            }
+        }
+    }
+    
+    /**
+     * Invalidate set list cache
+     */
+    invalidateSetListCache() {
+        this.setlistCache = null;
+    }
+    
+    /**
+     * Handle set list refresh
+     */
+    async handleSetListRefresh() {
+        this.invalidateSetListCache();
+        this.closeSetListDropdown();
+        
+        this._isRefreshing = true;
+        this.updateSetListButtonText();
+        
+        setTimeout(() => {
+            this._isRefreshing = false;
+            this.updateSetListButtonText();
+        }, 500);
+    }
+    
+    /**
+     * Show save dialog specifically for set lists
+     * (Set lists are global, not per-song, so the dialog is slightly different)
+     * @returns {Promise<{name: string, isProtected: boolean, secret?: string}|null>}
+     */
+    async showSetListSaveDialog() {
+        const modal = getModal();
+        
+        return new Promise((resolve) => {
+            const content = `
+                <div class="save-dialog">
+                    <div class="save-dialog-field">
+                        <label for="save-name-input">Name</label>
+                        <input type="text" id="save-name-input" placeholder="Enter a name..." maxlength="100">
+                        <div id="save-name-error" class="save-dialog-error hidden"></div>
+                    </div>
+                    <div class="save-dialog-field save-dialog-checkbox">
+                        <label>
+                            <input type="checkbox" id="save-protected-checkbox">
+                            Mark as protected (requires secret to edit/delete)
+                        </label>
+                    </div>
+                </div>
+            `;
+            
+            modal.show({
+                title: 'Save Set List As',
+                content: content,
+                confirmText: 'Save',
+                cancelText: 'Cancel',
+                confirmClass: 'btn-primary',
+                showCancel: true,
+                onShow: () => {
+                    const nameInput = document.getElementById('save-name-input');
+                    
+                    setTimeout(() => nameInput?.focus(), 50);
+                    
+                    nameInput?.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            modal.close(true);
+                        }
+                    });
+                },
+                onConfirm: async () => {
+                    const nameInput = document.getElementById('save-name-input');
+                    const protectedCheckbox = document.getElementById('save-protected-checkbox');
+                    const errorDiv = document.getElementById('save-name-error');
+                    
+                    const name = nameInput?.value?.trim() || '';
+                    let isProtected = protectedCheckbox?.checked || false;
+                    let secret = undefined;
+                    
+                    const validation = validateName(name);
+                    if (!validation.valid) {
+                        if (errorDiv) {
+                            errorDiv.textContent = validation.error;
+                            errorDiv.classList.remove('hidden');
+                        }
+                        return false;
+                    }
+                    
+                    try {
+                        let existingItem = null;
+                        try {
+                            existingItem = await getSetList(name);
+                        } catch (fetchError) {
+                            if (fetchError.status !== 404) {
+                                throw fetchError;
+                            }
+                        }
+                        
+                        if (existingItem) {
+                            if (existingItem.protected) {
+                                const overwriteResult = await this.showProtectedOverwriteDialog('set list', name);
+                                
+                                if (!overwriteResult) {
+                                    resolve(null);
+                                    return;
+                                }
+                                
+                                secret = overwriteResult.secret;
+                                isProtected = overwriteResult.isProtected;
+                            } else {
+                                const overwrite = await modal.confirm({
+                                    title: 'Name Already Exists',
+                                    message: `<p>A set list named "${this.escapeHtml(name)}" already exists.</p><p>Do you want to overwrite it?</p>`,
+                                    confirmText: 'Overwrite',
+                                    confirmClass: 'btn-danger'
+                                });
+                                
+                                if (!overwrite) {
+                                    resolve(null);
+                                    return;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to check name existence:', error);
+                    }
+                    
+                    resolve({ name, isProtected, secret });
+                },
+                onCancel: () => {
+                    resolve(null);
+                }
+            });
+        });
     }
     
     // ========================================

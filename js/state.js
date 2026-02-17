@@ -108,6 +108,8 @@ const initialState = {
     songs: [],
     activeSongId: null,
     playbackState: 'stopped', // 'stopped', 'playing', 'paused'
+    currentSetListId: null,
+    currentSetListName: null,
     ui: {
         selectedTrackId: null,
         isLoading: false,
@@ -185,6 +187,9 @@ export const Events = {
     
     // Mute set events (Phase 4)
     MUTE_SECTIONS_CHANGED: 'muteSectionsChanged',
+    
+    // Set list events
+    SET_LIST_CHANGED: 'setListChanged',
     
     // Transport events
     TRANSPORT_UPDATED: 'transportUpdated',
@@ -867,6 +872,37 @@ export function setCurrentMuteSetProtected(isProtected) {
     }
 }
 
+// ========================================
+// Set List State
+// ========================================
+
+/**
+ * Get the current set list display name
+ * @returns {string} Set list name or "None"
+ */
+export function getCurrentSetListDisplayName() {
+    return state.currentSetListName || 'None';
+}
+
+/**
+ * Set the current set list
+ * @param {string} name - Set list name
+ */
+export function setCurrentSetList(name) {
+    state.currentSetListId = name;
+    state.currentSetListName = name;
+    emit(Events.SET_LIST_CHANGED, { name });
+}
+
+/**
+ * Clear the current set list
+ */
+export function clearCurrentSetList() {
+    state.currentSetListId = null;
+    state.currentSetListName = null;
+    emit(Events.SET_LIST_CHANGED, { name: null });
+}
+
 /**
  * Initialize mute sections for a single track with full duration, unmuted
  * @param {string} trackId - Track ID
@@ -1403,6 +1439,14 @@ export function loadState(savedState) {
         });
     }
     
+    // Migrate global state for set list properties if missing
+    if (savedState.currentSetListId === undefined) {
+        savedState.currentSetListId = null;
+    }
+    if (savedState.currentSetListName === undefined) {
+        savedState.currentSetListName = null;
+    }
+    
     Object.assign(state, savedState);
     emit(Events.STATE_LOADED, state);
 }
@@ -1425,7 +1469,9 @@ export function getSerializableState() {
     
     return {
         songs: serializableSongs,
-        activeSongId: state.activeSongId
+        activeSongId: state.activeSongId,
+        currentSetListId: state.currentSetListId,
+        currentSetListName: state.currentSetListName
     };
 }
 

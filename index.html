@@ -14,6 +14,21 @@
     <div id="app">
         <!-- Menu Bar -->
         <header id="menu-bar">
+            <!-- Set List Selector Dropdown (always visible) -->
+            <div id="setlist-selector" class="menu-dropdown">
+                <button id="setlist-dropdown-btn" class="dropdown-btn" title="Set Lists">
+                    <div class="dropdown-btn-content">
+                        <span class="dropdown-btn-label">Set List</span>
+                        <span class="dropdown-btn-text">None</span>
+                    </div>
+                    <svg class="dropdown-arrow" viewBox="0 0 24 24" width="12" height="12">
+                        <path fill="currentColor" d="M7 10l5 5 5-5z"/>
+                    </svg>
+                </button>
+                <div id="setlist-dropdown-menu" class="dropdown-menu hidden">
+                    <!-- Menu items populated dynamically by menubar.js -->
+                </div>
+            </div>
             <!-- Arrangement Selector Dropdown (shown when song is open) -->
             <div id="arrangement-selector" class="menu-dropdown hidden">
                 <button id="arrangement-dropdown-btn" class="dropdown-btn" title="Arrangements">

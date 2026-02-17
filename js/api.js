@@ -1,6 +1,6 @@
 /**
  * API Client Module
- * Handles communication with the arrangements and mute sets Lambda API
+ * Handles communication with the arrangements, mute sets, and set lists Lambda API
  */
 
 const API_BASE_URL = 'https://g1pan67cc9.execute-api.us-east-2.amazonaws.com/prod';
@@ -361,6 +361,143 @@ export async function deleteMuteSet(songName, name, secret = null) {
 export async function checkMuteSetExists(songName, name) {
     const muteSets = await listMuteSets(songName);
     return muteSets.some(m => m.toLowerCase() === name.toLowerCase());
+}
+
+// ============ Set List API Functions ============
+
+/**
+ * List all set lists
+ * @returns {Promise<string[]>} - Array of set list names
+ * @throws {Error} - On network or API errors
+ */
+export async function listSetLists() {
+    const response = await fetchWithTimeoutAndRetry(
+        `${API_BASE_URL}/setlists`,
+        {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        const error = new Error(data.error || 'Failed to list set lists');
+        error.status = response.status;
+        error.data = data;
+        throw error;
+    }
+
+    return data.setLists;
+}
+
+/**
+ * Get a specific set list
+ * @param {string} name - Name of the set list
+ * @returns {Promise<Object>} - Set list object with name, songs, protected, createdAt, modifiedAt
+ * @throws {Error} - On network or API errors
+ */
+export async function getSetList(name) {
+    const response = await fetchWithTimeoutAndRetry(
+        `${API_BASE_URL}/setlists/${encodeURIComponent(name)}`,
+        {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        const error = new Error(data.error || 'Failed to get set list');
+        error.status = response.status;
+        error.data = data;
+        throw error;
+    }
+
+    return data;
+}
+
+/**
+ * Save a set list (create or update)
+ * @param {string} name - Name of the set list
+ * @param {Object} data - Set list data
+ * @param {Array} data.songs - Array of { songName, arrangementName, pitch } objects
+ * @param {boolean} [data.protected=false] - Whether to protect this set list
+ * @param {string} [data.secret] - Required if overwriting a protected set list
+ * @returns {Promise<Object>} - Response with success, message, and saved set list
+ * @throws {Error} - On network or API errors
+ */
+export async function saveSetList(name, data) {
+    const response = await fetchWithTimeoutAndRetry(
+        `${API_BASE_URL}/setlists/${encodeURIComponent(name)}`,
+        {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        }
+    );
+
+    const responseData = await response.json();
+
+    if (!response.ok) {
+        const error = new Error(responseData.error || 'Failed to save set list');
+        error.status = response.status;
+        error.data = responseData;
+        throw error;
+    }
+
+    return responseData;
+}
+
+/**
+ * Delete a set list
+ * @param {string} name - Name of the set list
+ * @param {string} [secret] - Required if deleting a protected set list
+ * @returns {Promise<Object>} - Response with success and message
+ * @throws {Error} - On network or API errors
+ */
+export async function deleteSetList(name, secret = null) {
+    const body = secret ? { secret } : {};
+    
+    const response = await fetchWithTimeoutAndRetry(
+        `${API_BASE_URL}/setlists/${encodeURIComponent(name)}`,
+        {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        const error = new Error(data.error || 'Failed to delete set list');
+        error.status = response.status;
+        error.data = data;
+        throw error;
+    }
+
+    return data;
+}
+
+/**
+ * Check if a set list with the given name already exists
+ * @param {string} name - Name to check
+ * @returns {Promise<boolean>} - True if set list exists
+ * @throws {Error} - On network or API errors
+ */
+export async function checkSetListExists(name) {
+    const setLists = await listSetLists();
+    return setLists.some(s => s.toLowerCase() === name.toLowerCase());
 }
 
 // ============ Validation Utilities ============

@@ -143,6 +143,58 @@ export const handler = async (event) => {
         }
     }
 
+    // Handle GET /setlists - list all set lists (public, no auth required)
+    if (event.httpMethod === 'GET' && event.resource === '/setlists') {
+        try {
+            return await handleListSetLists();
+        } catch (err) {
+            console.error('Error in handleListSetLists:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle GET /setlists/{name} - get specific set list (public, no auth required)
+    if (event.httpMethod === 'GET' && event.resource === '/setlists/{name}') {
+        try {
+            const { name } = event.pathParameters;
+            return await handleGetSetList(decodeURIComponent(name));
+        } catch (err) {
+            console.error('Error in handleGetSetList:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle PUT /setlists/{name} - save set list
+    if (event.httpMethod === 'PUT' && event.resource === '/setlists/{name}') {
+        try {
+            const { name } = event.pathParameters;
+            const body = JSON.parse(event.body || '{}');
+            return await handleSaveSetList(
+                decodeURIComponent(name),
+                body
+            );
+        } catch (err) {
+            console.error('Error in handleSaveSetList:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle DELETE /setlists/{name} - delete set list
+    if (event.httpMethod === 'DELETE' && event.resource === '/setlists/{name}') {
+        try {
+            const { name } = event.pathParameters;
+            const body = JSON.parse(event.body || '{}');
+            const { secret } = body;
+            return await handleDeleteSetList(
+                decodeURIComponent(name),
+                secret
+            );
+        } catch (err) {
+            console.error('Error in handleDeleteSetList:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
     // No matching route
     return response(400, { error: 'Invalid request' });
 };
@@ -607,6 +659,200 @@ async function handleDeleteMuteSet(songName, name, secret) {
     return response(200, { 
         success: true, 
         message: `Mute set '${name}' deleted from '${songName}'`
+    });
+}
+
+// ============ Set List Handlers ============
+
+async function handleListSetLists() {
+    console.log('handleListSetLists called');
+    
+    const prefix = 'setlists/';
+    
+    try {
+        const command = new ListObjectsV2Command({
+            Bucket: BUCKET,
+            Prefix: prefix
+        });
+        
+        const result = await s3.send(command);
+        
+        // If no Contents, folder doesn't exist or is empty - return empty array
+        if (!result.Contents || result.Contents.length === 0) {
+            return response(200, { setLists: [] });
+        }
+        
+        // Extract set list names from keys
+        // Key format: setlists/{name}.json
+        const setLists = [];
+        
+        for (const obj of result.Contents) {
+            const key = obj.Key;
+            
+            // Skip if not a .json file
+            if (!key.endsWith('.json')) {
+                continue;
+            }
+            
+            // Extract filename from key
+            const filename = key.slice(prefix.length); // Remove prefix
+            
+            // Skip if empty or contains subdirectories
+            if (!filename || filename.includes('/')) {
+                continue;
+            }
+            
+            // Remove .json extension and URL-decode the name
+            const name = decodeURIComponent(filename.slice(0, -5));
+            setLists.push(name);
+        }
+        
+        // Sort alphabetically
+        setLists.sort((a, b) => a.localeCompare(b));
+        
+        return response(200, { setLists });
+    } catch (err) {
+        console.error('Error listing set lists:', err);
+        return response(500, { error: 'Failed to list set lists', details: err.message });
+    }
+}
+
+async function handleGetSetList(name) {
+    console.log('handleGetSetList called for:', name);
+    
+    const key = `setlists/${name}.json`;
+    
+    try {
+        const command = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(command);
+        const bodyString = await result.Body.transformToString();
+        const setList = JSON.parse(bodyString);
+        
+        return response(200, setList);
+    } catch (err) {
+        if (err.name === 'NoSuchKey') {
+            return response(404, { error: `Set list '${name}' not found` });
+        }
+        console.error('Error getting set list:', err);
+        return response(500, { error: 'Failed to get set list', details: err.message });
+    }
+}
+
+async function handleSaveSetList(name, body) {
+    console.log('handleSaveSetList called for:', name);
+    
+    const { songs, protected: isProtected, secret } = body;
+    
+    // Validate required fields
+    if (!songs || !Array.isArray(songs) || songs.length === 0) {
+        return response(400, { error: 'Missing or invalid songs array' });
+    }
+    
+    // Validate each song entry
+    for (const entry of songs) {
+        if (!entry.songName || typeof entry.songName !== 'string') {
+            return response(400, { error: 'Each song entry must have a songName (string)' });
+        }
+        if (entry.arrangementName !== null && entry.arrangementName !== undefined && typeof entry.arrangementName !== 'string') {
+            return response(400, { error: `Song '${entry.songName}': arrangementName must be a string or null` });
+        }
+        if (typeof entry.pitch !== 'number' || !Number.isInteger(entry.pitch) || entry.pitch < -6 || entry.pitch > 6) {
+            return response(400, { error: `Song '${entry.songName}': pitch must be an integer from -6 to 6` });
+        }
+    }
+    
+    const key = `setlists/${name}.json`;
+    
+    // Check if set list already exists
+    let existingSetList = null;
+    try {
+        const getCommand = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(getCommand);
+        const bodyString = await result.Body.transformToString();
+        existingSetList = JSON.parse(bodyString);
+    } catch (err) {
+        if (err.name !== 'NoSuchKey') {
+            throw err; // Unexpected error
+        }
+        // NoSuchKey means it's a new set list - that's fine
+    }
+    
+    // If existing set list is protected, require secret
+    if (existingSetList?.protected) {
+        if (secret !== ADMIN_SECRET) {
+            return response(403, { error: 'This set list is protected. Valid secret required to overwrite.' });
+        }
+    }
+    
+    // Build the set list object
+    const now = new Date().toISOString();
+    const setList = {
+        name: name,
+        songs: songs.map(entry => ({
+            songName: entry.songName,
+            arrangementName: entry.arrangementName || null,
+            pitch: entry.pitch
+        })),
+        protected: isProtected || false,
+        createdAt: existingSetList?.createdAt || now,
+        modifiedAt: now
+    };
+    
+    // Save to S3
+    const putCommand = new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+        Body: JSON.stringify(setList, null, '\t'),
+        ContentType: 'application/json'
+    });
+    await s3.send(putCommand);
+    
+    // Invalidate CloudFront cache
+    await invalidateCache(`/setlists/${encodeURIComponent(name)}.json`);
+    
+    return response(200, { 
+        success: true, 
+        message: existingSetList ? `Set list '${name}' updated` : `Set list '${name}' created`,
+        setList: setList
+    });
+}
+
+async function handleDeleteSetList(name, secret) {
+    console.log('handleDeleteSetList called for:', name);
+    
+    const key = `setlists/${name}.json`;
+    
+    // First, check if set list exists and if it's protected
+    let existingSetList = null;
+    try {
+        const getCommand = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(getCommand);
+        const bodyString = await result.Body.transformToString();
+        existingSetList = JSON.parse(bodyString);
+    } catch (err) {
+        if (err.name === 'NoSuchKey') {
+            return response(404, { error: `Set list '${name}' not found` });
+        }
+        throw err;
+    }
+    
+    // If set list is protected, require secret
+    if (existingSetList.protected) {
+        if (secret !== ADMIN_SECRET) {
+            return response(403, { error: 'This set list is protected. Valid secret required to delete.' });
+        }
+    }
+    
+    // Delete from S3
+    const deleteCommand = new DeleteObjectCommand({ Bucket: BUCKET, Key: key });
+    await s3.send(deleteCommand);
+    
+    // Invalidate CloudFront cache
+    await invalidateCache(`/setlists/${encodeURIComponent(name)}.json`);
+    
+    return response(200, { 
+        success: true, 
+        message: `Set list '${name}' deleted`
     });
 }
 
