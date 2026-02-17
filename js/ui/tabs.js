@@ -407,15 +407,15 @@ class TabsUI {
         item.className = 'dropdown-item has-submenu';
         item.dataset.submenu = submenuId;
         
-        // Arrow on left side since submenu opens to the left
-        const arrow = document.createElement('span');
-        arrow.className = 'submenu-arrow';
-        arrow.textContent = '◀';
-        item.appendChild(arrow);
-        
+        // Label first, then arrow on right side since submenu opens to the right
         const labelSpan = document.createElement('span');
         labelSpan.textContent = label;
         item.appendChild(labelSpan);
+        
+        const arrow = document.createElement('span');
+        arrow.className = 'submenu-arrow';
+        arrow.textContent = '▶';
+        item.appendChild(arrow);
         
         // Create submenu container
         const submenu = document.createElement('div');
@@ -502,20 +502,20 @@ class TabsUI {
     
     /**
      * Position submenu to avoid going off-screen
-     * Default is to open left (since dropdown is on far right)
+     * Default is to open right (since dropdown is on top left)
      * @param {HTMLElement} parentItem - Parent menu item
      * @param {HTMLElement} submenu - Submenu element
      */
     positionSubmenu(parentItem, submenu) {
-        // Reset positioning (default opens left)
-        submenu.classList.remove('position-right');
+        // Reset positioning (default opens right)
+        submenu.classList.remove('position-left');
         
         const rect = parentItem.getBoundingClientRect();
         const submenuWidth = submenu.offsetWidth || 180; // Use actual width or min-width
         
-        // Check if submenu would go off LEFT edge - if so, open to the right instead
-        if (rect.left - submenuWidth < 10) {
-            submenu.classList.add('position-right');
+        // Check if submenu would go off RIGHT edge - if so, open to the left instead
+        if (rect.right + submenuWidth > window.innerWidth - 10) {
+            submenu.classList.add('position-left');
         }
     }
     
@@ -697,15 +697,15 @@ class TabsUI {
         item.className = 'dropdown-item has-submenu';
         item.dataset.submenu = submenuId;
         
-        // Arrow on left side since submenu opens to the left
-        const arrow = document.createElement('span');
-        arrow.className = 'submenu-arrow';
-        arrow.textContent = '◀';
-        item.appendChild(arrow);
-        
+        // Label first, then arrow on right side since submenu opens to the right
         const labelSpan = document.createElement('span');
         labelSpan.textContent = label;
         item.appendChild(labelSpan);
+        
+        const arrow = document.createElement('span');
+        arrow.className = 'submenu-arrow';
+        arrow.textContent = '▶';
+        item.appendChild(arrow);
         
         // Create nested submenu container
         const nestedSubmenu = document.createElement('div');

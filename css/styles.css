@@ -87,6 +87,26 @@ body {
 }
 
 /* ========================================
+   Menu Bar
+   ======================================== */
+#menu-bar {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 8px;
+    padding-left: calc(8px + env(safe-area-inset-left));
+    padding-right: calc(8px + env(safe-area-inset-right));
+    gap: 4px;
+}
+
+#menu-bar #arrangement-selector {
+    margin-left: 0;
+    padding-right: 0;
+}
+
+/* ========================================
    Tab Bar
    ======================================== */
 #tab-bar {
@@ -211,8 +231,6 @@ body {
 /* Arrangement/Mute Selector Dropdown in Tab Bar */
 #arrangement-selector {
     flex-shrink: 0;
-    margin-left: auto; /* Push to the right */
-    padding-right: 8px;
     position: relative;
 }
 
@@ -260,14 +278,14 @@ body {
 .dropdown-menu {
     position: absolute;
     top: 100%;
-    right: 0;
+    left: 0;
     margin-top: 4px;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
     z-index: 200;
-    min-width: 200px;
+    min-width: 150px;
     padding: 4px 0;
     overflow: visible; /* Allow submenus to appear outside bounds */
 }
@@ -316,9 +334,9 @@ body {
     visibility: hidden;
 }
 
-/* Submenu arrow indicator - on LEFT side since submenus open left */
+/* Submenu arrow indicator - on RIGHT side since submenus open right */
 .dropdown-item .submenu-arrow {
-    margin-right: 8px;
+    margin-left: auto;
     color: var(--text-muted);
     flex-shrink: 0;
 }
@@ -329,7 +347,7 @@ body {
 
 /* Item with submenu */
 .dropdown-item.has-submenu {
-    padding-left: 8px;
+    padding-right: 8px;
 }
 
 /* Dropdown Divider */
@@ -380,13 +398,13 @@ body {
     font-style: italic;
 }
 
-/* Submenu - opens to the LEFT by default since dropdown is on far right */
+/* Submenu - opens to the RIGHT by default since dropdown is on top left */
 .dropdown-submenu {
     position: absolute;
-    left: auto;
-    right: 100%;
+    left: 100%;
+    right: auto;
     top: -4px;
-    margin-right: 4px;
+    margin-left: 4px;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 6px;
@@ -402,12 +420,12 @@ body {
     display: none;
 }
 
-/* Position submenu to the right if there's not enough room on left */
-.dropdown-submenu.position-right {
-    left: 100%;
-    right: auto;
-    margin-right: 0;
-    margin-left: 4px;
+/* Position submenu to the left if there's not enough room on right */
+.dropdown-submenu.position-left {
+    left: auto;
+    right: 100%;
+    margin-left: 0;
+    margin-right: 4px;
 }
 
 /* Highlight parent item when submenu is open */
