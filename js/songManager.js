@@ -76,16 +76,16 @@ export async function switchSong(songId) {
         }
         
         if (result === 'save') {
-            // Import tabs dynamically to avoid circular dependency
-            const { getTabs } = await import('./ui/tabs.js');
-            const tabs = getTabs();
+            // Import menubar dynamically to avoid circular dependency
+            const { getMenuBar } = await import('./ui/menubar.js');
+            const menubar = getMenuBar();
             
             // Save the current changes
             if (State.hasUnsavedArrangementChanges()) {
-                await tabs.saveCurrentArrangement(currentSong);
+                await menubar.saveCurrentArrangement(currentSong);
             }
             if (State.hasUnsavedMuteChanges()) {
-                await tabs.saveCurrentMuteSet(currentSong);
+                await menubar.saveCurrentMuteSet(currentSong);
             }
         }
         // 'discard' - continue without saving

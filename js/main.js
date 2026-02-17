@@ -14,6 +14,7 @@ import { getTrackPanel } from './ui/trackPanel.js';
 import { getWaveformPanel } from './ui/waveformPanel.js';
 import { getTransportBar } from './ui/transportBar.js';
 import { getTabs } from './ui/tabs.js';
+import { getMenuBar } from './ui/menubar.js';
 import { getTimeline } from './timeline.js';
 import { getTimelineSections } from './ui/timelineSections.js';
 import { initDragDrop } from './ui/dragDrop.js';
@@ -89,6 +90,7 @@ class App {
         getWaveformPanel();
         getTransportBar();
         getTabs();
+        getMenuBar();
         getTimeline();
         getTimelineSections(); // Phase 3: Timeline-based arrangement sections
         initDragDrop();

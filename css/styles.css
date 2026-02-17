@@ -228,7 +228,7 @@ body {
     position: relative;
 }
 
-/* Arrangement/Mute Selector Dropdown in Tab Bar */
+/* Arrangement/Mute Selector Dropdown in Menu Bar */
 #arrangement-selector {
     flex-shrink: 0;
     position: relative;
