@@ -223,6 +223,14 @@ body {
     border-right: 2px solid var(--accent-primary);
 }
 
+/* Song tab color gradients (bottom-third gradient using track color palette) */
+.song-tab.tab-color-1 { background-image: linear-gradient(to top, rgba(0, 212, 255, 0.35) 0%, transparent 33%); }
+.song-tab.tab-color-2 { background-image: linear-gradient(to top, rgba(255, 107, 107, 0.35) 0%, transparent 33%); }
+.song-tab.tab-color-3 { background-image: linear-gradient(to top, rgba(150, 255, 0, 0.35) 0%, transparent 33%); }
+.song-tab.tab-color-4 { background-image: linear-gradient(to top, rgba(175, 175, 100, 0.35) 0%, transparent 33%); }
+.song-tab.tab-color-5 { background-image: linear-gradient(to top, rgba(199, 125, 255, 0.35) 0%, transparent 33%); }
+.song-tab.tab-color-6 { background-image: linear-gradient(to top, rgba(107, 255, 148, 0.35) 0%, transparent 33%); }
+
 #add-song-btn {
     flex-shrink: 0;
     position: relative;

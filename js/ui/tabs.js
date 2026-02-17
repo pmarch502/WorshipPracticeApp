@@ -368,6 +368,11 @@ class TabsUI {
             SongManager.closeSong(song.id, false); // No confirmation needed for new model
         });
         
+        // Assign tab color based on position (cycles through 6 colors)
+        const tabIndex = this.container.children.length;
+        const colorIndex = (tabIndex % 6) + 1;
+        tab.classList.add(`tab-color-${colorIndex}`);
+        
         this.container.appendChild(tab);
         this.tabElements.set(song.id, tab);
     }
