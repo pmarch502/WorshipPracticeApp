@@ -14,16 +14,28 @@
     <div id="app">
         <!-- Menu Bar -->
         <header id="menu-bar">
-            <!-- Arrangement/Mute Selector Dropdown (shown when song is open) -->
-            <div id="arrangement-selector" class="hidden">
+            <!-- Arrangement Selector Dropdown (shown when song is open) -->
+            <div id="arrangement-selector" class="menu-dropdown hidden">
                 <button id="arrangement-dropdown-btn" class="dropdown-btn">
-                    <span class="dropdown-btn-text">Arrangements</span>
+                    <span class="dropdown-btn-text">Original</span>
                     <svg class="dropdown-arrow" viewBox="0 0 24 24" width="12" height="12">
                         <path fill="currentColor" d="M7 10l5 5 5-5z"/>
                     </svg>
                 </button>
                 <div id="arrangement-dropdown-menu" class="dropdown-menu hidden">
-                    <!-- Menu items populated dynamically by tabs.js -->
+                    <!-- Menu items populated dynamically by menubar.js -->
+                </div>
+            </div>
+            <!-- Mute Set Selector Dropdown (shown when song is open) -->
+            <div id="mute-selector" class="menu-dropdown hidden">
+                <button id="mute-dropdown-btn" class="dropdown-btn">
+                    <span class="dropdown-btn-text">None</span>
+                    <svg class="dropdown-arrow" viewBox="0 0 24 24" width="12" height="12">
+                        <path fill="currentColor" d="M7 10l5 5 5-5z"/>
+                    </svg>
+                </button>
+                <div id="mute-dropdown-menu" class="dropdown-menu hidden">
+                    <!-- Menu items populated dynamically by menubar.js -->
                 </div>
             </div>
         </header>

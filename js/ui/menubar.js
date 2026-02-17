@@ -1,7 +1,8 @@
 /**
  * MenuBar UI
- * Arrangement/Mute selector dropdown management with hierarchical menus
- * Extracted from tabs.js for separation of concerns
+ * Separate Arrangement and Mute Set dropdown menus in the menu bar.
+ * Each dropdown opens directly to its content (no nested submenu layer).
+ * Delete actions use a nested submenu within each dropdown.
  */
 
 import * as State from '../state.js';
@@ -20,13 +21,21 @@ import {
 
 class MenuBarUI {
     constructor() {
-        // Dropdown elements
+        // Arrangement dropdown elements
         this.arrangementSelector = document.getElementById('arrangement-selector');
-        this.dropdownBtn = document.getElementById('arrangement-dropdown-btn');
-        this.dropdownBtnText = this.dropdownBtn?.querySelector('.dropdown-btn-text');
-        this.dropdownMenu = document.getElementById('arrangement-dropdown-menu');
+        this.arrangementBtn = document.getElementById('arrangement-dropdown-btn');
+        this.arrangementBtnText = this.arrangementBtn?.querySelector('.dropdown-btn-text');
+        this.arrangementMenu = document.getElementById('arrangement-dropdown-menu');
         
-        this.isDropdownOpen = false;
+        // Mute dropdown elements
+        this.muteSelector = document.getElementById('mute-selector');
+        this.muteBtn = document.getElementById('mute-dropdown-btn');
+        this.muteBtnText = this.muteBtn?.querySelector('.dropdown-btn-text');
+        this.muteMenu = document.getElementById('mute-dropdown-menu');
+        
+        // Dropdown state
+        this.isArrangementOpen = false;
+        this.isMuteOpen = false;
         this._isRefreshing = false;
         
         // Cache for API data
@@ -34,7 +43,7 @@ class MenuBarUI {
         this.muteSetCache = new Map(); // songName -> { data: string[], timestamp: number }
         this.CACHE_TTL = 60000; // 1 minute cache
         
-        // Active submenu tracking
+        // Active submenu tracking (for Delete nested submenus)
         this.activeSubmenu = null;
         this.submenuTimeout = null;
         
@@ -43,29 +52,41 @@ class MenuBarUI {
     }
 
     init() {
-        // Close dropdown when clicking outside
+        // Close dropdowns when clicking outside
         document.addEventListener('click', (e) => {
-            if (this.isDropdownOpen && 
-                !this.dropdownMenu?.contains(e.target) && 
-                !this.dropdownBtn?.contains(e.target)) {
-                this.closeDropdown();
+            if (this.isArrangementOpen && 
+                !this.arrangementMenu?.contains(e.target) && 
+                !this.arrangementBtn?.contains(e.target)) {
+                this.closeArrangementDropdown();
+            }
+            if (this.isMuteOpen && 
+                !this.muteMenu?.contains(e.target) && 
+                !this.muteBtn?.contains(e.target)) {
+                this.closeMuteDropdown();
             }
         });
 
-        // Close dropdown on Escape
+        // Close dropdowns on Escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                if (this.isDropdownOpen) {
-                    this.closeDropdown();
-                }
+                if (this.isArrangementOpen) this.closeArrangementDropdown();
+                if (this.isMuteOpen) this.closeMuteDropdown();
             }
         });
         
-        // Dropdown button click handler
-        if (this.dropdownBtn) {
-            this.dropdownBtn.addEventListener('click', (e) => {
+        // Arrangement dropdown button click
+        if (this.arrangementBtn) {
+            this.arrangementBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.toggleDropdown();
+                this.toggleArrangementDropdown();
+            });
+        }
+        
+        // Mute dropdown button click
+        if (this.muteBtn) {
+            this.muteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleMuteDropdown();
             });
         }
     }
@@ -80,7 +101,7 @@ class MenuBarUI {
             this.updateDropdownSelector(song);
         });
         
-        // Show/hide arrangement selector based on whether songs exist
+        // Show/hide selectors based on whether songs exist
         State.subscribe(State.Events.SONG_ADDED, () => {
             this.updateSelectorVisibility();
         });
@@ -89,19 +110,19 @@ class MenuBarUI {
             this.updateSelectorVisibility();
         });
         
-        // Update dropdown when arrangement sections change (modified indicator)
+        // Update arrangement button when arrangement sections change
         State.subscribe(State.Events.ARRANGEMENT_SECTIONS_CHANGED, () => {
             const song = State.getActiveSong();
             if (song) {
-                this.updateDropdownButtonText(song);
+                this.updateArrangementButtonText(song);
             }
         });
         
-        // Update dropdown when mute sections change (modified indicator)
+        // Update mute button when mute sections change
         State.subscribe(State.Events.MUTE_SECTIONS_CHANGED, () => {
             const song = State.getActiveSong();
             if (song) {
-                this.updateDropdownButtonText(song);
+                this.updateMuteButtonText(song);
             }
         });
     }
@@ -111,118 +132,332 @@ class MenuBarUI {
     // ========================================
     
     /**
-     * Update arrangement selector visibility based on whether songs are open
+     * Update both selectors' visibility based on whether songs are open
      */
     updateSelectorVisibility() {
-        if (!this.arrangementSelector) return;
         const hasSongs = State.state.songs.length > 0;
-        this.arrangementSelector.classList.toggle('hidden', !hasSongs);
+        this.arrangementSelector?.classList.toggle('hidden', !hasSongs);
+        this.muteSelector?.classList.toggle('hidden', !hasSongs);
     }
 
     // ========================================
-    // Dropdown Menu Management
+    // Arrangement Dropdown
+    // ========================================
+    
+    toggleArrangementDropdown() {
+        if (this.isArrangementOpen) {
+            this.closeArrangementDropdown();
+        } else {
+            this.openArrangementDropdown();
+        }
+    }
+    
+    openArrangementDropdown() {
+        const song = State.getActiveSong();
+        if (!song || !this.arrangementMenu) return;
+        
+        // Close mute dropdown if open
+        if (this.isMuteOpen) this.closeMuteDropdown();
+        
+        this.isArrangementOpen = true;
+        this.arrangementBtn?.classList.add('open');
+        this.arrangementMenu.classList.remove('hidden');
+        
+        this.renderArrangementMenu(song);
+    }
+    
+    closeArrangementDropdown() {
+        this.isArrangementOpen = false;
+        this.arrangementBtn?.classList.remove('open');
+        this.arrangementMenu?.classList.add('hidden');
+        this.closeAllSubmenus(this.arrangementMenu);
+    }
+    
+    // ========================================
+    // Mute Dropdown
+    // ========================================
+    
+    toggleMuteDropdown() {
+        if (this.isMuteOpen) {
+            this.closeMuteDropdown();
+        } else {
+            this.openMuteDropdown();
+        }
+    }
+    
+    openMuteDropdown() {
+        const song = State.getActiveSong();
+        if (!song || !this.muteMenu) return;
+        
+        // Close arrangement dropdown if open
+        if (this.isArrangementOpen) this.closeArrangementDropdown();
+        
+        this.isMuteOpen = true;
+        this.muteBtn?.classList.add('open');
+        this.muteMenu.classList.remove('hidden');
+        
+        this.renderMuteMenu(song);
+    }
+    
+    closeMuteDropdown() {
+        this.isMuteOpen = false;
+        this.muteBtn?.classList.remove('open');
+        this.muteMenu?.classList.add('hidden');
+        this.closeAllSubmenus(this.muteMenu);
+    }
+    
+    // ========================================
+    // Close any open dropdown (used by save/delete handlers)
+    // ========================================
+    
+    closeAllDropdowns() {
+        if (this.isArrangementOpen) this.closeArrangementDropdown();
+        if (this.isMuteOpen) this.closeMuteDropdown();
+    }
+
+    // ========================================
+    // Button Text Updates
     // ========================================
     
     /**
-     * Toggle the dropdown menu open/closed
-     */
-    toggleDropdown() {
-        if (this.isDropdownOpen) {
-            this.closeDropdown();
-        } else {
-            this.openDropdown();
-        }
-    }
-    
-    /**
-     * Open the dropdown menu
-     */
-    openDropdown() {
-        const song = State.getActiveSong();
-        if (!song || !this.dropdownMenu) return;
-        
-        this.isDropdownOpen = true;
-        this.dropdownBtn?.classList.add('open');
-        this.dropdownMenu.classList.remove('hidden');
-        
-        // Render the main menu
-        this.renderMainMenu(song);
-    }
-    
-    /**
-     * Close the dropdown menu
-     */
-    closeDropdown() {
-        this.isDropdownOpen = false;
-        this.dropdownBtn?.classList.remove('open');
-        this.dropdownMenu?.classList.add('hidden');
-        this.closeAllSubmenus();
-    }
-    
-    /**
-     * Update the dropdown selector visibility and button text
+     * Update both dropdown selectors' visibility and text
      * @param {Object|null} song - Active song or null
      */
     updateDropdownSelector(song) {
-        if (!this.arrangementSelector) return;
-        
         if (song) {
-            this.arrangementSelector.classList.remove('hidden');
-            this.updateDropdownButtonText(song);
+            this.arrangementSelector?.classList.remove('hidden');
+            this.muteSelector?.classList.remove('hidden');
+            this.updateArrangementButtonText(song);
+            this.updateMuteButtonText(song);
         } else {
-            this.arrangementSelector.classList.add('hidden');
+            this.arrangementSelector?.classList.add('hidden');
+            this.muteSelector?.classList.add('hidden');
         }
     }
     
     /**
-     * Update the dropdown button text based on current state
+     * Update the arrangement dropdown button text
      * @param {Object} song - Song object
      */
-    updateDropdownButtonText(song) {
-        if (!this.dropdownBtnText) return;
+    updateArrangementButtonText(song) {
+        if (!this.arrangementBtnText) return;
         
         const arrName = State.getCurrentArrangementDisplayName();
-        const muteName = State.getCurrentMuteSetDisplayName();
         const arrModified = State.isArrangementModified();
-        const muteModified = State.isMuteSetModified();
         
-        // Build display text
         let text = arrName || 'Original';
         if (arrModified) text += ' *';
         
-        // Add mute set info if not "None"
-        if (muteName && muteName !== 'None') {
-            text += ` / ${muteName}`;
-            if (muteModified) text += ' *';
-        }
-        
-        this.dropdownBtnText.textContent = text;
+        this.arrangementBtnText.textContent = text;
     }
     
     /**
-     * Render the main dropdown menu
+     * Update the mute dropdown button text
      * @param {Object} song - Song object
      */
-    renderMainMenu(song) {
-        if (!this.dropdownMenu) return;
+    updateMuteButtonText(song) {
+        if (!this.muteBtnText) return;
         
-        this.dropdownMenu.innerHTML = '';
+        const muteName = State.getCurrentMuteSetDisplayName();
+        const muteModified = State.isMuteSetModified();
+        
+        let text = muteName || 'None';
+        if (muteModified) text += ' *';
+        
+        this.muteBtnText.textContent = text;
+    }
+
+    // Keep legacy method name for any external callers
+    updateDropdownButtonText(song) {
+        this.updateArrangementButtonText(song);
+        this.updateMuteButtonText(song);
+    }
+
+    // ========================================
+    // Arrangement Menu Rendering
+    // ========================================
+    
+    /**
+     * Render the arrangement dropdown menu content directly
+     * @param {Object} song - Song object
+     */
+    async renderArrangementMenu(song) {
+        if (!this.arrangementMenu) return;
+        
+        this.arrangementMenu.innerHTML = '';
         
         // Refresh option
-        const refreshItem = this.createMenuItem('Refresh', () => this.handleRefresh(song), false);
-        refreshItem.id = 'dropdown-refresh-item';
-        this.dropdownMenu.appendChild(refreshItem);
+        const refreshItem = this.createMenuItem('Refresh', () => this.handleArrangementRefresh(song), false);
+        refreshItem.id = 'arrangement-refresh-item';
+        this.arrangementMenu.appendChild(refreshItem);
         
-        this.dropdownMenu.appendChild(this.createDivider());
+        this.arrangementMenu.appendChild(this.createDivider());
         
-        // Arrangements submenu
-        const arrangementsItem = this.createSubmenuItem('Arrangements', 'arrangements-submenu');
-        this.dropdownMenu.appendChild(arrangementsItem);
+        // Show loading indicator for the list
+        const loadingEl = this.createLoadingIndicator();
+        this.arrangementMenu.appendChild(loadingEl);
         
-        // Mutes submenu
-        const mutesItem = this.createSubmenuItem('Mutes', 'mutes-submenu');
-        this.dropdownMenu.appendChild(mutesItem);
+        try {
+            const arrangements = await this.fetchArrangements(song.songName);
+            
+            // Remove loading indicator
+            loadingEl.remove();
+            
+            const currentArrName = State.getCurrentArrangementDisplayName();
+            const arrModified = State.isArrangementModified();
+            
+            // "Original (Full Song)" option
+            const originalItem = this.createMenuItem('Original (Full Song)', () => this.selectOriginalArrangement(song));
+            if (!currentArrName || currentArrName === 'Original') {
+                originalItem.classList.add('active');
+                const checkmark = originalItem.querySelector('.checkmark');
+                if (checkmark) checkmark.classList.remove('hidden');
+            }
+            this.arrangementMenu.appendChild(originalItem);
+            
+            // List of saved arrangements
+            if (arrangements.length > 0) {
+                this.arrangementMenu.appendChild(this.createDivider());
+                
+                arrangements.forEach(name => {
+                    const item = this.createMenuItem(name, () => this.selectArrangement(song, name));
+                    if (currentArrName === name) {
+                        item.classList.add('active');
+                        const checkmark = item.querySelector('.checkmark');
+                        if (checkmark) checkmark.classList.remove('hidden');
+                    }
+                    this.arrangementMenu.appendChild(item);
+                });
+            } else {
+                this.arrangementMenu.appendChild(this.createDivider());
+                this.arrangementMenu.appendChild(this.createEmptyState('No saved arrangements'));
+            }
+            
+            // Divider and actions
+            this.arrangementMenu.appendChild(this.createDivider());
+            
+            // Save option (enabled if modified and has a name)
+            const saveItem = this.createMenuItem('Save', () => this.saveCurrentArrangement(song), false);
+            if (!arrModified || !currentArrName || currentArrName === 'Original') {
+                saveItem.classList.add('disabled');
+            }
+            this.arrangementMenu.appendChild(saveItem);
+            
+            // Save As option
+            const saveAsItem = this.createMenuItem('Save As...', () => this.saveArrangementAs(song), false);
+            this.arrangementMenu.appendChild(saveAsItem);
+            
+            // Only show Delete if there are arrangements
+            if (arrangements.length > 0) {
+                this.arrangementMenu.appendChild(this.createDivider());
+                
+                const deleteItem = this.createNestedSubmenuItem('Delete', 'arr-delete-submenu', async (nestedSubmenu) => {
+                    await this.populateDeleteArrangementsSubmenu(nestedSubmenu, song, arrangements);
+                });
+                this.arrangementMenu.appendChild(deleteItem);
+            }
+            
+        } catch (error) {
+            console.error('Failed to load arrangements:', error);
+            loadingEl.remove();
+            this.arrangementMenu.appendChild(this.createEmptyState('Failed to load'));
+        }
     }
+
+    // ========================================
+    // Mute Menu Rendering
+    // ========================================
+    
+    /**
+     * Render the mute set dropdown menu content directly
+     * @param {Object} song - Song object
+     */
+    async renderMuteMenu(song) {
+        if (!this.muteMenu) return;
+        
+        this.muteMenu.innerHTML = '';
+        
+        // Refresh option
+        const refreshItem = this.createMenuItem('Refresh', () => this.handleMuteRefresh(song), false);
+        refreshItem.id = 'mute-refresh-item';
+        this.muteMenu.appendChild(refreshItem);
+        
+        this.muteMenu.appendChild(this.createDivider());
+        
+        // Show loading indicator for the list
+        const loadingEl = this.createLoadingIndicator();
+        this.muteMenu.appendChild(loadingEl);
+        
+        try {
+            const muteSets = await this.fetchMuteSets(song.songName);
+            
+            // Remove loading indicator
+            loadingEl.remove();
+            
+            const currentMuteName = State.getCurrentMuteSetDisplayName();
+            const muteModified = State.isMuteSetModified();
+            
+            // "None (All Unmuted)" option
+            const noneItem = this.createMenuItem('None (All Unmuted)', () => this.selectNoneMuteSet(song));
+            if (!currentMuteName || currentMuteName === 'None') {
+                noneItem.classList.add('active');
+                const checkmark = noneItem.querySelector('.checkmark');
+                if (checkmark) checkmark.classList.remove('hidden');
+            }
+            this.muteMenu.appendChild(noneItem);
+            
+            // List of mute sets
+            if (muteSets.length > 0) {
+                this.muteMenu.appendChild(this.createDivider());
+                
+                muteSets.forEach(name => {
+                    const item = this.createMenuItem(name, () => this.selectMuteSet(song, name));
+                    if (currentMuteName === name) {
+                        item.classList.add('active');
+                        const checkmark = item.querySelector('.checkmark');
+                        if (checkmark) checkmark.classList.remove('hidden');
+                    }
+                    this.muteMenu.appendChild(item);
+                });
+            } else {
+                this.muteMenu.appendChild(this.createDivider());
+                this.muteMenu.appendChild(this.createEmptyState('No saved mute sets'));
+            }
+            
+            // Divider and actions
+            this.muteMenu.appendChild(this.createDivider());
+            
+            // Save option (enabled if modified and has a name)
+            const saveItem = this.createMenuItem('Save', () => this.saveCurrentMuteSet(song), false);
+            if (!muteModified || !currentMuteName || currentMuteName === 'None') {
+                saveItem.classList.add('disabled');
+            }
+            this.muteMenu.appendChild(saveItem);
+            
+            // Save As option
+            const saveAsItem = this.createMenuItem('Save As...', () => this.saveMuteSetAs(song), false);
+            this.muteMenu.appendChild(saveAsItem);
+            
+            // Only show Delete if there are mute sets
+            if (muteSets.length > 0) {
+                this.muteMenu.appendChild(this.createDivider());
+                
+                const deleteItem = this.createNestedSubmenuItem('Delete', 'mute-delete-submenu', async (nestedSubmenu) => {
+                    await this.populateDeleteMuteSetsSubmenu(nestedSubmenu, song, muteSets);
+                });
+                this.muteMenu.appendChild(deleteItem);
+            }
+            
+        } catch (error) {
+            console.error('Failed to load mute sets:', error);
+            loadingEl.remove();
+            this.muteMenu.appendChild(this.createEmptyState('Failed to load'));
+        }
+    }
+
+    // ========================================
+    // Shared Menu Item Creators
+    // ========================================
     
     /**
      * Create a standard menu item
@@ -249,24 +484,24 @@ class MenuBarUI {
         item.addEventListener('click', (e) => {
             e.stopPropagation();
             onClick();
-            this.closeDropdown();
+            this.closeAllDropdowns();
         });
         
         return item;
     }
     
     /**
-     * Create a submenu trigger item
+     * Create a nested submenu trigger item (used for Delete submenus)
      * @param {string} label - Item label
      * @param {string} submenuId - Submenu identifier
+     * @param {Function} populateFn - Function to populate the nested submenu
      * @returns {HTMLElement}
      */
-    createSubmenuItem(label, submenuId) {
+    createNestedSubmenuItem(label, submenuId, populateFn) {
         const item = document.createElement('div');
         item.className = 'dropdown-item has-submenu';
         item.dataset.submenu = submenuId;
         
-        // Label first, then arrow on right side since submenu opens to the right
         const labelSpan = document.createElement('span');
         labelSpan.textContent = label;
         item.appendChild(labelSpan);
@@ -276,50 +511,63 @@ class MenuBarUI {
         arrow.textContent = '\u25B6';
         item.appendChild(arrow);
         
-        // Create submenu container
-        const submenu = document.createElement('div');
-        submenu.className = 'dropdown-submenu hidden';
-        submenu.id = submenuId;
-        item.appendChild(submenu);
+        // Create nested submenu container
+        const nestedSubmenu = document.createElement('div');
+        nestedSubmenu.className = 'dropdown-submenu hidden';
+        nestedSubmenu.id = submenuId;
+        item.appendChild(nestedSubmenu);
+        
+        let populated = false;
         
         // Click handler for mobile support
-        item.addEventListener('click', (e) => {
+        item.addEventListener('click', async (e) => {
             e.stopPropagation();
             
-            // Toggle submenu
-            if (submenu.classList.contains('hidden')) {
-                this.showSubmenu(item, submenu, submenuId);
+            if (nestedSubmenu.classList.contains('hidden')) {
+                this.cancelSubmenuClose();
+                nestedSubmenu.classList.remove('hidden');
+                item.classList.add('submenu-open');
+                this.positionSubmenu(item, nestedSubmenu);
+                
+                if (!populated) {
+                    await populateFn(nestedSubmenu);
+                    populated = true;
+                }
             } else {
-                submenu.classList.add('hidden');
+                nestedSubmenu.classList.add('hidden');
                 item.classList.remove('submenu-open');
             }
         });
         
         // Hover handlers for desktop
-        item.addEventListener('mouseenter', () => {
-            this.showSubmenu(item, submenu, submenuId);
+        item.addEventListener('mouseenter', async () => {
+            this.cancelSubmenuClose();
+            nestedSubmenu.classList.remove('hidden');
+            item.classList.add('submenu-open');
+            this.positionSubmenu(item, nestedSubmenu);
+            
+            if (!populated) {
+                await populateFn(nestedSubmenu);
+                populated = true;
+            }
         });
         
         item.addEventListener('mouseleave', (e) => {
-            // Check if moving to submenu
-            const relatedTarget = e.relatedTarget;
-            if (submenu.contains(relatedTarget)) return;
-            
-            this.scheduleSubmenuClose(submenu);
+            if (nestedSubmenu.contains(e.relatedTarget)) return;
+            this.scheduleSubmenuClose(nestedSubmenu, item);
         });
         
-        submenu.addEventListener('mouseenter', () => {
+        nestedSubmenu.addEventListener('mouseenter', () => {
             this.cancelSubmenuClose();
         });
         
-        submenu.addEventListener('mouseleave', (e) => {
-            // Check if moving back to parent item
+        nestedSubmenu.addEventListener('mouseleave', (e) => {
             if (item.contains(e.relatedTarget)) return;
-            this.scheduleSubmenuClose(submenu);
+            this.scheduleSubmenuClose(nestedSubmenu, item);
         });
         
-        // Prevent clicks inside submenu from closing it
-        submenu.addEventListener('click', (e) => {
+        // Prevent clicks inside nested submenu from closing it
+        nestedSubmenu.addEventListener('click', (e) => {
             e.stopPropagation();
         });
         
@@ -327,52 +575,16 @@ class MenuBarUI {
     }
     
     /**
-     * Show a submenu
-     * @param {HTMLElement} parentItem - Parent menu item
-     * @param {HTMLElement} submenu - Submenu element
-     * @param {string} submenuId - Submenu identifier
-     */
-    async showSubmenu(parentItem, submenu, submenuId) {
-        this.cancelSubmenuClose();
-        
-        // Close other submenus
-        if (this.activeSubmenu && this.activeSubmenu !== submenu) {
-            this.activeSubmenu.classList.add('hidden');
-            this.activeSubmenu.parentElement?.classList.remove('submenu-open');
-        }
-        
-        this.activeSubmenu = submenu;
-        parentItem.classList.add('submenu-open');
-        submenu.classList.remove('hidden');
-        
-        // Position the submenu
-        this.positionSubmenu(parentItem, submenu);
-        
-        // Populate submenu based on type
-        const song = State.getActiveSong();
-        if (!song) return;
-        
-        if (submenuId === 'arrangements-submenu') {
-            await this.populateArrangementsSubmenu(submenu, song);
-        } else if (submenuId === 'mutes-submenu') {
-            await this.populateMutesSubmenu(submenu, song);
-        }
-    }
-    
-    /**
      * Position submenu to avoid going off-screen
-     * Default is to open right (since dropdown is on top left)
      * @param {HTMLElement} parentItem - Parent menu item
      * @param {HTMLElement} submenu - Submenu element
      */
     positionSubmenu(parentItem, submenu) {
-        // Reset positioning (default opens right)
         submenu.classList.remove('position-left');
         
         const rect = parentItem.getBoundingClientRect();
-        const submenuWidth = submenu.offsetWidth || 180; // Use actual width or min-width
+        const submenuWidth = submenu.offsetWidth || 180;
         
-        // Check if submenu would go off RIGHT edge - if so, open to the left instead
         if (rect.right + submenuWidth > window.innerWidth - 10) {
             submenu.classList.add('position-left');
         }
@@ -380,12 +592,11 @@ class MenuBarUI {
     
     /**
      * Schedule submenu close with delay
-     * @param {HTMLElement} submenu - Submenu element
      */
-    scheduleSubmenuClose(submenu) {
+    scheduleSubmenuClose(submenu, parentItem) {
         this.submenuTimeout = setTimeout(() => {
             submenu.classList.add('hidden');
-            submenu.parentElement?.classList.remove('submenu-open');
+            parentItem?.classList.remove('submenu-open');
             if (this.activeSubmenu === submenu) {
                 this.activeSubmenu = null;
             }
@@ -403,11 +614,12 @@ class MenuBarUI {
     }
     
     /**
-     * Close all open submenus
+     * Close all open submenus within a dropdown menu
+     * @param {HTMLElement} menu - The dropdown menu container
      */
-    closeAllSubmenus() {
+    closeAllSubmenus(menu) {
         this.cancelSubmenuClose();
-        const submenus = this.dropdownMenu?.querySelectorAll('.dropdown-submenu');
+        const submenus = menu?.querySelectorAll('.dropdown-submenu');
         submenus?.forEach(submenu => {
             submenu.classList.add('hidden');
             submenu.parentElement?.classList.remove('submenu-open');
@@ -461,184 +673,8 @@ class MenuBarUI {
     }
     
     // ========================================
-    // Arrangements Submenu
+    // Arrangements: Selection, Save, Delete
     // ========================================
-    
-    /**
-     * Populate the arrangements submenu
-     * @param {HTMLElement} submenu - Submenu element
-     * @param {Object} song - Song object
-     */
-    async populateArrangementsSubmenu(submenu, song) {
-        submenu.innerHTML = '';
-        
-        // Show loading
-        submenu.appendChild(this.createLoadingIndicator());
-        
-        try {
-            // Fetch arrangements from API (with cache)
-            const arrangements = await this.fetchArrangements(song.songName);
-            
-            submenu.innerHTML = '';
-            
-            const currentArrName = State.getCurrentArrangementDisplayName();
-            const arrModified = State.isArrangementModified();
-            
-            // "Original (Full Song)" option at the top
-            const originalItem = this.createMenuItem('Original (Full Song)', () => this.selectOriginalArrangement(song));
-            if (!currentArrName || currentArrName === 'Original') {
-                originalItem.classList.add('active');
-                const checkmark = originalItem.querySelector('.checkmark');
-                if (checkmark) checkmark.classList.remove('hidden');
-            }
-            submenu.appendChild(originalItem);
-            
-            // List of saved arrangements
-            if (arrangements.length > 0) {
-                submenu.appendChild(this.createDivider());
-                
-                arrangements.forEach(name => {
-                    const item = this.createMenuItem(name, () => this.selectArrangement(song, name));
-                    if (currentArrName === name) {
-                        item.classList.add('active');
-                        const checkmark = item.querySelector('.checkmark');
-                        if (checkmark) checkmark.classList.remove('hidden');
-                    }
-                    submenu.appendChild(item);
-                });
-            } else {
-                // Show empty state when no saved arrangements
-                submenu.appendChild(this.createDivider());
-                submenu.appendChild(this.createEmptyState('No saved arrangements'));
-            }
-            
-            // Divider and actions
-            submenu.appendChild(this.createDivider());
-            
-            // Save option (enabled if modified and has a name)
-            const saveItem = this.createMenuItem('Save', () => this.saveCurrentArrangement(song), false);
-            if (!arrModified || !currentArrName || currentArrName === 'Original') {
-                saveItem.classList.add('disabled');
-            }
-            submenu.appendChild(saveItem);
-            
-            // Save As option
-            const saveAsItem = this.createMenuItem('Save As...', () => this.saveArrangementAs(song), false);
-            submenu.appendChild(saveAsItem);
-            
-            // Only show Delete if there are arrangements
-            if (arrangements.length > 0) {
-                submenu.appendChild(this.createDivider());
-                
-                // Delete submenu
-                const deleteItem = this.createNestedSubmenuItem('Delete', 'arr-delete-submenu', async (nestedSubmenu) => {
-                    await this.populateDeleteArrangementsSubmenu(nestedSubmenu, song, arrangements);
-                });
-                submenu.appendChild(deleteItem);
-            }
-            
-        } catch (error) {
-            console.error('Failed to load arrangements:', error);
-            submenu.innerHTML = '';
-            submenu.appendChild(this.createEmptyState('Failed to load'));
-        }
-    }
-    
-    /**
-     * Create a nested submenu item (for Edit/Delete submenus)
-     * @param {string} label - Item label
-     * @param {string} submenuId - Submenu identifier
-     * @param {Function} populateFn - Function to populate the nested submenu
-     * @returns {HTMLElement}
-     */
-    createNestedSubmenuItem(label, submenuId, populateFn) {
-        const item = document.createElement('div');
-        item.className = 'dropdown-item has-submenu';
-        item.dataset.submenu = submenuId;
-        
-        // Label first, then arrow on right side since submenu opens to the right
-        const labelSpan = document.createElement('span');
-        labelSpan.textContent = label;
-        item.appendChild(labelSpan);
-        
-        const arrow = document.createElement('span');
-        arrow.className = 'submenu-arrow';
-        arrow.textContent = '\u25B6';
-        item.appendChild(arrow);
-        
-        // Create nested submenu container
-        const nestedSubmenu = document.createElement('div');
-        nestedSubmenu.className = 'dropdown-submenu hidden';
-        nestedSubmenu.id = submenuId;
-        item.appendChild(nestedSubmenu);
-        
-        let populated = false;
-        
-        // Click handler for mobile support
-        item.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            
-            // Toggle submenu
-            if (nestedSubmenu.classList.contains('hidden')) {
-                this.cancelSubmenuClose();
-                nestedSubmenu.classList.remove('hidden');
-                item.classList.add('submenu-open');
-                this.positionSubmenu(item, nestedSubmenu);
-                
-                if (!populated) {
-                    await populateFn(nestedSubmenu);
-                    populated = true;
-                }
-            } else {
-                nestedSubmenu.classList.add('hidden');
-                item.classList.remove('submenu-open');
-            }
-        });
-        
-        // Hover handlers for desktop
-        item.addEventListener('mouseenter', async () => {
-            this.cancelSubmenuClose();
-            nestedSubmenu.classList.remove('hidden');
-            item.classList.add('submenu-open');
-            this.positionSubmenu(item, nestedSubmenu);
-            
-            if (!populated) {
-                await populateFn(nestedSubmenu);
-                populated = true;
-            }
-        });
-        
-        item.addEventListener('mouseleave', (e) => {
-            if (nestedSubmenu.contains(e.relatedTarget)) return;
-            this.scheduleNestedSubmenuClose(nestedSubmenu, item);
-        });
-        
-        nestedSubmenu.addEventListener('mouseenter', () => {
-            this.cancelSubmenuClose();
-        });
-        
-        nestedSubmenu.addEventListener('mouseleave', (e) => {
-            if (item.contains(e.relatedTarget)) return;
-            this.scheduleNestedSubmenuClose(nestedSubmenu, item);
-        });
-        
-        // Prevent clicks inside nested submenu from closing it
-        nestedSubmenu.addEventListener('click', (e) => {
-            e.stopPropagation();
-        });
-        
-        return item;
-    }
-    
-    /**
-     * Schedule nested submenu close
-     */
-    scheduleNestedSubmenuClose(submenu, parentItem) {
-        this.submenuTimeout = setTimeout(() => {
-            submenu.classList.add('hidden');
-            parentItem.classList.remove('submenu-open');
-        }, 150);
-    }
     
     /**
      * Populate delete arrangements submenu
@@ -675,7 +711,6 @@ class MenuBarUI {
      * Select Original arrangement (with unsaved changes check)
      */
     async selectOriginalArrangement(song) {
-        // Check for unsaved arrangement changes first
         if (State.hasUnsavedArrangementChanges()) {
             const currentName = State.getCurrentArrangementDisplayName() || 'Original';
             const modal = getModal();
@@ -685,27 +720,23 @@ class MenuBarUI {
             if (result === 'save') {
                 await this.saveCurrentArrangement(song);
             }
-            // 'discard' - continue
         }
         
-        // Reset to original (full song, no splits)
         State.initializeOriginalArrangement();
         State.setArrangementModified(false);
-        // Clear current arrangement name/id - these need to be set in state
         const activeSong = State.getActiveSong();
         if (activeSong) {
             activeSong.currentArrangementId = null;
             activeSong.currentArrangementName = null;
             activeSong.currentArrangementProtected = false;
         }
-        this.updateDropdownButtonText(song);
+        this.updateArrangementButtonText(song);
     }
     
     /**
      * Select a saved arrangement (with unsaved changes check)
      */
     async selectArrangement(song, name) {
-        // Check for unsaved arrangement changes first
         if (State.hasUnsavedArrangementChanges()) {
             const currentName = State.getCurrentArrangementDisplayName() || 'Original';
             const modal = getModal();
@@ -715,17 +746,14 @@ class MenuBarUI {
             if (result === 'save') {
                 await this.saveCurrentArrangement(song);
             }
-            // 'discard' - continue
         }
         
         try {
             const arrangement = await getArrangement(song.songName, name);
             
-            // Apply arrangement sections to state
             State.setArrangementSections(arrangement.sections, false);
             State.setArrangementModified(false);
             
-            // Set current arrangement info
             const activeSong = State.getActiveSong();
             if (activeSong) {
                 activeSong.currentArrangementId = name;
@@ -733,7 +761,7 @@ class MenuBarUI {
                 activeSong.currentArrangementProtected = arrangement.protected || false;
             }
             
-            this.updateDropdownButtonText(song);
+            this.updateArrangementButtonText(song);
         } catch (error) {
             console.error('Failed to load arrangement:', error);
             const modal = getModal();
@@ -753,7 +781,6 @@ class MenuBarUI {
         
         const currentlyProtected = State.getCurrentArrangementProtected();
         
-        // Show save dialog with protection option
         const dialogResult = await this.showSaveCurrentDialog('arrangement', currentlyProtected);
         if (!dialogResult) return;
         
@@ -769,7 +796,7 @@ class MenuBarUI {
             State.setArrangementModified(false);
             State.setCurrentArrangementProtected(isProtected);
             this.invalidateArrangementCache(song.songName);
-            this.updateDropdownButtonText(song);
+            this.updateArrangementButtonText(song);
         } catch (error) {
             console.error('Failed to save arrangement:', error);
             const modal = getModal();
@@ -787,7 +814,7 @@ class MenuBarUI {
      * Save arrangement as new name
      */
     async saveArrangementAs(song) {
-        this.closeDropdown();
+        this.closeArrangementDropdown();
         
         const result = await this.showSaveDialog('arrangement', song);
         if (!result) return;
@@ -801,7 +828,6 @@ class MenuBarUI {
             
             await saveArrangement(song.songName, name, data);
             
-            // Update current arrangement info
             const activeSong = State.getActiveSong();
             if (activeSong) {
                 activeSong.currentArrangementId = name;
@@ -811,7 +837,7 @@ class MenuBarUI {
             
             State.setArrangementModified(false);
             this.invalidateArrangementCache(song.songName);
-            this.updateDropdownButtonText(song);
+            this.updateArrangementButtonText(song);
         } catch (error) {
             console.error('Failed to save arrangement:', error);
             const modal = getModal();
@@ -829,11 +855,10 @@ class MenuBarUI {
      * Delete arrangement with confirmation
      */
     async deleteArrangementWithConfirm(song, name) {
-        this.closeDropdown();
+        this.closeArrangementDropdown();
         
         const modal = getModal();
         
-        // First check if protected
         let arrangement;
         try {
             arrangement = await getArrangement(song.songName, name);
@@ -848,7 +873,7 @@ class MenuBarUI {
         let secret = null;
         if (arrangement.protected) {
             secret = await this.promptForSecret('Delete Protected Arrangement');
-            if (!secret) return; // User cancelled
+            if (!secret) return;
         }
         
         const confirmed = await modal.confirm({
@@ -864,7 +889,6 @@ class MenuBarUI {
             await deleteArrangement(song.songName, name, secret);
             this.invalidateArrangementCache(song.songName);
             
-            // If deleted the current arrangement, reset to Original
             if (State.getCurrentArrangementDisplayName() === name) {
                 this.selectOriginalArrangement(song);
             }
@@ -892,88 +916,8 @@ class MenuBarUI {
     }
     
     // ========================================
-    // Mutes Submenu
+    // Mutes: Selection, Save, Delete
     // ========================================
-    
-    /**
-     * Populate the mutes submenu
-     * @param {HTMLElement} submenu - Submenu element
-     * @param {Object} song - Song object
-     */
-    async populateMutesSubmenu(submenu, song) {
-        submenu.innerHTML = '';
-        
-        // Show loading
-        submenu.appendChild(this.createLoadingIndicator());
-        
-        try {
-            // Fetch mute sets from API (with cache)
-            const muteSets = await this.fetchMuteSets(song.songName);
-            
-            submenu.innerHTML = '';
-            
-            const currentMuteName = State.getCurrentMuteSetDisplayName();
-            const muteModified = State.isMuteSetModified();
-            
-            // "None" option at the top
-            const noneItem = this.createMenuItem('None (All Unmuted)', () => this.selectNoneMuteSet(song));
-            if (!currentMuteName || currentMuteName === 'None') {
-                noneItem.classList.add('active');
-                const checkmark = noneItem.querySelector('.checkmark');
-                if (checkmark) checkmark.classList.remove('hidden');
-            }
-            submenu.appendChild(noneItem);
-            
-            // List of mute sets
-            if (muteSets.length > 0) {
-                submenu.appendChild(this.createDivider());
-                
-                muteSets.forEach(name => {
-                    const item = this.createMenuItem(name, () => this.selectMuteSet(song, name));
-                    if (currentMuteName === name) {
-                        item.classList.add('active');
-                        const checkmark = item.querySelector('.checkmark');
-                        if (checkmark) checkmark.classList.remove('hidden');
-                    }
-                    submenu.appendChild(item);
-                });
-            } else {
-                // Show empty state when no saved mute sets
-                submenu.appendChild(this.createDivider());
-                submenu.appendChild(this.createEmptyState('No saved mute sets'));
-            }
-            
-            // Divider and actions
-            submenu.appendChild(this.createDivider());
-            
-            // Save option (enabled if modified and has a name)
-            const saveItem = this.createMenuItem('Save', () => this.saveCurrentMuteSet(song), false);
-            if (!muteModified || !currentMuteName || currentMuteName === 'None') {
-                saveItem.classList.add('disabled');
-            }
-            submenu.appendChild(saveItem);
-            
-            // Save As option
-            const saveAsItem = this.createMenuItem('Save As...', () => this.saveMuteSetAs(song), false);
-            submenu.appendChild(saveAsItem);
-            
-            // Only show Delete if there are mute sets
-            if (muteSets.length > 0) {
-                submenu.appendChild(this.createDivider());
-                
-                // Delete submenu
-                const deleteItem = this.createNestedSubmenuItem('Delete', 'mute-delete-submenu', async (nestedSubmenu) => {
-                    await this.populateDeleteMuteSetsSubmenu(nestedSubmenu, song, muteSets);
-                });
-                submenu.appendChild(deleteItem);
-            }
-            
-        } catch (error) {
-            console.error('Failed to load mute sets:', error);
-            submenu.innerHTML = '';
-            submenu.appendChild(this.createEmptyState('Failed to load'));
-        }
-    }
     
     /**
      * Populate delete mute sets submenu
@@ -1007,7 +951,6 @@ class MenuBarUI {
      * Select None (clear mutes) (with unsaved changes check)
      */
     async selectNoneMuteSet(song) {
-        // Check for unsaved mute set changes first
         if (State.hasUnsavedMuteChanges()) {
             const currentName = State.getCurrentMuteSetDisplayName() || 'None';
             const modal = getModal();
@@ -1017,14 +960,11 @@ class MenuBarUI {
             if (result === 'save') {
                 await this.saveCurrentMuteSet(song);
             }
-            // 'discard' - continue
         }
         
-        // Reset all mute sections to default unmuted state
         State.resetAllMuteSections();
         State.setMuteSetModified(false);
         
-        // Clear current mute set info
         const activeSong = State.getActiveSong();
         if (activeSong) {
             activeSong.currentMuteSetId = null;
@@ -1032,14 +972,13 @@ class MenuBarUI {
             activeSong.currentMuteSetProtected = false;
         }
         
-        this.updateDropdownButtonText(song);
+        this.updateMuteButtonText(song);
     }
     
     /**
      * Select a saved mute set (with unsaved changes check)
      */
     async selectMuteSet(song, name) {
-        // Check for unsaved mute set changes first
         if (State.hasUnsavedMuteChanges()) {
             const currentName = State.getCurrentMuteSetDisplayName() || 'None';
             const modal = getModal();
@@ -1049,17 +988,14 @@ class MenuBarUI {
             if (result === 'save') {
                 await this.saveCurrentMuteSet(song);
             }
-            // 'discard' - continue
         }
         
         try {
             const muteSet = await getMuteSet(song.songName, name);
             
-            // Apply mute sections to state - need to map filenames to track IDs
             this.applyMuteSetToState(song, muteSet);
             State.setMuteSetModified(false);
             
-            // Set current mute set info
             const activeSong = State.getActiveSong();
             if (activeSong) {
                 activeSong.currentMuteSetId = name;
@@ -1067,7 +1003,7 @@ class MenuBarUI {
                 activeSong.currentMuteSetProtected = muteSet.protected || false;
             }
             
-            this.updateDropdownButtonText(song);
+            this.updateMuteButtonText(song);
         } catch (error) {
             console.error('Failed to load mute set:', error);
             const modal = getModal();
@@ -1085,10 +1021,8 @@ class MenuBarUI {
         const activeSong = State.getActiveSong();
         if (!activeSong) return;
         
-        // Initialize muteSections object (without emitting event)
         activeSong.muteSections = {};
         
-        // Set default unmuted section for all tracks
         activeSong.tracks.forEach(track => {
             if (track.duration > 0) {
                 activeSong.muteSections[track.id] = [{
@@ -1099,10 +1033,8 @@ class MenuBarUI {
             }
         });
         
-        // Apply the mute set data (overwriting defaults)
         if (muteSet.tracks) {
             for (const [filename, sections] of Object.entries(muteSet.tracks)) {
-                // Find the track with this filename
                 const track = song.tracks?.find(t => {
                     const parts = t.filePath.split('/');
                     return parts[parts.length - 1] === filename;
@@ -1114,7 +1046,6 @@ class MenuBarUI {
             }
         }
         
-        // Single emit after all data is applied
         State.emit(State.Events.MUTE_SECTIONS_CHANGED, { trackId: null });
     }
     
@@ -1127,7 +1058,6 @@ class MenuBarUI {
         
         const currentlyProtected = State.getCurrentMuteSetProtected();
         
-        // Show save dialog with protection option
         const dialogResult = await this.showSaveCurrentDialog('mute', currentlyProtected);
         if (!dialogResult) return;
         
@@ -1143,7 +1073,7 @@ class MenuBarUI {
             State.setMuteSetModified(false);
             State.setCurrentMuteSetProtected(isProtected);
             this.invalidateMuteSetCache(song.songName);
-            this.updateDropdownButtonText(song);
+            this.updateMuteButtonText(song);
         } catch (error) {
             console.error('Failed to save mute set:', error);
             const modal = getModal();
@@ -1161,7 +1091,7 @@ class MenuBarUI {
      * Save mute set as new name
      */
     async saveMuteSetAs(song) {
-        this.closeDropdown();
+        this.closeMuteDropdown();
         
         const result = await this.showSaveDialog('mute', song);
         if (!result) return;
@@ -1175,7 +1105,6 @@ class MenuBarUI {
             
             await saveMuteSet(song.songName, name, data);
             
-            // Update current mute set info
             const activeSong = State.getActiveSong();
             if (activeSong) {
                 activeSong.currentMuteSetId = name;
@@ -1185,7 +1114,7 @@ class MenuBarUI {
             
             State.setMuteSetModified(false);
             this.invalidateMuteSetCache(song.songName);
-            this.updateDropdownButtonText(song);
+            this.updateMuteButtonText(song);
         } catch (error) {
             console.error('Failed to save mute set:', error);
             const modal = getModal();
@@ -1213,7 +1142,6 @@ class MenuBarUI {
         
         for (const track of activeSong.tracks) {
             const sections = activeSong.muteSections[track.id];
-            // Only include tracks that have at least one muted section
             if (sections && sections.some(s => s.muted)) {
                 const parts = track.filePath.split('/');
                 const filename = parts[parts.length - 1];
@@ -1228,11 +1156,10 @@ class MenuBarUI {
      * Delete mute set with confirmation
      */
     async deleteMuteSetWithConfirm(song, name) {
-        this.closeDropdown();
+        this.closeMuteDropdown();
         
         const modal = getModal();
         
-        // First check if protected
         let muteSet;
         try {
             muteSet = await getMuteSet(song.songName, name);
@@ -1247,7 +1174,7 @@ class MenuBarUI {
         let secret = null;
         if (muteSet.protected) {
             secret = await this.promptForSecret('Delete Protected Mute Set');
-            if (!secret) return; // User cancelled
+            if (!secret) return;
         }
         
         const confirmed = await modal.confirm({
@@ -1263,7 +1190,6 @@ class MenuBarUI {
             await deleteMuteSet(song.songName, name, secret);
             this.invalidateMuteSetCache(song.songName);
             
-            // If deleted the current mute set, reset to None
             if (State.getCurrentMuteSetDisplayName() === name) {
                 this.selectNoneMuteSet(song);
             }
@@ -1331,10 +1257,8 @@ class MenuBarUI {
                 onShow: () => {
                     const nameInput = document.getElementById('save-name-input');
                     
-                    // Focus name input
                     setTimeout(() => nameInput?.focus(), 50);
                     
-                    // Enter key to submit
                     nameInput?.addEventListener('keydown', (e) => {
                         if (e.key === 'Enter') {
                             e.preventDefault();
@@ -1351,18 +1275,15 @@ class MenuBarUI {
                     let isProtected = protectedCheckbox?.checked || false;
                     let secret = undefined;
                     
-                    // Validate name
                     const validation = validateName(name);
                     if (!validation.valid) {
                         if (errorDiv) {
                             errorDiv.textContent = validation.error;
                             errorDiv.classList.remove('hidden');
                         }
-                        // Don't close modal
                         return false;
                     }
                     
-                    // Check for name collision by trying to fetch the existing item
                     try {
                         let existingItem = null;
                         try {
@@ -1370,7 +1291,6 @@ class MenuBarUI {
                                 ? await getArrangement(song.songName, name)
                                 : await getMuteSet(song.songName, name);
                         } catch (fetchError) {
-                            // 404 means item doesn't exist, which is fine
                             if (fetchError.status !== 404) {
                                 throw fetchError;
                             }
@@ -1378,7 +1298,6 @@ class MenuBarUI {
                         
                         if (existingItem) {
                             if (existingItem.protected) {
-                                // Existing item is protected - show overwrite dialog with secret field and protection option
                                 const overwriteResult = await this.showProtectedOverwriteDialog(type, name);
                                 
                                 if (!overwriteResult) {
@@ -1389,7 +1308,6 @@ class MenuBarUI {
                                 secret = overwriteResult.secret;
                                 isProtected = overwriteResult.isProtected;
                             } else {
-                                // Existing item is not protected - simple overwrite confirmation
                                 const overwrite = await modal.confirm({
                                     title: 'Name Already Exists',
                                     message: `<p>A ${type} named "${this.escapeHtml(name)}" already exists.</p><p>Do you want to overwrite it?</p>`,
@@ -1418,9 +1336,9 @@ class MenuBarUI {
     
     /**
      * Show dialog for overwriting a protected item (includes secret input and protection checkbox)
-     * @param {string} type - 'arrangement' or 'muteSet'
+     * @param {string} type - 'arrangement' or 'mute'
      * @param {string} name - Name of the existing item
-     * @returns {Promise<{secret: string, isProtected: boolean}|null>} - Object with secret and protection status, or null if cancelled
+     * @returns {Promise<{secret: string, isProtected: boolean}|null>}
      */
     async showProtectedOverwriteDialog(type, name) {
         const modal = getModal();
@@ -1461,7 +1379,6 @@ class MenuBarUI {
                     const secretInput = document.getElementById('overwrite-secret-input');
                     setTimeout(() => secretInput?.focus(), 50);
                     
-                    // Enter key to submit
                     secretInput?.addEventListener('keydown', (e) => {
                         if (e.key === 'Enter') {
                             e.preventDefault();
@@ -1497,7 +1414,6 @@ class MenuBarUI {
             let content = '';
             
             if (currentlyProtected) {
-                // Currently protected - always require secret
                 content = `
                     <p>This ${typeLabel.toLowerCase()} is protected. Enter the admin secret to save changes.</p>
                     <div class="save-dialog-field save-dialog-checkbox" style="margin: 16px 0;">
@@ -1518,7 +1434,6 @@ class MenuBarUI {
                     </div>
                 `;
             } else {
-                // Not currently protected - no secret needed
                 content = `
                     <div class="save-dialog-field save-dialog-checkbox">
                         <label>
@@ -1569,24 +1484,34 @@ class MenuBarUI {
     // ========================================
     
     /**
-     * Handle refresh button click
+     * Handle arrangement refresh - only invalidates arrangement cache
      */
-    async handleRefresh(song) {
-        // Invalidate caches
+    async handleArrangementRefresh(song) {
         this.invalidateArrangementCache(song.songName);
-        this.invalidateMuteSetCache(song.songName);
+        this.closeArrangementDropdown();
         
-        // Close dropdown - user can reopen to see refreshed data
-        this.closeDropdown();
-        
-        // Update button to show we're refreshing
         this._isRefreshing = true;
-        this.updateDropdownButtonText(song);
+        this.updateArrangementButtonText(song);
         
-        // Brief delay to show refreshing state
         setTimeout(() => {
             this._isRefreshing = false;
-            this.updateDropdownButtonText(song);
+            this.updateArrangementButtonText(song);
+        }, 500);
+    }
+    
+    /**
+     * Handle mute refresh - only invalidates mute set cache
+     */
+    async handleMuteRefresh(song) {
+        this.invalidateMuteSetCache(song.songName);
+        this.closeMuteDropdown();
+        
+        this._isRefreshing = true;
+        this.updateMuteButtonText(song);
+        
+        setTimeout(() => {
+            this._isRefreshing = false;
+            this.updateMuteButtonText(song);
         }, 500);
     }
     
@@ -1595,7 +1520,7 @@ class MenuBarUI {
     // ========================================
     
     /**
-     * Set the refreshing state and update the Refresh option text
+     * Set the refreshing state
      * @param {boolean} isRefreshing - Whether a refresh is in progress
      */
     setRefreshingState(isRefreshing) {

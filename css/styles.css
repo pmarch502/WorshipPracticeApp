@@ -101,7 +101,7 @@ body {
     gap: 4px;
 }
 
-#menu-bar #arrangement-selector {
+#menu-bar .menu-dropdown {
     margin-left: 0;
     padding-right: 0;
 }
@@ -228,8 +228,8 @@ body {
     position: relative;
 }
 
-/* Arrangement/Mute Selector Dropdown in Menu Bar */
-#arrangement-selector {
+/* Arrangement/Mute Selector Dropdowns in Menu Bar */
+.menu-dropdown {
     flex-shrink: 0;
     position: relative;
 }
