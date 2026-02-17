@@ -195,6 +195,58 @@ export const handler = async (event) => {
         }
     }
 
+    // Handle GET /mashups - list all mashups (public, no auth required)
+    if (event.httpMethod === 'GET' && event.resource === '/mashups') {
+        try {
+            return await handleListMashups();
+        } catch (err) {
+            console.error('Error in handleListMashups:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle GET /mashups/{name} - get specific mashup (public, no auth required)
+    if (event.httpMethod === 'GET' && event.resource === '/mashups/{name}') {
+        try {
+            const { name } = event.pathParameters;
+            return await handleGetMashup(decodeURIComponent(name));
+        } catch (err) {
+            console.error('Error in handleGetMashup:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle PUT /mashups/{name} - save mashup
+    if (event.httpMethod === 'PUT' && event.resource === '/mashups/{name}') {
+        try {
+            const { name } = event.pathParameters;
+            const body = JSON.parse(event.body || '{}');
+            return await handleSaveMashup(
+                decodeURIComponent(name),
+                body
+            );
+        } catch (err) {
+            console.error('Error in handleSaveMashup:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
+    // Handle DELETE /mashups/{name} - delete mashup
+    if (event.httpMethod === 'DELETE' && event.resource === '/mashups/{name}') {
+        try {
+            const { name } = event.pathParameters;
+            const body = JSON.parse(event.body || '{}');
+            const { secret } = body;
+            return await handleDeleteMashup(
+                decodeURIComponent(name),
+                secret
+            );
+        } catch (err) {
+            console.error('Error in handleDeleteMashup:', err);
+            return response(500, { error: 'Internal server error', details: err.message });
+        }
+    }
+
     // No matching route
     return response(400, { error: 'Invalid request' });
 };
@@ -853,6 +905,200 @@ async function handleDeleteSetList(name, secret) {
     return response(200, { 
         success: true, 
         message: `Set list '${name}' deleted`
+    });
+}
+
+// ============ Mashup Handlers ============
+
+async function handleListMashups() {
+    console.log('handleListMashups called');
+    
+    const prefix = 'mashups/';
+    
+    try {
+        const command = new ListObjectsV2Command({
+            Bucket: BUCKET,
+            Prefix: prefix
+        });
+        
+        const result = await s3.send(command);
+        
+        // If no Contents, folder doesn't exist or is empty - return empty array
+        if (!result.Contents || result.Contents.length === 0) {
+            return response(200, { mashups: [] });
+        }
+        
+        // Extract mashup names from keys
+        // Key format: mashups/{name}.json
+        const mashups = [];
+        
+        for (const obj of result.Contents) {
+            const key = obj.Key;
+            
+            // Skip if not a .json file
+            if (!key.endsWith('.json')) {
+                continue;
+            }
+            
+            // Extract filename from key
+            const filename = key.slice(prefix.length); // Remove prefix
+            
+            // Skip if empty or contains subdirectories
+            if (!filename || filename.includes('/')) {
+                continue;
+            }
+            
+            // Remove .json extension and URL-decode the name
+            const name = decodeURIComponent(filename.slice(0, -5));
+            mashups.push(name);
+        }
+        
+        // Sort alphabetically
+        mashups.sort((a, b) => a.localeCompare(b));
+        
+        return response(200, { mashups });
+    } catch (err) {
+        console.error('Error listing mashups:', err);
+        return response(500, { error: 'Failed to list mashups', details: err.message });
+    }
+}
+
+async function handleGetMashup(name) {
+    console.log('handleGetMashup called for:', name);
+    
+    const key = `mashups/${name}.json`;
+    
+    try {
+        const command = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(command);
+        const bodyString = await result.Body.transformToString();
+        const mashup = JSON.parse(bodyString);
+        
+        return response(200, mashup);
+    } catch (err) {
+        if (err.name === 'NoSuchKey') {
+            return response(404, { error: `Mashup '${name}' not found` });
+        }
+        console.error('Error getting mashup:', err);
+        return response(500, { error: 'Failed to get mashup', details: err.message });
+    }
+}
+
+async function handleSaveMashup(name, body) {
+    console.log('handleSaveMashup called for:', name);
+    
+    const { entries, protected: isProtected, secret } = body;
+    
+    // Validate required fields
+    if (!entries || !Array.isArray(entries) || entries.length === 0) {
+        return response(400, { error: 'Missing or invalid entries array' });
+    }
+    
+    // Validate each entry
+    for (const entry of entries) {
+        if (!entry.songName || typeof entry.songName !== 'string') {
+            return response(400, { error: 'Each entry must have a songName (string)' });
+        }
+        if (entry.arrangementName !== null && entry.arrangementName !== undefined && typeof entry.arrangementName !== 'string') {
+            return response(400, { error: `Entry '${entry.songName}': arrangementName must be a string or null` });
+        }
+        if (typeof entry.pitch !== 'number' || !Number.isInteger(entry.pitch) || entry.pitch < -6 || entry.pitch > 6) {
+            return response(400, { error: `Entry '${entry.songName}': pitch must be an integer from -6 to 6` });
+        }
+    }
+    
+    const key = `mashups/${name}.json`;
+    
+    // Check if mashup already exists
+    let existingMashup = null;
+    try {
+        const getCommand = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(getCommand);
+        const bodyString = await result.Body.transformToString();
+        existingMashup = JSON.parse(bodyString);
+    } catch (err) {
+        if (err.name !== 'NoSuchKey') {
+            throw err; // Unexpected error
+        }
+        // NoSuchKey means it's a new mashup - that's fine
+    }
+    
+    // If existing mashup is protected, require secret
+    if (existingMashup?.protected) {
+        if (secret !== ADMIN_SECRET) {
+            return response(403, { error: 'This mashup is protected. Valid secret required to overwrite.' });
+        }
+    }
+    
+    // Build the mashup object
+    const now = new Date().toISOString();
+    const mashup = {
+        name: name,
+        entries: entries.map(entry => ({
+            songName: entry.songName,
+            arrangementName: entry.arrangementName || null,
+            pitch: entry.pitch
+        })),
+        protected: isProtected || false,
+        createdAt: existingMashup?.createdAt || now,
+        modifiedAt: now
+    };
+    
+    // Save to S3
+    const putCommand = new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+        Body: JSON.stringify(mashup, null, '\t'),
+        ContentType: 'application/json'
+    });
+    await s3.send(putCommand);
+    
+    // Invalidate CloudFront cache
+    await invalidateCache(`/mashups/${encodeURIComponent(name)}.json`);
+    
+    return response(200, { 
+        success: true, 
+        message: existingMashup ? `Mashup '${name}' updated` : `Mashup '${name}' created`,
+        mashup: mashup
+    });
+}
+
+async function handleDeleteMashup(name, secret) {
+    console.log('handleDeleteMashup called for:', name);
+    
+    const key = `mashups/${name}.json`;
+    
+    // First, check if mashup exists and if it's protected
+    let existingMashup = null;
+    try {
+        const getCommand = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+        const result = await s3.send(getCommand);
+        const bodyString = await result.Body.transformToString();
+        existingMashup = JSON.parse(bodyString);
+    } catch (err) {
+        if (err.name === 'NoSuchKey') {
+            return response(404, { error: `Mashup '${name}' not found` });
+        }
+        throw err;
+    }
+    
+    // If mashup is protected, require secret
+    if (existingMashup.protected) {
+        if (secret !== ADMIN_SECRET) {
+            return response(403, { error: 'This mashup is protected. Valid secret required to delete.' });
+        }
+    }
+    
+    // Delete from S3
+    const deleteCommand = new DeleteObjectCommand({ Bucket: BUCKET, Key: key });
+    await s3.send(deleteCommand);
+    
+    // Invalidate CloudFront cache
+    await invalidateCache(`/mashups/${encodeURIComponent(name)}.json`);
+    
+    return response(200, { 
+        success: true, 
+        message: `Mashup '${name}' deleted`
     });
 }
 

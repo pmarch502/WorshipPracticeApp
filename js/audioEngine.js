@@ -47,6 +47,7 @@ class AudioEngine {
         // Pre-scheduled event tracking for background tab support
         this.scheduledSkipTimeout = null;   // setTimeout ID for section skip
         this.scheduledLoopTimeout = null;   // setTimeout ID for loop
+        this.scheduledEndTimeout = null;    // setTimeout ID for end-of-song (mashup advance)
         
         // Guard flag to prevent concurrent play() calls
         this.isPlayInProgress = false;
@@ -144,6 +145,10 @@ class AudioEngine {
         if (this.scheduledLoopTimeout) {
             clearTimeout(this.scheduledLoopTimeout);
             this.scheduledLoopTimeout = null;
+        }
+        if (this.scheduledEndTimeout) {
+            clearTimeout(this.scheduledEndTimeout);
+            this.scheduledEndTimeout = null;
         }
     }
 
@@ -289,7 +294,14 @@ class AudioEngine {
         }
         
         if (target === null) {
-            this.stop();
+            // No more enabled sections - check mashup advance or stop
+            import('./mashupController.js').then(({ tryMashupAdvance }) => {
+                tryMashupAdvance().then(advanced => {
+                    if (!advanced) {
+                        this.stop();
+                    }
+                });
+            });
             return;
         }
         
@@ -360,6 +372,31 @@ class AudioEngine {
         } else if (loopInfo) {
             // Only loop needed
             this.scheduleLoop(loopInfo.time, loopInfo.target, currentPosition);
+        }
+        
+        // Schedule end-of-song event for mashup auto-advance (background tab support)
+        // Only if no loop is active (loop takes priority over end-of-song)
+        if (!loopEnabled && song.mashupGroupId) {
+            const maxDuration = State.getMaxDuration();
+            if (currentPosition < maxDuration) {
+                const timeUntilEnd = (maxDuration - currentPosition) / this._speed;
+                const delayMs = timeUntilEnd * 1000;
+                
+                if (delayMs > 0 && delayMs < 600000) { // Cap at 10 minutes
+                    this.scheduledEndTimeout = setTimeout(() => {
+                        this.scheduledEndTimeout = null;
+                        if (this.isPlaying) {
+                            import('./mashupController.js').then(({ tryMashupAdvance }) => {
+                                tryMashupAdvance().then(advanced => {
+                                    if (!advanced) {
+                                        this.stop();
+                                    }
+                                });
+                            });
+                        }
+                    }, delayMs);
+                }
+            }
         }
     }
 
@@ -1009,9 +1046,15 @@ class AudioEngine {
                             this.seek(loopStart);
                             return;
                         }
-                        // No more enabled sections - stop playback
-                        console.log('No more enabled sections, stopping playback');
-                        this.stop();
+                        // No more enabled sections - check mashup advance or stop
+                        console.log('No more enabled sections, checking mashup advance');
+                        import('./mashupController.js').then(({ tryMashupAdvance }) => {
+                            tryMashupAdvance().then(advanced => {
+                                if (!advanced) {
+                                    this.stop();
+                                }
+                            });
+                        });
                         return;
                     }
                 }
@@ -1082,9 +1125,15 @@ class AudioEngine {
                                 targetPosition = nextEnabled.start;
                                 console.log(`Loop start in disabled section, jumping to ${targetPosition.toFixed(3)}s`);
                             } else {
-                                // No enabled section within loop range - stop looping
-                                console.log('No enabled sections within loop range, stopping');
-                                this.stop();
+                                // No enabled section within loop range - check mashup advance or stop
+                                console.log('No enabled sections within loop range, checking mashup advance');
+                                import('./mashupController.js').then(({ tryMashupAdvance }) => {
+                                    tryMashupAdvance().then(advanced => {
+                                        if (!advanced) {
+                                            this.stop();
+                                        }
+                                    });
+                                });
                                 return;
                             }
                         }
@@ -1105,7 +1154,14 @@ class AudioEngine {
             // Check if we've reached the end of the arrangement/song
             const maxDuration = State.getMaxDuration(); // Returns virtual duration for arrangements
             if (virtualPosition >= maxDuration) {
-                this.stop();
+                // Check if this is a mashup entry that should auto-advance
+                import('./mashupController.js').then(({ tryMashupAdvance }) => {
+                    tryMashupAdvance().then(advanced => {
+                        if (!advanced) {
+                            this.stop();
+                        }
+                    });
+                });
                 return;
             }
 
@@ -1126,14 +1182,40 @@ class AudioEngine {
     }
 
     /**
+     * Stop all audio buffer sources without changing playback state.
+     * Used by mashup controller during entry transitions.
+     */
+    stopAllSources() {
+        this.trackNodes.forEach((nodes) => {
+            if (nodes.source) {
+                // Clear onended to prevent checkPlaybackComplete from firing
+                nodes.source.onended = null;
+                try {
+                    nodes.source.stop();
+                } catch (e) {}
+                nodes.source = null;
+            }
+        });
+        this.trackSectionState.clear();
+        this.isInCrossfade = false;
+        this.stopPositionUpdate();
+        this.cancelScheduledEvents();
+    }
+
+    /**
      * Check if all tracks have finished playing
      */
-    checkPlaybackComplete() {
+    async checkPlaybackComplete() {
         const position = this.getCurrentPosition();
         const maxDuration = State.getMaxDuration();
         
         if (position >= maxDuration - 0.1) {
-            this.stop();
+            // Check if this is a mashup entry that should auto-advance
+            const { tryMashupAdvance } = await import('./mashupController.js');
+            const advanced = await tryMashupAdvance();
+            if (!advanced) {
+                this.stop();
+            }
         }
     }
 

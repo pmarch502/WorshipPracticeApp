@@ -165,6 +165,9 @@ export async function closeSong(songId, confirm = false) {
             .catch(err => console.warn('Failed to invalidate song cache:', err));
     }
     
+    // Remove from mashup group if applicable
+    State.removeSongFromMashupGroup(songId);
+    
     // Remove song from state
     State.removeSong(songId);
     

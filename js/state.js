@@ -48,7 +48,10 @@ export function createDefaultSong(songName) {
             mode: 'beats', // 'time' or 'beats'
             zoom: null, // null = auto-fit to window, otherwise zoom multiplier
             offset: 0 // Timeline offset in seconds
-        }
+        },
+        // Mashup group membership
+        mashupGroupId: null,    // null = standalone tab, or a unique group ID
+        mashupIndex: null       // this tab's position in its mashup sequence (0, 1, 2, ...)
     };
 }
 
@@ -110,6 +113,8 @@ const initialState = {
     playbackState: 'stopped', // 'stopped', 'playing', 'paused'
     currentSetListId: null,
     currentSetListName: null,
+    // Mashup groups: { groupId: { tabIds: [songId1, songId2, ...] } }
+    mashupGroups: {},
     ui: {
         selectedTrackId: null,
         isLoading: false,
@@ -903,6 +908,118 @@ export function clearCurrentSetList() {
     emit(Events.SET_LIST_CHANGED, { name: null });
 }
 
+// ========================================
+// Mashup Group State
+// ========================================
+
+/**
+ * Create a new mashup group and return its ID
+ * @param {string[]} tabIds - Ordered array of song IDs in this mashup
+ * @returns {string} The mashup group ID
+ */
+export function createMashupGroup(tabIds) {
+    const groupId = 'mashup_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
+    state.mashupGroups[groupId] = { tabIds: [...tabIds] };
+    
+    // Set mashup membership on each song
+    tabIds.forEach((songId, index) => {
+        const song = getSong(songId);
+        if (song) {
+            song.mashupGroupId = groupId;
+            song.mashupIndex = index;
+        }
+    });
+    
+    return groupId;
+}
+
+/**
+ * Get a mashup group by ID
+ * @param {string} groupId
+ * @returns {Object|null} The group object { tabIds: [...] } or null
+ */
+export function getMashupGroup(groupId) {
+    return state.mashupGroups[groupId] || null;
+}
+
+/**
+ * Get the mashup group for the active song (if any)
+ * @returns {Object|null} { groupId, group: { tabIds }, currentIndex } or null
+ */
+export function getActiveMashupGroup() {
+    const song = getActiveSong();
+    if (!song || !song.mashupGroupId) return null;
+    
+    const group = state.mashupGroups[song.mashupGroupId];
+    if (!group) return null;
+    
+    const currentIndex = group.tabIds.indexOf(song.id);
+    return { groupId: song.mashupGroupId, group, currentIndex };
+}
+
+/**
+ * Get the next song ID in a mashup group after the given song
+ * @param {string} songId - Current song ID
+ * @returns {string|null} Next song ID or null if last/not in a group
+ */
+export function getNextMashupSongId(songId) {
+    const song = getSong(songId);
+    if (!song || !song.mashupGroupId) return null;
+    
+    const group = state.mashupGroups[song.mashupGroupId];
+    if (!group) return null;
+    
+    const currentIndex = group.tabIds.indexOf(songId);
+    if (currentIndex === -1 || currentIndex >= group.tabIds.length - 1) return null;
+    
+    return group.tabIds[currentIndex + 1];
+}
+
+/**
+ * Get the first song ID in a mashup group
+ * @param {string} groupId
+ * @returns {string|null}
+ */
+export function getFirstMashupSongId(groupId) {
+    const group = state.mashupGroups[groupId];
+    if (!group || group.tabIds.length === 0) return null;
+    return group.tabIds[0];
+}
+
+/**
+ * Remove a song from its mashup group (called when a tab is closed)
+ * @param {string} songId
+ */
+export function removeSongFromMashupGroup(songId) {
+    const song = getSong(songId);
+    if (!song || !song.mashupGroupId) return;
+    
+    const groupId = song.mashupGroupId;
+    const group = state.mashupGroups[groupId];
+    if (!group) return;
+    
+    // Remove from tabIds
+    const index = group.tabIds.indexOf(songId);
+    if (index !== -1) {
+        group.tabIds.splice(index, 1);
+    }
+    
+    // Re-index remaining songs
+    group.tabIds.forEach((id, i) => {
+        const s = getSong(id);
+        if (s) s.mashupIndex = i;
+    });
+    
+    // Clear mashup properties on the removed song
+    song.mashupGroupId = null;
+    song.mashupIndex = null;
+    
+    // If group is empty, delete it
+    if (group.tabIds.length === 0) {
+        delete state.mashupGroups[groupId];
+    }
+}
+
 /**
  * Initialize mute sections for a single track with full duration, unmuted
  * @param {string} trackId - Track ID
@@ -1436,6 +1553,10 @@ export function loadState(savedState) {
             delete song.arrangement;
             delete song.virtualSections;
             delete song.virtualDuration;
+            
+            // Mashup group membership is transient - always reset on load
+            song.mashupGroupId = null;
+            song.mashupIndex = null;
         });
     }
     
@@ -1446,6 +1567,9 @@ export function loadState(savedState) {
     if (savedState.currentSetListName === undefined) {
         savedState.currentSetListName = null;
     }
+    
+    // Mashup groups are transient - always start fresh
+    savedState.mashupGroups = {};
     
     Object.assign(state, savedState);
     emit(Events.STATE_LOADED, state);
@@ -1460,6 +1584,8 @@ export function getSerializableState() {
     const serializableSongs = state.songs.map(song => {
         const { 
             beatPositions,  // Derived from tempo/time signature
+            // Mashup group membership is transient, not persisted
+            mashupGroupId, mashupIndex,
             // Legacy properties (should not exist, but ensure cleanup)
             arrangement, virtualSections, virtualDuration,
             ...rest 

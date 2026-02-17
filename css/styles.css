@@ -270,8 +270,10 @@ body {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
+    justify-content: center;
     line-height: 1;
     gap: 1px;
+    min-height: 22px;
 }
 
 .dropdown-btn-label {
@@ -2265,6 +2267,176 @@ select:disabled {
 
 .file-select-item.disabled input[type="checkbox"] {
     cursor: not-allowed;
+}
+
+/* ========================================
+   Mashup Editor Modal
+   ======================================== */
+#modal-dialog.modal-mashup-editor {
+    min-width: 580px;
+    max-width: 720px;
+    width: 90vw;
+}
+
+.mashup-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mashup-editor-load {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.mashup-editor-load label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.mashup-editor-load select {
+    flex: 1;
+    padding: 6px 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.mashup-editor-entries {
+    max-height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mashup-entry-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    border: 1px solid transparent;
+    transition: border-color var(--transition-fast);
+}
+
+.mashup-entry-row:hover {
+    border-color: var(--border-color);
+}
+
+.mashup-entry-row.dragging {
+    opacity: 0.4;
+}
+
+.mashup-entry-drag {
+    cursor: grab;
+    color: var(--text-muted);
+    font-size: 16px;
+    padding: 0 2px;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.mashup-entry-drag:active {
+    cursor: grabbing;
+}
+
+.mashup-entry-num {
+    font-size: 12px;
+    color: var(--text-muted);
+    min-width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.mashup-entry-row select {
+    padding: 5px 6px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    color: var(--text-primary);
+    font-size: 12px;
+}
+
+.mashup-entry-row select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.mashup-entry-song {
+    flex: 3;
+    min-width: 0;
+}
+
+.mashup-entry-arrangement {
+    flex: 2;
+    min-width: 0;
+}
+
+.mashup-entry-pitch {
+    flex: 0 0 80px;
+    min-width: 80px;
+}
+
+.mashup-entry-remove {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 16px;
+    line-height: 1;
+    border-radius: 3px;
+    flex-shrink: 0;
+    transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.mashup-entry-remove:hover {
+    color: var(--accent-danger);
+    background: rgba(255, 107, 107, 0.15);
+}
+
+.mashup-editor-add-btn {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: var(--bg-tertiary);
+    border: 1px dashed var(--border-color);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+    transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.mashup-editor-add-btn:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.mashup-editor-empty {
+    text-align: center;
+    padding: 24px;
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 13px;
+}
+
+.mashup-drop-indicator {
+    height: 2px;
+    background: var(--accent-primary);
+    border-radius: 1px;
+    margin: -3px 0;
+    pointer-events: none;
 }
 
 /* Selection */

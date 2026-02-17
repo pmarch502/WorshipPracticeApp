@@ -331,6 +331,7 @@ class TabsUI {
             this.addTab(song);
         }
         
+        this.applyTabColors();
         this.updateActiveTab();
     }
 
@@ -393,6 +394,41 @@ class TabsUI {
         this.tabElements.forEach((tab, songId) => {
             tab.classList.toggle('active', songId === State.state.activeSongId);
         });
+    }
+
+    /**
+     * Apply colors to all tabs, treating mashup groups as a single color slot.
+     * Standalone songs each get the next color in the cycle (1-6).
+     * All tabs in the same mashup group share one color slot.
+     */
+    applyTabColors() {
+        let colorCounter = 0;
+        const coloredGroups = new Set();
+        
+        for (const song of State.state.songs) {
+            const tab = this.tabElements.get(song.id);
+            if (!tab) continue;
+            
+            if (song.mashupGroupId) {
+                if (!coloredGroups.has(song.mashupGroupId)) {
+                    // First tab of this mashup group — advance color
+                    colorCounter++;
+                    coloredGroups.add(song.mashupGroupId);
+                }
+                // Subsequent tabs of same group reuse the same color
+            } else {
+                // Standalone song — advance color
+                colorCounter++;
+            }
+            
+            const colorIndex = ((colorCounter - 1) % 6) + 1;
+            
+            // Remove existing color classes, apply new one
+            for (let i = 1; i <= 6; i++) {
+                tab.classList.remove(`tab-color-${i}`);
+            }
+            tab.classList.add(`tab-color-${colorIndex}`);
+        }
     }
 
     /**

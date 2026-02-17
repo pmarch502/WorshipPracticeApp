@@ -500,6 +500,143 @@ export async function checkSetListExists(name) {
     return setLists.some(s => s.toLowerCase() === name.toLowerCase());
 }
 
+// ============ Mashup API ============
+
+/**
+ * List all mashups
+ * @returns {Promise<string[]>} - Array of mashup names
+ * @throws {Error} - On network or API errors
+ */
+export async function listMashups() {
+    const response = await fetchWithTimeoutAndRetry(
+        `${API_BASE_URL}/mashups`,
+        {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        const error = new Error(data.error || 'Failed to list mashups');
+        error.status = response.status;
+        error.data = data;
+        throw error;
+    }
+
+    return data.mashups;
+}
+
+/**
+ * Get a specific mashup
+ * @param {string} name - Name of the mashup
+ * @returns {Promise<Object>} - Mashup object with name, entries, protected, createdAt, modifiedAt
+ * @throws {Error} - On network or API errors
+ */
+export async function getMashup(name) {
+    const response = await fetchWithTimeoutAndRetry(
+        `${API_BASE_URL}/mashups/${encodeURIComponent(name)}`,
+        {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        const error = new Error(data.error || 'Failed to get mashup');
+        error.status = response.status;
+        error.data = data;
+        throw error;
+    }
+
+    return data;
+}
+
+/**
+ * Save a mashup (create or update)
+ * @param {string} name - Name of the mashup
+ * @param {Object} data - Mashup data
+ * @param {Array} data.entries - Array of { songName, arrangementName, pitch } objects
+ * @param {boolean} [data.protected=false] - Whether to protect this mashup
+ * @param {string} [data.secret] - Required if overwriting a protected mashup
+ * @returns {Promise<Object>} - Response with success, message, and saved mashup
+ * @throws {Error} - On network or API errors
+ */
+export async function saveMashup(name, data) {
+    const response = await fetchWithTimeoutAndRetry(
+        `${API_BASE_URL}/mashups/${encodeURIComponent(name)}`,
+        {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        }
+    );
+
+    const responseData = await response.json();
+
+    if (!response.ok) {
+        const error = new Error(responseData.error || 'Failed to save mashup');
+        error.status = response.status;
+        error.data = responseData;
+        throw error;
+    }
+
+    return responseData;
+}
+
+/**
+ * Delete a mashup
+ * @param {string} name - Name of the mashup
+ * @param {string} [secret] - Required if deleting a protected mashup
+ * @returns {Promise<Object>} - Response with success and message
+ * @throws {Error} - On network or API errors
+ */
+export async function deleteMashup(name, secret = null) {
+    const body = secret ? { secret } : {};
+    
+    const response = await fetchWithTimeoutAndRetry(
+        `${API_BASE_URL}/mashups/${encodeURIComponent(name)}`,
+        {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        const error = new Error(data.error || 'Failed to delete mashup');
+        error.status = response.status;
+        error.data = data;
+        throw error;
+    }
+
+    return data;
+}
+
+/**
+ * Check if a mashup with the given name already exists
+ * @param {string} name - Name to check
+ * @returns {Promise<boolean>} - True if mashup exists
+ * @throws {Error} - On network or API errors
+ */
+export async function checkMashupExists(name) {
+    const mashups = await listMashups();
+    return mashups.some(m => m.toLowerCase() === name.toLowerCase());
+}
+
 // ============ Validation Utilities ============
 
 /**

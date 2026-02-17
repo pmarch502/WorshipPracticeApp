@@ -22,8 +22,15 @@ import {
     getSetList,
     saveSetList,
     deleteSetList,
+    listMashups,
+    getMashup,
+    saveMashup,
+    deleteMashup,
     validateName
 } from '../api.js';
+import * as Manifest from '../manifest.js';
+import * as Metadata from '../metadata.js';
+import * as TrackManager from '../trackManager.js';
 
 class MenuBarUI {
     constructor() {
@@ -45,16 +52,23 @@ class MenuBarUI {
         this.setlistBtnText = this.setlistBtn?.querySelector('.dropdown-btn-text');
         this.setlistMenu = document.getElementById('setlist-dropdown-menu');
         
+        // Mashup dropdown elements
+        this.mashupSelector = document.getElementById('mashup-selector');
+        this.mashupBtn = document.getElementById('mashup-dropdown-btn');
+        this.mashupMenu = document.getElementById('mashup-dropdown-menu');
+        
         // Dropdown state
         this.isArrangementOpen = false;
         this.isMuteOpen = false;
         this.isSetListOpen = false;
+        this.isMashupOpen = false;
         this._isRefreshing = false;
         
         // Cache for API data
         this.arrangementCache = new Map(); // songName -> { data: string[], timestamp: number }
         this.muteSetCache = new Map(); // songName -> { data: string[], timestamp: number }
         this.setlistCache = null; // { data: string[], timestamp: number } (global, not per-song)
+        this.mashupCache = null; // { data: string[], timestamp: number } (global)
         this.CACHE_TTL = 60000; // 1 minute cache
         
         // Active submenu tracking (for Delete nested submenus)
@@ -83,6 +97,11 @@ class MenuBarUI {
                 !this.setlistBtn?.contains(e.target)) {
                 this.closeSetListDropdown();
             }
+            if (this.isMashupOpen && 
+                !this.mashupMenu?.contains(e.target) && 
+                !this.mashupBtn?.contains(e.target)) {
+                this.closeMashupDropdown();
+            }
         });
 
         // Close dropdowns on Escape
@@ -91,6 +110,7 @@ class MenuBarUI {
                 if (this.isArrangementOpen) this.closeArrangementDropdown();
                 if (this.isMuteOpen) this.closeMuteDropdown();
                 if (this.isSetListOpen) this.closeSetListDropdown();
+                if (this.isMashupOpen) this.closeMashupDropdown();
             }
         });
         
@@ -115,6 +135,14 @@ class MenuBarUI {
             this.setlistBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.toggleSetListDropdown();
+            });
+        }
+        
+        // Mashup dropdown button click
+        if (this.mashupBtn) {
+            this.mashupBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleMashupDropdown();
             });
         }
     }
@@ -192,6 +220,7 @@ class MenuBarUI {
         // Close other dropdowns if open
         if (this.isMuteOpen) this.closeMuteDropdown();
         if (this.isSetListOpen) this.closeSetListDropdown();
+        if (this.isMashupOpen) this.closeMashupDropdown();
         
         this.isArrangementOpen = true;
         this.arrangementBtn?.classList.add('open');
@@ -226,6 +255,7 @@ class MenuBarUI {
         // Close other dropdowns if open
         if (this.isArrangementOpen) this.closeArrangementDropdown();
         if (this.isSetListOpen) this.closeSetListDropdown();
+        if (this.isMashupOpen) this.closeMashupDropdown();
         
         this.isMuteOpen = true;
         this.muteBtn?.classList.add('open');
@@ -249,6 +279,7 @@ class MenuBarUI {
         if (this.isArrangementOpen) this.closeArrangementDropdown();
         if (this.isMuteOpen) this.closeMuteDropdown();
         if (this.isSetListOpen) this.closeSetListDropdown();
+        if (this.isMashupOpen) this.closeMashupDropdown();
     }
 
     // ========================================
@@ -1280,6 +1311,7 @@ class MenuBarUI {
         // Close other dropdowns if open
         if (this.isArrangementOpen) this.closeArrangementDropdown();
         if (this.isMuteOpen) this.closeMuteDropdown();
+        if (this.isMashupOpen) this.closeMashupDropdown();
         
         this.isSetListOpen = true;
         this.setlistBtn?.classList.add('open');
@@ -2158,6 +2190,862 @@ class MenuBarUI {
         });
     }
     
+    // ========================================
+    // Mashup Dropdown
+    // ========================================
+    
+    toggleMashupDropdown() {
+        if (this.isMashupOpen) {
+            this.closeMashupDropdown();
+        } else {
+            this.openMashupDropdown();
+        }
+    }
+    
+    openMashupDropdown() {
+        if (!this.mashupMenu) return;
+        
+        // Close other dropdowns if open
+        if (this.isArrangementOpen) this.closeArrangementDropdown();
+        if (this.isMuteOpen) this.closeMuteDropdown();
+        if (this.isSetListOpen) this.closeSetListDropdown();
+        
+        this.isMashupOpen = true;
+        this.mashupBtn?.classList.add('open');
+        this.mashupMenu.classList.remove('hidden');
+        
+        this.renderMashupMenu();
+    }
+    
+    closeMashupDropdown() {
+        this.isMashupOpen = false;
+        this.mashupBtn?.classList.remove('open');
+        this.mashupMenu?.classList.add('hidden');
+        this.closeAllSubmenus(this.mashupMenu);
+    }
+
+    // ========================================
+    // Mashup Menu Rendering
+    // ========================================
+    
+    async renderMashupMenu() {
+        if (!this.mashupMenu) return;
+        
+        this.mashupMenu.innerHTML = '';
+        
+        // Open submenu
+        const openItem = this.createNestedSubmenuItem('Open', 'mashup-open-submenu', async (submenu) => {
+            submenu.innerHTML = '';
+            submenu.appendChild(this.createLoadingIndicator());
+            
+            try {
+                const mashups = await this.fetchMashups();
+                submenu.innerHTML = '';
+                
+                if (mashups.length === 0) {
+                    submenu.appendChild(this.createEmptyState('No mashups saved'));
+                    return;
+                }
+                
+                for (const name of mashups) {
+                    const item = document.createElement('div');
+                    item.className = 'dropdown-item';
+                    item.textContent = name;
+                    item.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.closeAllDropdowns();
+                        this.openMashup(name);
+                    });
+                    submenu.appendChild(item);
+                }
+            } catch (error) {
+                submenu.innerHTML = '';
+                submenu.appendChild(this.createEmptyState('Failed to load'));
+            }
+        });
+        this.mashupMenu.appendChild(openItem);
+        
+        this.mashupMenu.appendChild(this.createDivider());
+        
+        // New mashup
+        const newItem = this.createMenuItem('New...', () => {
+            this.showMashupEditor(null);
+        }, false);
+        this.mashupMenu.appendChild(newItem);
+        
+        // Edit mashup
+        const editItem = this.createMenuItem('Edit...', () => {
+            this.showMashupEditor('edit');
+        }, false);
+        this.mashupMenu.appendChild(editItem);
+        
+        this.mashupMenu.appendChild(this.createDivider());
+        
+        // Delete submenu
+        const deleteItem = this.createNestedSubmenuItem('Delete', 'mashup-delete-submenu', async (submenu) => {
+            submenu.innerHTML = '';
+            submenu.appendChild(this.createLoadingIndicator());
+            
+            try {
+                const mashups = await this.fetchMashups();
+                submenu.innerHTML = '';
+                
+                if (mashups.length === 0) {
+                    submenu.appendChild(this.createEmptyState('No mashups saved'));
+                    return;
+                }
+                
+                for (const name of mashups) {
+                    const item = document.createElement('div');
+                    item.className = 'dropdown-item';
+                    item.textContent = name;
+                    item.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.closeAllDropdowns();
+                        this.deleteMashupWithConfirm(name);
+                    });
+                    submenu.appendChild(item);
+                }
+            } catch (error) {
+                submenu.innerHTML = '';
+                submenu.appendChild(this.createEmptyState('Failed to load'));
+            }
+        });
+        this.mashupMenu.appendChild(deleteItem);
+    }
+    
+    // ========================================
+    // Mashup API Helpers
+    // ========================================
+    
+    async fetchMashups() {
+        if (this.mashupCache && (Date.now() - this.mashupCache.timestamp < this.CACHE_TTL)) {
+            return this.mashupCache.data;
+        }
+        
+        const mashups = await listMashups();
+        this.mashupCache = { data: mashups, timestamp: Date.now() };
+        return mashups;
+    }
+    
+    invalidateMashupCache() {
+        this.mashupCache = null;
+    }
+    
+    // ========================================
+    // Mashup Delete
+    // ========================================
+    
+    async deleteMashupWithConfirm(name) {
+        const modal = getModal();
+        
+        let mashupData;
+        try {
+            mashupData = await getMashup(name);
+        } catch (error) {
+            await modal.alert({
+                title: 'Error',
+                message: `Failed to load mashup: ${error.message}`
+            });
+            return;
+        }
+        
+        let secret = null;
+        if (mashupData.protected) {
+            secret = await this.promptForSecret('Delete Protected Mashup');
+            if (!secret) return;
+        }
+        
+        const confirmed = await modal.confirm({
+            title: 'Delete Mashup',
+            message: `<p>Delete mashup "<strong>${this.escapeHtml(name)}</strong>"?</p><p>This cannot be undone.</p>`,
+            confirmText: 'Delete',
+            confirmClass: 'btn-danger'
+        });
+        
+        if (!confirmed) return;
+        
+        try {
+            await deleteMashup(name, secret);
+            this.invalidateMashupCache();
+        } catch (error) {
+            console.error('Failed to delete mashup:', error);
+            if (error.status === 403) {
+                await modal.alert({
+                    title: 'Invalid Secret',
+                    message: 'The admin secret is incorrect.'
+                });
+            } else {
+                await modal.alert({
+                    title: 'Error',
+                    message: `Failed to delete mashup: ${error.message}`
+                });
+            }
+        }
+    }
+    
+    // ========================================
+    // Mashup Editor Modal
+    // ========================================
+    
+    /**
+     * Show the mashup editor modal
+     * @param {string|null} mode - null for new, 'edit' for edit mode
+     */
+    async showMashupEditor(mode) {
+        const modal = getModal();
+        const isEditMode = mode === 'edit';
+        
+        // Load songs list from manifest
+        await Manifest.loadManifest();
+        const allSongs = Manifest.getSongs();
+        
+        // Build song options HTML
+        const songOptionsHtml = allSongs.map(s => 
+            `<option value="${this.escapeHtml(s.name)}">${this.escapeHtml(s.name)}</option>`
+        ).join('');
+        
+        // Pitch options HTML
+        const pitchOptionsHtml = this._buildPitchOptionsHtml();
+        
+        // Build the load dropdown for edit mode
+        const loadDropdownHtml = isEditMode ? `
+            <div class="mashup-editor-load">
+                <label for="mashup-load-select">Load:</label>
+                <select id="mashup-load-select">
+                    <option value="">-- Select a mashup --</option>
+                </select>
+            </div>
+        ` : '';
+        
+        const content = `
+            <div class="mashup-editor">
+                ${loadDropdownHtml}
+                <div class="save-dialog-field">
+                    <label for="mashup-name-input">Name</label>
+                    <input type="text" id="mashup-name-input" placeholder="Enter mashup name..." maxlength="100">
+                    <div id="mashup-name-error" class="save-dialog-error hidden"></div>
+                </div>
+                <div class="save-dialog-field save-dialog-checkbox">
+                    <label>
+                        <input type="checkbox" id="mashup-protected-checkbox">
+                        Mark as protected
+                    </label>
+                </div>
+                <div id="mashup-entries-container" class="mashup-editor-entries">
+                    <div class="mashup-editor-empty">Click "+ Add Entry" to add songs</div>
+                </div>
+                <button type="button" id="mashup-add-entry-btn" class="mashup-editor-add-btn">+ Add Entry</button>
+            </div>
+        `;
+        
+        // Track the loaded mashup name for Save vs Save As
+        let loadedMashupName = null;
+        let loadedMashupProtected = false;
+        
+        // Store references for reuse
+        const editorState = {
+            songOptionsHtml,
+            pitchOptionsHtml,
+            allSongs,
+            metadataCache: {} // songName -> metadata
+        };
+        
+        return new Promise((resolve) => {
+            modal.show({
+                title: isEditMode ? 'Edit Mashup' : 'New Mashup',
+                content: content,
+                confirmText: isEditMode ? 'Save' : 'Save As...',
+                cancelText: 'Cancel',
+                confirmClass: 'btn-primary',
+                showCancel: true,
+                modalClass: 'modal-mashup-editor',
+                onShow: async () => {
+                    const container = document.getElementById('mashup-entries-container');
+                    const addBtn = document.getElementById('mashup-add-entry-btn');
+                    const nameInput = document.getElementById('mashup-name-input');
+                    const dialog = document.getElementById('modal-dialog');
+                    
+                    dialog?.classList.add('modal-mashup-editor');
+                    
+                    // Add entry button
+                    addBtn?.addEventListener('click', () => {
+                        this._addMashupEntryRow(container, editorState);
+                    });
+                    
+                    // Initialize drag-and-drop on the entries container
+                    this._initMashupEntryDragDrop(container);
+                    
+                    // If edit mode, populate the load dropdown
+                    if (isEditMode) {
+                        const loadSelect = document.getElementById('mashup-load-select');
+                        if (loadSelect) {
+                            try {
+                                const mashups = await this.fetchMashups();
+                                for (const name of mashups) {
+                                    const opt = document.createElement('option');
+                                    opt.value = name;
+                                    opt.textContent = name;
+                                    loadSelect.appendChild(opt);
+                                }
+                            } catch (err) {
+                                console.error('Failed to load mashup list:', err);
+                            }
+                            
+                            loadSelect.addEventListener('change', async () => {
+                                const selectedName = loadSelect.value;
+                                if (!selectedName) return;
+                                
+                                try {
+                                    const mashupData = await getMashup(selectedName);
+                                    loadedMashupName = selectedName;
+                                    loadedMashupProtected = mashupData.protected || false;
+                                    
+                                    // Populate form
+                                    nameInput.value = mashupData.name || selectedName;
+                                    document.getElementById('mashup-protected-checkbox').checked = mashupData.protected || false;
+                                    
+                                    // Clear entries and add from mashup data
+                                    container.innerHTML = '';
+                                    for (const entry of mashupData.entries) {
+                                        this._addMashupEntryRow(container, editorState, entry);
+                                    }
+                                    
+                                    // Update button text
+                                    const confirmBtn = document.getElementById('modal-confirm');
+                                    if (confirmBtn) confirmBtn.textContent = 'Save';
+                                } catch (err) {
+                                    console.error('Failed to load mashup:', err);
+                                    const errModal = getModal();
+                                    await errModal.alert({
+                                        title: 'Error',
+                                        message: `Failed to load mashup: ${err.message}`
+                                    });
+                                }
+                            });
+                        }
+                    }
+                    
+                    // Add an initial empty entry for new mashups
+                    if (!isEditMode) {
+                        this._addMashupEntryRow(container, editorState);
+                        setTimeout(() => nameInput?.focus(), 50);
+                    }
+                },
+                onConfirm: async () => {
+                    const nameInput = document.getElementById('mashup-name-input');
+                    const protectedCheckbox = document.getElementById('mashup-protected-checkbox');
+                    const errorDiv = document.getElementById('mashup-name-error');
+                    const container = document.getElementById('mashup-entries-container');
+                    
+                    // Gather entries
+                    const entries = this._gatherMashupEntries(container);
+                    
+                    if (entries.length === 0) {
+                        if (errorDiv) {
+                            errorDiv.textContent = 'At least one entry with a song is required';
+                            errorDiv.classList.remove('hidden');
+                        }
+                        return false;
+                    }
+                    
+                    const isProtected = protectedCheckbox?.checked || false;
+                    
+                    // If this is a Save (not Save As) on a loaded mashup
+                    if (isEditMode && loadedMashupName) {
+                        const name = nameInput?.value?.trim() || loadedMashupName;
+                        
+                        // If name changed, treat as Save As
+                        if (name !== loadedMashupName) {
+                            return await this._handleMashupSaveAs(name, entries, isProtected, errorDiv, resolve);
+                        }
+                        
+                        // Save (overwrite)
+                        try {
+                            let secret = undefined;
+                            if (loadedMashupProtected) {
+                                secret = await this.promptForSecret('Save Protected Mashup');
+                                if (!secret) return false;
+                            }
+                            
+                            await saveMashup(name, { entries, protected: isProtected, secret });
+                            this.invalidateMashupCache();
+                            const dlg = document.getElementById('modal-dialog');
+                            dlg?.classList.remove('modal-mashup-editor');
+                            resolve({ name, entries });
+                            return; // close modal
+                        } catch (error) {
+                            console.error('Failed to save mashup:', error);
+                            if (error.status === 403) {
+                                if (errorDiv) {
+                                    errorDiv.textContent = 'Invalid admin secret';
+                                    errorDiv.classList.remove('hidden');
+                                }
+                            } else {
+                                if (errorDiv) {
+                                    errorDiv.textContent = `Save failed: ${error.message}`;
+                                    errorDiv.classList.remove('hidden');
+                                }
+                            }
+                            return false;
+                        }
+                    }
+                    
+                    // Save As flow (for new mashups or when name changed)
+                    const name = nameInput?.value?.trim() || '';
+                    return await this._handleMashupSaveAs(name, entries, isProtected, errorDiv, resolve);
+                },
+                onCancel: () => {
+                    const dialog = document.getElementById('modal-dialog');
+                    dialog?.classList.remove('modal-mashup-editor');
+                    resolve(null);
+                }
+            });
+        });
+    }
+    
+    /**
+     * Handle the Save As flow for mashups
+     */
+    async _handleMashupSaveAs(name, entries, isProtected, errorDiv, resolve) {
+        const validation = validateName(name);
+        if (!validation.valid) {
+            if (errorDiv) {
+                errorDiv.textContent = validation.error;
+                errorDiv.classList.remove('hidden');
+            }
+            return false;
+        }
+        
+        try {
+            // Check if name already exists
+            let existingMashup = null;
+            try {
+                existingMashup = await getMashup(name);
+            } catch (fetchError) {
+                if (fetchError.status !== 404) throw fetchError;
+            }
+            
+            let secret = undefined;
+            if (existingMashup) {
+                if (existingMashup.protected) {
+                    const overwriteResult = await this.showProtectedOverwriteDialog('mashup', name);
+                    if (!overwriteResult) {
+                        resolve(null);
+                        return;
+                    }
+                    secret = overwriteResult.secret;
+                    isProtected = overwriteResult.isProtected;
+                } else {
+                    const modal = getModal();
+                    const overwrite = await modal.confirm({
+                        title: 'Name Already Exists',
+                        message: `<p>A mashup named "${this.escapeHtml(name)}" already exists.</p><p>Do you want to overwrite it?</p>`,
+                        confirmText: 'Overwrite',
+                        confirmClass: 'btn-danger'
+                    });
+                    if (!overwrite) {
+                        resolve(null);
+                        return;
+                    }
+                }
+            }
+            
+            await saveMashup(name, { entries, protected: isProtected, secret });
+            this.invalidateMashupCache();
+            
+            const dialog = document.getElementById('modal-dialog');
+            dialog?.classList.remove('modal-mashup-editor');
+            resolve({ name, entries });
+            return; // close modal
+        } catch (error) {
+            console.error('Failed to save mashup:', error);
+            if (errorDiv) {
+                errorDiv.textContent = `Save failed: ${error.message}`;
+                errorDiv.classList.remove('hidden');
+            }
+            return false;
+        }
+    }
+    
+    /**
+     * Build pitch options HTML for mashup editor
+     */
+    _buildPitchOptionsHtml(originalKey) {
+        const KEYS = ['A', 'Bb', 'B', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab'];
+        let html = '';
+        for (let i = -6; i <= 6; i++) {
+            let label = `${i >= 0 ? '+' : ''}${i}`;
+            if (originalKey) {
+                const keyIndex = KEYS.indexOf(originalKey);
+                if (keyIndex !== -1) {
+                    const transposed = KEYS[((keyIndex + i) % 12 + 12) % 12];
+                    label += ` (${transposed})`;
+                }
+            }
+            const selected = i === 0 ? ' selected' : '';
+            html += `<option value="${i}"${selected}>${label}</option>`;
+        }
+        return html;
+    }
+    
+    /**
+     * Add an entry row to the mashup editor
+     * @param {HTMLElement} container - Entries container
+     * @param {Object} editorState - Shared editor state
+     * @param {Object} [prefill] - Optional prefill data { songName, arrangementName, pitch }
+     */
+    _addMashupEntryRow(container, editorState, prefill = null) {
+        // Remove empty state message if present
+        const emptyMsg = container.querySelector('.mashup-editor-empty');
+        if (emptyMsg) emptyMsg.remove();
+        
+        const row = document.createElement('div');
+        row.className = 'mashup-entry-row';
+        row.draggable = true;
+        
+        const rowIndex = container.querySelectorAll('.mashup-entry-row').length + 1;
+        
+        row.innerHTML = `
+            <span class="mashup-entry-drag" title="Drag to reorder">&#x2630;</span>
+            <span class="mashup-entry-num">${rowIndex}</span>
+            <select class="mashup-entry-song" title="Song">
+                <option value="">-- Song --</option>
+                ${editorState.songOptionsHtml}
+            </select>
+            <select class="mashup-entry-arrangement" title="Arrangement">
+                <option value="">Original</option>
+            </select>
+            <select class="mashup-entry-pitch" title="Pitch">
+                ${editorState.pitchOptionsHtml}
+            </select>
+            <button type="button" class="mashup-entry-remove" title="Remove entry">&times;</button>
+        `;
+        
+        const songSelect = row.querySelector('.mashup-entry-song');
+        const arrangementSelect = row.querySelector('.mashup-entry-arrangement');
+        const pitchSelect = row.querySelector('.mashup-entry-pitch');
+        const removeBtn = row.querySelector('.mashup-entry-remove');
+        
+        // Promise that resolves when the song change handler finishes loading arrangements
+        let songChangePromise = Promise.resolve();
+        
+        // Song change handler - update arrangement dropdown and pitch key names
+        songSelect.addEventListener('change', async () => {
+            const songName = songSelect.value;
+            arrangementSelect.innerHTML = '<option value="">Original</option>';
+            
+            if (!songName) return;
+            
+            let resolveChange;
+            songChangePromise = new Promise(r => { resolveChange = r; });
+            
+            // Fetch arrangements for this song
+            try {
+                const arrangements = await listArrangements(songName);
+                for (const arrName of arrangements) {
+                    const opt = document.createElement('option');
+                    opt.value = arrName;
+                    opt.textContent = arrName;
+                    arrangementSelect.appendChild(opt);
+                }
+            } catch (err) {
+                console.warn('Failed to fetch arrangements for', songName, err);
+            }
+            
+            // Load metadata for key info
+            try {
+                if (!editorState.metadataCache[songName]) {
+                    const metadata = await Metadata.loadMetadata(songName);
+                    editorState.metadataCache[songName] = metadata;
+                }
+                const metadata = editorState.metadataCache[songName];
+                if (metadata?.key) {
+                    pitchSelect.innerHTML = this._buildPitchOptionsHtml(metadata.key);
+                    // Restore pitch value if prefilled
+                    if (prefill?.pitch !== undefined) {
+                        pitchSelect.value = String(prefill.pitch);
+                    }
+                }
+            } catch (err) {
+                console.warn('Failed to load metadata for', songName, err);
+            }
+            
+            resolveChange();
+        });
+        
+        // Remove button
+        removeBtn.addEventListener('click', () => {
+            row.remove();
+            this._updateMashupEntryNumbers(container);
+            // Show empty state if no entries
+            if (container.querySelectorAll('.mashup-entry-row').length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'mashup-editor-empty';
+                empty.textContent = 'Click "+ Add Entry" to add songs';
+                container.appendChild(empty);
+            }
+        });
+        
+        container.appendChild(row);
+        
+        // Apply prefill data
+        if (prefill) {
+            if (prefill.songName) {
+                songSelect.value = prefill.songName;
+                // Trigger change to load arrangements, then set values after it completes
+                songSelect.dispatchEvent(new Event('change'));
+                songChangePromise.then(() => {
+                    if (prefill.arrangementName) {
+                        arrangementSelect.value = prefill.arrangementName;
+                    }
+                    if (prefill.pitch !== undefined) {
+                        pitchSelect.value = String(prefill.pitch);
+                    }
+                });
+            }
+            if (prefill.pitch !== undefined) {
+                pitchSelect.value = String(prefill.pitch);
+            }
+        }
+    }
+    
+    /**
+     * Update entry row numbers after reorder/delete
+     */
+    _updateMashupEntryNumbers(container) {
+        const rows = container.querySelectorAll('.mashup-entry-row');
+        rows.forEach((row, i) => {
+            const num = row.querySelector('.mashup-entry-num');
+            if (num) num.textContent = String(i + 1);
+        });
+    }
+    
+    /**
+     * Initialize drag-and-drop for mashup entry rows
+     */
+    _initMashupEntryDragDrop(container) {
+        let draggedRow = null;
+        
+        container.addEventListener('dragstart', (e) => {
+            const row = e.target.closest('.mashup-entry-row');
+            if (!row) return;
+            draggedRow = row;
+            row.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        
+        container.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (!draggedRow) return;
+            
+            const target = e.target.closest('.mashup-entry-row');
+            if (!target || target === draggedRow) return;
+            
+            const rect = target.getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+            
+            if (e.clientY < midY) {
+                container.insertBefore(draggedRow, target);
+            } else {
+                container.insertBefore(draggedRow, target.nextSibling);
+            }
+        });
+        
+        container.addEventListener('dragend', () => {
+            if (draggedRow) {
+                draggedRow.classList.remove('dragging');
+                draggedRow = null;
+                this._updateMashupEntryNumbers(container);
+            }
+        });
+    }
+    
+    /**
+     * Gather entry data from the editor
+     */
+    _gatherMashupEntries(container) {
+        const rows = container.querySelectorAll('.mashup-entry-row');
+        const entries = [];
+        
+        rows.forEach(row => {
+            const songName = row.querySelector('.mashup-entry-song')?.value;
+            if (!songName) return; // Skip entries with no song selected
+            
+            const arrangementName = row.querySelector('.mashup-entry-arrangement')?.value || null;
+            const pitch = parseInt(row.querySelector('.mashup-entry-pitch')?.value || '0', 10);
+            
+            entries.push({ songName, arrangementName: arrangementName || null, pitch });
+        });
+        
+        return entries;
+    }
+    
+    // ========================================
+    // Mashup Loading (Open a Mashup)
+    // ========================================
+    
+    /**
+     * Open a mashup - load all entries as tabs
+     * @param {string} name - Mashup name
+     */
+    async openMashup(name) {
+        const modal = getModal();
+        
+        let mashupData;
+        try {
+            mashupData = await getMashup(name);
+        } catch (error) {
+            await modal.alert({
+                title: 'Error',
+                message: `Failed to load mashup: ${error.message}`
+            });
+            return;
+        }
+        
+        if (!mashupData.entries || mashupData.entries.length === 0) {
+            await modal.alert({
+                title: 'Empty Mashup',
+                message: 'This mashup has no entries.'
+            });
+            return;
+        }
+        
+        const createdSongIds = [];
+        const warnings = [];
+        
+        // Show loading overlay
+        State.setLoading(true, `Opening mashup "${name}"...`);
+        
+        try {
+            for (let i = 0; i < mashupData.entries.length; i++) {
+                const entry = mashupData.entries[i];
+                
+                State.setLoading(true, `Loading "${entry.songName}" (${i + 1}/${mashupData.entries.length})...`);
+                
+                // Open the song without closing existing tabs or unloading current tracks
+                const song = await this._openSongForMashup(entry.songName);
+                
+                if (!song) {
+                    warnings.push(`Song "${entry.songName}" not found in manifest`);
+                    continue;
+                }
+                
+                createdSongIds.push(song.id);
+                
+                // Set display name: "Song Name - Arrangement" or just "Song Name"
+                if (entry.arrangementName) {
+                    song.name = `${entry.songName} - ${entry.arrangementName}`;
+                }
+                
+                // Wait for metadata
+                await SongManager.waitForMetadata(song.id, 5000);
+                
+                // Apply pitch
+                if (entry.pitch && entry.pitch !== 0) {
+                    song.transport.pitch = entry.pitch;
+                }
+                
+                // Apply arrangement if specified
+                if (entry.arrangementName) {
+                    try {
+                        // Ensure this song is the active one so State methods operate on it
+                        State.switchSong(song.id);
+                        const arrangement = await getArrangement(entry.songName, entry.arrangementName);
+                        if (arrangement?.sections) {
+                            State.setArrangementSections(arrangement.sections, false);
+                            State.setArrangementModified(false);
+                            song.currentArrangementId = entry.arrangementName;
+                            song.currentArrangementName = entry.arrangementName;
+                            song.currentArrangementProtected = arrangement.protected || false;
+                        }
+                    } catch (arrErr) {
+                        if (arrErr.status === 404) {
+                            warnings.push(`Arrangement "${entry.arrangementName}" not found for "${entry.songName}"`);
+                        } else {
+                            warnings.push(`Failed to load arrangement for "${entry.songName}": ${arrErr.message}`);
+                        }
+                    }
+                }
+                
+                // Load click/reference tracks
+                await Manifest.loadManifest();
+                const manifestSong = Manifest.getSong(entry.songName);
+                if (manifestSong) {
+                    const matchingTracks = manifestSong.tracks.filter(trackName =>
+                        ['click', 'reference'].some(kw => trackName.toLowerCase().includes(kw.toLowerCase()))
+                    );
+                    if (matchingTracks.length > 0) {
+                        // Make this the active song temporarily so tracks get added to it
+                        State.switchSong(song.id);
+                        await TrackManager.addTracksFromManifest(entry.songName, matchingTracks);
+                    }
+                }
+            }
+            
+            // Create mashup group
+            if (createdSongIds.length > 0) {
+                const groupId = State.createMashupGroup(createdSongIds);
+                
+                // Recolor all tabs (mashup group tabs share one color slot)
+                const { getTabs } = await import('./tabs.js');
+                const tabs = getTabs();
+                tabs.applyTabColors();
+                
+                // Switch to the first mashup tab
+                const firstId = createdSongIds[0];
+                await SongManager.switchSong(firstId);
+                
+                // Apply the first song's pitch and speed
+                const firstSong = State.getSong(firstId);
+                if (firstSong) {
+                    const transport = getTransport();
+                    transport.setPitch(firstSong.transport.pitch);
+                    transport.setSpeed(firstSong.transport.speed);
+                }
+            }
+        } finally {
+            State.setLoading(false);
+        }
+        
+        // Show any warnings
+        if (warnings.length > 0) {
+            const warningList = warnings.map(w => `<li>${this.escapeHtml(w)}</li>`).join('');
+            await modal.alert({
+                title: 'Mashup Loaded with Warnings',
+                message: `<ul>${warningList}</ul>`
+            });
+        }
+    }
+    
+    /**
+     * Open a song for a mashup - does NOT close existing tabs or unload current song
+     * @param {string} songName - Song name from manifest
+     * @returns {Object|null} - Created song object, or null if song not found
+     */
+    async _openSongForMashup(songName) {
+        await Manifest.loadManifest();
+        const manifestSong = Manifest.getSong(songName);
+        
+        if (!manifestSong) {
+            console.warn(`Song '${songName}' not found in manifest`);
+            return null;
+        }
+        
+        // Create the song in state (this will set it as active and emit events)
+        // But we do NOT stop playback or unload current tracks
+        const song = State.addSong(State.createDefaultSong(songName));
+        
+        // Load metadata (fire-and-forget)
+        Metadata.loadMetadata(songName).then(metadata => {
+            if (metadata) {
+                State.updateSongMetadata(song.id, metadata);
+            }
+        });
+        
+        return song;
+    }
+
     /**
      * Escape HTML for safe insertion
      */
