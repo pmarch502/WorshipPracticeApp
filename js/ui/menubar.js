@@ -1493,11 +1493,11 @@ class MenuBarUI {
             // Fetch the set list
             const setList = await getSetList(name);
             
-            if (!setList.songs || setList.songs.length === 0) {
+            if (!setList.items || setList.items.length === 0) {
                 State.setLoading(false);
                 await modal.alert({
                     title: 'Empty Set List',
-                    message: 'This set list contains no songs.'
+                    message: 'This set list contains no items.'
                 });
                 return;
             }
@@ -1505,48 +1505,65 @@ class MenuBarUI {
             // Close all currently open songs
             await SongManager.closeAllSongs();
             
-            // Open each song in the set list
+            // Open each item in the set list
             const warnings = [];
             let firstSongId = null;
             
-            for (let i = 0; i < setList.songs.length; i++) {
-                const entry = setList.songs[i];
-                State.setLoading(true, `Loading "${entry.songName}" (${i + 1}/${setList.songs.length})...`);
+            for (let i = 0; i < setList.items.length; i++) {
+                const entry = setList.items[i];
                 
-                try {
-                    // Open the song with auto-loaded click/reference tracks
-                    const song = await SongManager.openSongWithAutoTracks(entry.songName);
+                if (entry.type === 'mashup') {
+                    // Load a mashup -- fetch its data and open as a mashup group
+                    State.setLoading(true, `Loading mashup "${entry.mashupName}" (${i + 1}/${setList.items.length})...`);
                     
-                    if (i === 0) {
-                        firstSongId = song.id;
-                    }
-                    
-                    // Wait for metadata to load (needed for arrangement initialization)
-                    await SongManager.waitForMetadata(song.id, 5000);
-                    
-                    // Apply pitch
-                    if (entry.pitch && entry.pitch !== 0) {
-                        song.transport.pitch = entry.pitch;
-                    }
-                    
-                    // Apply arrangement if specified
-                    if (entry.arrangementName) {
-                        try {
-                            const arrangement = await getArrangement(entry.songName, entry.arrangementName);
-                            State.setArrangementSections(arrangement.sections, false);
-                            State.setArrangementModified(false);
-                            song.currentArrangementId = entry.arrangementName;
-                            song.currentArrangementName = entry.arrangementName;
-                            song.currentArrangementProtected = arrangement.protected || false;
-                        } catch (arrError) {
-                            console.warn(`Arrangement "${entry.arrangementName}" not found for "${entry.songName}", using Original`);
-                            warnings.push(`"${entry.songName}": arrangement "${entry.arrangementName}" not found, using Original`);
+                    try {
+                        const mashupSongId = await this._openMashupForSetList(entry.mashupName, warnings);
+                        if (mashupSongId && !firstSongId) {
+                            firstSongId = mashupSongId;
                         }
+                    } catch (error) {
+                        console.warn(`Failed to load mashup "${entry.mashupName}":`, error);
+                        warnings.push(`Mashup "${entry.mashupName}": ${error.message}`);
                     }
+                } else {
+                    // Load a song
+                    State.setLoading(true, `Loading "${entry.songName}" (${i + 1}/${setList.items.length})...`);
                     
-                } catch (error) {
-                    console.warn(`Failed to open song "${entry.songName}":`, error);
-                    warnings.push(`"${entry.songName}": ${error.message}`);
+                    try {
+                        // Open the song with auto-loaded click/reference tracks
+                        const song = await SongManager.openSongWithAutoTracks(entry.songName);
+                        
+                        if (!firstSongId) {
+                            firstSongId = song.id;
+                        }
+                        
+                        // Wait for metadata to load (needed for arrangement initialization)
+                        await SongManager.waitForMetadata(song.id, 5000);
+                        
+                        // Apply pitch
+                        if (entry.pitch && entry.pitch !== 0) {
+                            song.transport.pitch = entry.pitch;
+                        }
+                        
+                        // Apply arrangement if specified
+                        if (entry.arrangementName) {
+                            try {
+                                const arrangement = await getArrangement(entry.songName, entry.arrangementName);
+                                State.setArrangementSections(arrangement.sections, false);
+                                State.setArrangementModified(false);
+                                song.currentArrangementId = entry.arrangementName;
+                                song.currentArrangementName = entry.arrangementName;
+                                song.currentArrangementProtected = arrangement.protected || false;
+                            } catch (arrError) {
+                                console.warn(`Arrangement "${entry.arrangementName}" not found for "${entry.songName}", using Original`);
+                                warnings.push(`"${entry.songName}": arrangement "${entry.arrangementName}" not found, using Original`);
+                            }
+                        }
+                        
+                    } catch (error) {
+                        console.warn(`Failed to open song "${entry.songName}":`, error);
+                        warnings.push(`"${entry.songName}": ${error.message}`);
+                    }
                 }
             }
             
@@ -1569,7 +1586,7 @@ class MenuBarUI {
             
             State.setLoading(false);
             
-            // Show warnings if any songs or arrangements couldn't be loaded
+            // Show warnings if any items couldn't be loaded
             if (warnings.length > 0) {
                 await modal.alert({
                     title: 'Set List Loaded with Warnings',
@@ -1599,10 +1616,10 @@ class MenuBarUI {
         if (!result) return;
         
         const { name, isProtected, secret } = result;
-        const songs = this.buildSetListData();
+        const items = this.buildSetListData();
         
         try {
-            const data = { songs, protected: isProtected };
+            const data = { items, protected: isProtected };
             if (secret) data.secret = secret;
             
             await saveSetList(name, data);
@@ -1624,15 +1641,43 @@ class MenuBarUI {
     }
     
     /**
-     * Build set list data from currently open songs
-     * @returns {Array} Array of { songName, arrangementName, pitch } objects
+     * Build set list data from currently open songs/mashups
+     * @returns {Array} Array of { type: "song", songName, arrangementName, pitch } or { type: "mashup", mashupName } objects
      */
     buildSetListData() {
-        return State.state.songs.map(song => ({
-            songName: song.songName,
-            arrangementName: song.currentArrangementName || null,
-            pitch: song.transport.pitch || 0
-        }));
+        const items = [];
+        const processedMashupGroups = new Set();
+        
+        for (const song of State.state.songs) {
+            // Check if this song belongs to a saved mashup group
+            if (song.mashupGroupId) {
+                const group = State.getMashupGroup(song.mashupGroupId);
+                if (group?.name && !processedMashupGroups.has(song.mashupGroupId)) {
+                    // Emit a single mashup reference for the entire group
+                    items.push({ type: 'mashup', mashupName: group.name });
+                    processedMashupGroups.add(song.mashupGroupId);
+                } else if (!group?.name) {
+                    // Ad-hoc mashup group without a saved name -- save as individual song
+                    items.push({
+                        type: 'song',
+                        songName: song.songName,
+                        arrangementName: song.currentArrangementName || null,
+                        pitch: song.transport.pitch || 0
+                    });
+                }
+                // If group has a name and was already processed, skip (don't duplicate)
+            } else {
+                // Standalone song
+                items.push({
+                    type: 'song',
+                    songName: song.songName,
+                    arrangementName: song.currentArrangementName || null,
+                    pitch: song.transport.pitch || 0
+                });
+            }
+        }
+        
+        return items;
     }
     
     /**
@@ -2983,9 +3028,9 @@ class MenuBarUI {
                 }
             }
             
-            // Create mashup group
+            // Create mashup group with the saved mashup name
             if (createdSongIds.length > 0) {
-                const groupId = State.createMashupGroup(createdSongIds);
+                const groupId = State.createMashupGroup(createdSongIds, name);
                 
                 // Recolor all tabs (mashup group tabs share one color slot)
                 const { getTabs } = await import('./tabs.js');
@@ -3044,6 +3089,113 @@ class MenuBarUI {
         });
         
         return song;
+    }
+
+    /**
+     * Open a mashup as part of loading a set list.
+     * Fetches the mashup data, opens all its entries as a mashup group with auto-advance and tab coloring.
+     * Does NOT manage loading overlay or close existing songs (the caller handles that).
+     * @param {string} mashupName - Name of the saved mashup
+     * @param {string[]} warnings - Array to push warning messages into
+     * @returns {Promise<string|null>} The first song ID in the mashup, or null if mashup failed to load
+     */
+    async _openMashupForSetList(mashupName, warnings) {
+        let mashupData;
+        try {
+            mashupData = await getMashup(mashupName);
+        } catch (error) {
+            if (error.status === 404) {
+                warnings.push(`Mashup "${mashupName}" not found (may have been deleted)`);
+            } else {
+                warnings.push(`Mashup "${mashupName}": ${error.message}`);
+            }
+            return null;
+        }
+        
+        if (!mashupData.entries || mashupData.entries.length === 0) {
+            warnings.push(`Mashup "${mashupName}" has no entries`);
+            return null;
+        }
+        
+        const createdSongIds = [];
+        
+        for (let j = 0; j < mashupData.entries.length; j++) {
+            const mashupEntry = mashupData.entries[j];
+            
+            try {
+                const song = await this._openSongForMashup(mashupEntry.songName);
+                
+                if (!song) {
+                    warnings.push(`Mashup "${mashupName}": song "${mashupEntry.songName}" not found in manifest`);
+                    continue;
+                }
+                
+                createdSongIds.push(song.id);
+                
+                // Set display name: "Song Name - Arrangement" or just "Song Name"
+                if (mashupEntry.arrangementName) {
+                    song.name = `${mashupEntry.songName} - ${mashupEntry.arrangementName}`;
+                }
+                
+                // Wait for metadata
+                await SongManager.waitForMetadata(song.id, 5000);
+                
+                // Apply pitch
+                if (mashupEntry.pitch && mashupEntry.pitch !== 0) {
+                    song.transport.pitch = mashupEntry.pitch;
+                }
+                
+                // Apply arrangement if specified
+                if (mashupEntry.arrangementName) {
+                    try {
+                        State.switchSong(song.id);
+                        const arrangement = await getArrangement(mashupEntry.songName, mashupEntry.arrangementName);
+                        if (arrangement?.sections) {
+                            State.setArrangementSections(arrangement.sections, false);
+                            State.setArrangementModified(false);
+                            song.currentArrangementId = mashupEntry.arrangementName;
+                            song.currentArrangementName = mashupEntry.arrangementName;
+                            song.currentArrangementProtected = arrangement.protected || false;
+                        }
+                    } catch (arrErr) {
+                        if (arrErr.status === 404) {
+                            warnings.push(`Mashup "${mashupName}": arrangement "${mashupEntry.arrangementName}" not found for "${mashupEntry.songName}"`);
+                        } else {
+                            warnings.push(`Mashup "${mashupName}": failed to load arrangement for "${mashupEntry.songName}": ${arrErr.message}`);
+                        }
+                    }
+                }
+                
+                // Load click/reference tracks
+                await Manifest.loadManifest();
+                const manifestSong = Manifest.getSong(mashupEntry.songName);
+                if (manifestSong) {
+                    const matchingTracks = manifestSong.tracks.filter(trackName =>
+                        ['click', 'reference'].some(kw => trackName.toLowerCase().includes(kw.toLowerCase()))
+                    );
+                    if (matchingTracks.length > 0) {
+                        State.switchSong(song.id);
+                        await TrackManager.addTracksFromManifest(mashupEntry.songName, matchingTracks);
+                    }
+                }
+            } catch (error) {
+                warnings.push(`Mashup "${mashupName}": failed to load song "${mashupEntry.songName}": ${error.message}`);
+            }
+        }
+        
+        // Create mashup group with the saved name
+        if (createdSongIds.length > 0) {
+            State.createMashupGroup(createdSongIds, mashupName);
+            
+            // Recolor tabs (mashup group tabs share one color slot)
+            const { getTabs } = await import('./tabs.js');
+            const tabs = getTabs();
+            tabs.applyTabColors();
+            
+            return createdSongIds[0];
+        }
+        
+        return null;
     }
 
     /**

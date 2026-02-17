@@ -396,7 +396,7 @@ export async function listSetLists() {
 /**
  * Get a specific set list
  * @param {string} name - Name of the set list
- * @returns {Promise<Object>} - Set list object with name, songs, protected, createdAt, modifiedAt
+ * @returns {Promise<Object>} - Set list object with name, items, protected, createdAt, modifiedAt
  * @throws {Error} - On network or API errors
  */
 export async function getSetList(name) {
@@ -426,7 +426,9 @@ export async function getSetList(name) {
  * Save a set list (create or update)
  * @param {string} name - Name of the set list
  * @param {Object} data - Set list data
- * @param {Array} data.songs - Array of { songName, arrangementName, pitch } objects
+ * @param {Array} data.items - Array of set list items, each with a `type` field:
+ *   - { type: "song", songName, arrangementName, pitch } for individual songs
+ *   - { type: "mashup", mashupName } for mashup references
  * @param {boolean} [data.protected=false] - Whether to protect this set list
  * @param {string} [data.secret] - Required if overwriting a protected set list
  * @returns {Promise<Object>} - Response with success, message, and saved set list

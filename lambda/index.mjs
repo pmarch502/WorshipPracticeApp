@@ -793,23 +793,33 @@ async function handleGetSetList(name) {
 async function handleSaveSetList(name, body) {
     console.log('handleSaveSetList called for:', name);
     
-    const { songs, protected: isProtected, secret } = body;
+    const { items, protected: isProtected, secret } = body;
     
     // Validate required fields
-    if (!songs || !Array.isArray(songs) || songs.length === 0) {
-        return response(400, { error: 'Missing or invalid songs array' });
+    if (!items || !Array.isArray(items) || items.length === 0) {
+        return response(400, { error: 'Missing or invalid items array' });
     }
     
-    // Validate each song entry
-    for (const entry of songs) {
-        if (!entry.songName || typeof entry.songName !== 'string') {
-            return response(400, { error: 'Each song entry must have a songName (string)' });
+    // Validate each item entry
+    for (const entry of items) {
+        if (!entry.type || (entry.type !== 'song' && entry.type !== 'mashup')) {
+            return response(400, { error: 'Each item must have a type of "song" or "mashup"' });
         }
-        if (entry.arrangementName !== null && entry.arrangementName !== undefined && typeof entry.arrangementName !== 'string') {
-            return response(400, { error: `Song '${entry.songName}': arrangementName must be a string or null` });
-        }
-        if (typeof entry.pitch !== 'number' || !Number.isInteger(entry.pitch) || entry.pitch < -6 || entry.pitch > 6) {
-            return response(400, { error: `Song '${entry.songName}': pitch must be an integer from -6 to 6` });
+        
+        if (entry.type === 'song') {
+            if (!entry.songName || typeof entry.songName !== 'string') {
+                return response(400, { error: 'Each song item must have a songName (string)' });
+            }
+            if (entry.arrangementName !== null && entry.arrangementName !== undefined && typeof entry.arrangementName !== 'string') {
+                return response(400, { error: `Song '${entry.songName}': arrangementName must be a string or null` });
+            }
+            if (typeof entry.pitch !== 'number' || !Number.isInteger(entry.pitch) || entry.pitch < -6 || entry.pitch > 6) {
+                return response(400, { error: `Song '${entry.songName}': pitch must be an integer from -6 to 6` });
+            }
+        } else if (entry.type === 'mashup') {
+            if (!entry.mashupName || typeof entry.mashupName !== 'string') {
+                return response(400, { error: 'Each mashup item must have a mashupName (string)' });
+            }
         }
     }
     
@@ -840,11 +850,17 @@ async function handleSaveSetList(name, body) {
     const now = new Date().toISOString();
     const setList = {
         name: name,
-        songs: songs.map(entry => ({
-            songName: entry.songName,
-            arrangementName: entry.arrangementName || null,
-            pitch: entry.pitch
-        })),
+        items: items.map(entry => {
+            if (entry.type === 'mashup') {
+                return { type: 'mashup', mashupName: entry.mashupName };
+            }
+            return {
+                type: 'song',
+                songName: entry.songName,
+                arrangementName: entry.arrangementName || null,
+                pitch: entry.pitch
+            };
+        }),
         protected: isProtected || false,
         createdAt: existingSetList?.createdAt || now,
         modifiedAt: now

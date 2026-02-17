@@ -915,11 +915,12 @@ export function clearCurrentSetList() {
 /**
  * Create a new mashup group and return its ID
  * @param {string[]} tabIds - Ordered array of song IDs in this mashup
+ * @param {string|null} [name=null] - Name of the saved mashup (null for ad-hoc groups)
  * @returns {string} The mashup group ID
  */
-export function createMashupGroup(tabIds) {
+export function createMashupGroup(tabIds, name = null) {
     const groupId = 'mashup_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
-    state.mashupGroups[groupId] = { tabIds: [...tabIds] };
+    state.mashupGroups[groupId] = { tabIds: [...tabIds], name: name || null };
     
     // Set mashup membership on each song
     tabIds.forEach((songId, index) => {
