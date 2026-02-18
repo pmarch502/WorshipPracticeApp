@@ -50,7 +50,7 @@
         async _doInit() {
             try {
                 // Load the SoundTouchJS worklet processor module
-                await this.audioContext.audioWorklet.addModule('js/lib/soundtouch-worklet.js');
+                await this.audioContext.audioWorklet.addModule('js/lib/soundtouch-worklet.0.3.0.modified.js');
                 
                 // Create the worklet node
                 // The SoundTouchJS worklet registers as 'soundtouch-processor'

@@ -1130,6 +1130,9 @@ var SoundTouchWorklet = function (_AudioWorkletProcesso) {
     _this.bufferSize = 128;
     _this._samples = new Float32Array(_this.bufferSize * 2);
     _this._pipe = new SoundTouch();
+    // MODIFIED: Initialize stretch with AudioWorklet sampleRate (not in upstream).
+    // Without this, the Stretch algorithm has sampleRate=0 and cannot compute
+    // correct overlap/sequence/seek window lengths for time-stretching.
     _this._pipe.stretch.setParameters(sampleRate, 0, 0, 0);
     return _this;
   }

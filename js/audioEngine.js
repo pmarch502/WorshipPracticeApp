@@ -427,11 +427,16 @@ class AudioEngine {
         this.bypassPitchShifter = new PitchShifterWorklet(this.audioContext);
         await this.bypassPitchShifter.init();
         
-        // Restore settings: primary gets tempo + pitch, bypass gets tempo only (pitch=0)
-        this.pitchShifter.tempo = currentSpeed;
+        // Restore settings: tempo stays at 1.0 (speed handled by source.playbackRate),
+        // pitch = 1/speed to compensate for playbackRate's pitch shift.
+        // Primary also gets the user's pitchSemitones; bypass stays at 0.
+        const pitchCorrection = 1 / currentSpeed;
+        this.pitchShifter.tempo = 1.0;
+        this.pitchShifter.pitch = pitchCorrection;
         this.pitchShifter.pitchSemitones = currentPitch;
         
-        this.bypassPitchShifter.tempo = currentSpeed;
+        this.bypassPitchShifter.tempo = 1.0;
+        this.bypassPitchShifter.pitch = pitchCorrection;
         this.bypassPitchShifter.pitchSemitones = 0; // Always 0 for exempt tracks
         
         // Reconnect both pitch shifters to masterGain
@@ -752,9 +757,10 @@ class AudioEngine {
         const source = this.audioContext.createBufferSource();
         source.buffer = nodes.audioBuffer;
         
-        // Note: Speed and pitch are handled by the SoundTouch worklet
-        // Source plays at normal rate, pitchShifter does the processing
-        source.playbackRate.value = 1.0;
+        // Speed is handled by the source's playbackRate (native browser resampling).
+        // SoundTouch worklet only handles pitch correction (compensating for the
+        // pitch shift caused by playbackRate) and any user-requested pitch shift.
+        source.playbackRate.value = this._speed;
 
         source.connect(nodes.gainNode);
         nodes.source = source;
@@ -852,9 +858,9 @@ class AudioEngine {
     }
 
     /**
-     * Get current playback position
-     * Note: Since SoundTouch handles tempo, the source plays at 1.0 rate.
-     * The position in the original audio advances at real-time rate.
+     * Get current playback position (in song time)
+     * Since source.playbackRate = speed, audio advances at speed * real-time.
+     * Position = startPosition + elapsed * speed.
      */
     getCurrentPosition() {
         if (!this.isPlaying) {
@@ -862,9 +868,9 @@ class AudioEngine {
             return song ? song.transport.position : 0;
         }
 
-        // Calculate elapsed time and current position
+        // Calculate elapsed real time, scaled by speed to get song time
         const elapsed = this.audioContext.currentTime - this.startTime;
-        return this.startPosition + elapsed;
+        return this.startPosition + elapsed * this._speed;
     }
 
     /**
@@ -1353,19 +1359,40 @@ class AudioEngine {
     }
 
     /**
-     * Set playback speed (time stretch)
-     * Uses SoundTouch worklet for high-quality time stretching without pitch change
+     * Set playback speed
+     * Speed is applied via BufferSourceNode.playbackRate (native browser resampling).
+     * SoundTouch compensates for the resulting pitch shift with pitch = 1/speed.
      */
     setSpeed(speed) {
+        // Capture current position before changing speed to prevent position jump.
+        // getCurrentPosition() uses this._speed, so we must snapshot before updating.
+        if (this.isPlaying) {
+            const currentPos = this.getCurrentPosition();
+            this.startPosition = currentPos;
+            this.startTime = this.audioContext.currentTime;
+        }
+        
         this._speed = speed;
         
-        // Update tempo on BOTH pitch shifters to keep all tracks in sync
+        // SoundTouch: no time-stretching (tempo=1.0), only pitch correction (1/speed)
+        // to cancel the pitch shift caused by the source's playbackRate.
+        // User pitch adjustments are applied independently via pitchSemitones.
+        const pitchCorrection = 1 / speed;
         if (this.pitchShifter) {
-            this.pitchShifter.tempo = speed;
+            this.pitchShifter.tempo = 1.0;
+            this.pitchShifter.pitch = pitchCorrection;
         }
         if (this.bypassPitchShifter) {
-            this.bypassPitchShifter.tempo = speed;
+            this.bypassPitchShifter.tempo = 1.0;
+            this.bypassPitchShifter.pitch = pitchCorrection;
         }
+        
+        // Update playbackRate on all active source nodes
+        this.trackNodes.forEach((nodes) => {
+            if (nodes.source) {
+                nodes.source.playbackRate.value = speed;
+            }
+        });
         
         // Reschedule skip/loop events with new timing
         if (this.isPlaying) {
