@@ -126,10 +126,29 @@ export async function switchSong(songId) {
 
 /**
  * Close a song
+ * If the song belongs to a mashup group, the entire group is closed.
  * @param {string} songId - Song ID to close
  * @param {boolean} confirm - Whether to show confirmation (not used in new model)
  */
 export async function closeSong(songId, confirm = false) {
+    const song = State.getSong(songId);
+    if (!song) return false;
+    
+    // If this song is part of a mashup group, close the entire group
+    if (song.mashupGroupId) {
+        return closeMashupGroup(song.mashupGroupId);
+    }
+    
+    return _closeSingleSong(songId);
+}
+
+/**
+ * Internal: close a single song (no mashup delegation).
+ * Used by closeSong for standalone songs and by closeMashupGroup for each member.
+ * @param {string} songId
+ * @param {boolean} skipActiveLoad - If true, don't load tracks for the new active song (caller handles it)
+ */
+async function _closeSingleSong(songId, skipActiveLoad = false) {
     const song = State.getSong(songId);
     if (!song) return false;
     
@@ -171,7 +190,46 @@ export async function closeSong(songId, confirm = false) {
     // Remove song from state
     State.removeSong(songId);
     
-    // If there's a new active song, load its tracks
+    if (!skipActiveLoad) {
+        // If there's a new active song, load its tracks
+        const newActiveSong = State.getActiveSong();
+        if (newActiveSong && newActiveSong.tracks.length > 0) {
+            State.setLoading(true, 'Loading tracks...');
+            try {
+                await TrackManager.loadTracksForSong(newActiveSong);
+            } finally {
+                State.setLoading(false);
+            }
+        }
+    }
+    
+    return true;
+}
+
+/**
+ * Close an entire mashup group — all songs in the group are closed together.
+ * @param {string} groupId - Mashup group ID
+ */
+export async function closeMashupGroup(groupId) {
+    const group = State.getMashupGroup(groupId);
+    if (!group) return false;
+    
+    const audioEngine = getAudioEngine();
+    
+    // Stop any current playback
+    if (State.state.playbackState === 'playing') {
+        audioEngine.stop();
+    }
+    
+    // Get the song IDs and remove the group from state first
+    const songIds = State.removeMashupGroup(groupId);
+    
+    // Close each song individually (skip active-song loading until the end)
+    for (const songId of songIds) {
+        await _closeSingleSong(songId, true);
+    }
+    
+    // Now load tracks for the new active song (if any)
     const newActiveSong = State.getActiveSong();
     if (newActiveSong && newActiveSong.tracks.length > 0) {
         State.setLoading(true, 'Loading tracks...');
@@ -181,6 +239,11 @@ export async function closeSong(songId, confirm = false) {
             State.setLoading(false);
         }
     }
+    
+    // Re-render tabs to remove the mashup tab element
+    const { getTabs } = await import('./ui/tabs.js');
+    const tabs = getTabs();
+    tabs.renderTabs();
     
     return true;
 }
@@ -211,6 +274,7 @@ export function getAllSongs() {
 /**
  * Close all open songs
  * Stops playback, unloads tracks, clears caches, and removes all songs from state.
+ * Cleans up mashup groups first to avoid partial group state.
  */
 export async function closeAllSongs() {
     const audioEngine = getAudioEngine();
@@ -218,6 +282,12 @@ export async function closeAllSongs() {
     // Stop any current playback
     if (State.state.playbackState === 'playing') {
         audioEngine.stop();
+    }
+    
+    // Clean up all mashup groups first
+    const groupIds = Object.keys(State.state.mashupGroups);
+    for (const groupId of groupIds) {
+        State.removeMashupGroup(groupId);
     }
     
     // Collect all song IDs first (iterate copy to avoid mutation issues)
@@ -252,6 +322,11 @@ export async function closeAllSongs() {
         // Remove from state
         State.removeSong(songId);
     }
+    
+    // Re-render tabs to clean up any mashup tab DOM elements
+    const { getTabs } = await import('./ui/tabs.js');
+    const tabs = getTabs();
+    tabs.renderTabs();
 }
 
 /**

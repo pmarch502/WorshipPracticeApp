@@ -3032,10 +3032,10 @@ class MenuBarUI {
             if (createdSongIds.length > 0) {
                 const groupId = State.createMashupGroup(createdSongIds, name);
                 
-                // Recolor all tabs (mashup group tabs share one color slot)
+                // Re-render tabs: replaces individual song tabs with segmented mashup tab
                 const { getTabs } = await import('./tabs.js');
                 const tabs = getTabs();
-                tabs.applyTabColors();
+                tabs.renderTabs();
                 
                 // Switch to the first mashup tab
                 const firstId = createdSongIds[0];
@@ -3187,10 +3187,10 @@ class MenuBarUI {
         if (createdSongIds.length > 0) {
             State.createMashupGroup(createdSongIds, mashupName);
             
-            // Recolor tabs (mashup group tabs share one color slot)
+            // Re-render tabs: replaces individual song tabs with segmented mashup tab
             const { getTabs } = await import('./tabs.js');
             const tabs = getTabs();
-            tabs.applyTabColors();
+            tabs.renderTabs();
             
             return createdSongIds[0];
         }

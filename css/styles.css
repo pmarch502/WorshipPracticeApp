@@ -231,6 +231,134 @@ body {
 .song-tab.tab-color-5 { background-image: linear-gradient(to top, rgba(199, 125, 255, 0.35) 0%, transparent 33%); }
 .song-tab.tab-color-6 { background-image: linear-gradient(to top, rgba(107, 255, 148, 0.35) 0%, transparent 33%); }
 
+/* ---- Mashup Segmented Tab ---- */
+.mashup-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background-color: var(--bg-tertiary);
+    border: 1px solid transparent;
+    border-radius: 4px 4px 0 0;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    min-width: 80px;
+    transition: background-color var(--transition-fast);
+}
+
+.mashup-tab:hover {
+    background-color: var(--bg-hover);
+}
+
+.mashup-tab.active {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+    border-bottom-color: var(--bg-primary);
+}
+
+.mashup-tab-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    max-width: 140px;
+}
+
+.mashup-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.mashup-tab.expanded .mashup-chevron {
+    transform: rotate(90deg);
+}
+
+.mashup-chevron:hover {
+    color: var(--text-primary);
+}
+
+/* Segments container — collapses to 0 width when not expanded */
+.mashup-segments {
+    display: flex;
+    gap: 2px;
+    overflow: hidden;
+    max-width: 0;
+    transition: max-width 0.25s ease, gap 0.25s ease;
+}
+
+.mashup-tab.expanded .mashup-segments {
+    /* Enough for up to ~10 segments; actual width determined by content */
+    max-width: 400px;
+}
+
+/* Individual segment — small blank clickable rectangle */
+.mashup-segment {
+    width: 32px;
+    height: 20px;
+    border-radius: 3px;
+    background-color: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.mashup-segment:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.mashup-segment.active {
+    background-color: rgba(255, 255, 255, 0.22);
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 4px rgba(0, 212, 255, 0.3);
+}
+
+/* Close button reuse — same styling as .song-tab-close */
+.mashup-tab .song-tab-close {
+    opacity: 0;
+}
+
+.mashup-tab:hover .song-tab-close,
+.mashup-tab.active .song-tab-close {
+    opacity: 1;
+}
+
+/* Mashup tab color gradients (same palette as song tabs) */
+.mashup-tab.tab-color-1 { background-image: linear-gradient(to top, rgba(0, 212, 255, 0.35) 0%, transparent 33%); }
+.mashup-tab.tab-color-2 { background-image: linear-gradient(to top, rgba(255, 107, 107, 0.35) 0%, transparent 33%); }
+.mashup-tab.tab-color-3 { background-image: linear-gradient(to top, rgba(150, 255, 0, 0.35) 0%, transparent 33%); }
+.mashup-tab.tab-color-4 { background-image: linear-gradient(to top, rgba(175, 175, 100, 0.35) 0%, transparent 33%); }
+.mashup-tab.tab-color-5 { background-image: linear-gradient(to top, rgba(199, 125, 255, 0.35) 0%, transparent 33%); }
+.mashup-tab.tab-color-6 { background-image: linear-gradient(to top, rgba(107, 255, 148, 0.35) 0%, transparent 33%); }
+
+/* Mashup tab drag-and-drop indicators */
+.mashup-tab[draggable="true"] {
+    cursor: grab;
+}
+
+.mashup-tab.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.mashup-tab.drag-over-left {
+    border-left: 2px solid var(--accent-primary);
+}
+
+.mashup-tab.drag-over-right {
+    border-right: 2px solid var(--accent-primary);
+}
+
 #add-song-btn {
     flex-shrink: 0;
     position: relative;

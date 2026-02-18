@@ -920,7 +920,12 @@ export function clearCurrentSetList() {
  */
 export function createMashupGroup(tabIds, name = null) {
     const groupId = 'mashup_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
-    state.mashupGroups[groupId] = { tabIds: [...tabIds], name: name || null };
+    state.mashupGroups[groupId] = { 
+        tabIds: [...tabIds], 
+        name: name || null,
+        expanded: false,             // Segments collapsed by default when opened
+        lastActiveSongId: tabIds[0] || null  // Track which segment was last active
+    };
     
     // Set mashup membership on each song
     tabIds.forEach((songId, index) => {
@@ -1019,6 +1024,121 @@ export function removeSongFromMashupGroup(songId) {
     if (group.tabIds.length === 0) {
         delete state.mashupGroups[groupId];
     }
+}
+
+/**
+ * Toggle the expanded/collapsed state of a mashup group
+ * @param {string} groupId
+ * @returns {boolean} The new expanded state
+ */
+export function toggleMashupExpanded(groupId) {
+    const group = state.mashupGroups[groupId];
+    if (!group) return false;
+    group.expanded = !group.expanded;
+    return group.expanded;
+}
+
+/**
+ * Check if a mashup group is expanded
+ * @param {string} groupId
+ * @returns {boolean}
+ */
+export function isMashupExpanded(groupId) {
+    const group = state.mashupGroups[groupId];
+    return group ? group.expanded : false;
+}
+
+/**
+ * Set the last active song ID for a mashup group
+ * @param {string} groupId
+ * @param {string} songId
+ */
+export function setMashupLastActive(groupId, songId) {
+    const group = state.mashupGroups[groupId];
+    if (group) {
+        group.lastActiveSongId = songId;
+    }
+}
+
+/**
+ * Get the last active song ID for a mashup group (falls back to first tab)
+ * @param {string} groupId
+ * @returns {string|null}
+ */
+export function getMashupLastActive(groupId) {
+    const group = state.mashupGroups[groupId];
+    if (!group) return null;
+    // If lastActiveSongId is still valid, return it; otherwise fall back to first
+    if (group.lastActiveSongId && group.tabIds.includes(group.lastActiveSongId)) {
+        return group.lastActiveSongId;
+    }
+    return group.tabIds[0] || null;
+}
+
+/**
+ * Reorder an entire mashup group to a new position in the songs array.
+ * Moves all songs in the group as a contiguous block.
+ * @param {string} groupId - Mashup group ID
+ * @param {number} newStartIndex - The target index in the *original* songs array
+ */
+export function reorderMashupGroup(groupId, newStartIndex) {
+    const group = state.mashupGroups[groupId];
+    if (!group) return false;
+    
+    // Track the original positions of mashup songs so we can adjust the target index
+    const mashupSongs = [];
+    const otherSongs = [];
+    let mashupSongsBefore = 0; // count of mashup songs that were before newStartIndex
+    
+    for (let i = 0; i < state.songs.length; i++) {
+        const song = state.songs[i];
+        if (song.mashupGroupId === groupId) {
+            mashupSongs.push(song);
+            if (i < newStartIndex) {
+                mashupSongsBefore++;
+            }
+        } else {
+            otherSongs.push(song);
+        }
+    }
+    
+    if (mashupSongs.length === 0) return false;
+    
+    // Adjust target index: subtract the mashup songs that were extracted from before the target
+    const adjustedIndex = newStartIndex - mashupSongsBefore;
+    const clampedIndex = Math.max(0, Math.min(adjustedIndex, otherSongs.length));
+    
+    // Insert the mashup block at the adjusted position
+    otherSongs.splice(clampedIndex, 0, ...mashupSongs);
+    state.songs = otherSongs;
+    
+    emit(Events.SONGS_REORDERED, { groupId });
+    return true;
+}
+
+/**
+ * Remove an entire mashup group, clearing mashup properties on all member songs.
+ * Does NOT remove the songs from state.songs — caller is responsible for that.
+ * @param {string} groupId
+ * @returns {string[]} Array of song IDs that were in the group
+ */
+export function removeMashupGroup(groupId) {
+    const group = state.mashupGroups[groupId];
+    if (!group) return [];
+    
+    const songIds = [...group.tabIds];
+    
+    // Clear mashup properties on each song
+    for (const songId of songIds) {
+        const song = getSong(songId);
+        if (song) {
+            song.mashupGroupId = null;
+            song.mashupIndex = null;
+        }
+    }
+    
+    delete state.mashupGroups[groupId];
+    return songIds;
 }
 
 /**
@@ -1555,9 +1675,13 @@ export function loadState(savedState) {
             delete song.virtualSections;
             delete song.virtualDuration;
             
-            // Mashup group membership is transient - always reset on load
-            song.mashupGroupId = null;
-            song.mashupIndex = null;
+            // Ensure mashup properties exist (may be missing from old saved state)
+            if (song.mashupGroupId === undefined) {
+                song.mashupGroupId = null;
+            }
+            if (song.mashupIndex === undefined) {
+                song.mashupIndex = null;
+            }
         });
     }
     
@@ -1569,8 +1693,42 @@ export function loadState(savedState) {
         savedState.currentSetListName = null;
     }
     
-    // Mashup groups are transient - always start fresh
-    savedState.mashupGroups = {};
+    // Restore mashup groups (default to empty if not present in saved state)
+    if (!savedState.mashupGroups) {
+        savedState.mashupGroups = {};
+    }
+    
+    // Validate mashup groups: ensure all referenced songIds still exist in songs array
+    const songIdSet = new Set((savedState.songs || []).map(s => s.id));
+    const groupsToDelete = [];
+    
+    for (const [groupId, group] of Object.entries(savedState.mashupGroups)) {
+        // Filter out any songIds that no longer exist
+        group.tabIds = (group.tabIds || []).filter(id => songIdSet.has(id));
+        
+        if (group.tabIds.length === 0) {
+            groupsToDelete.push(groupId);
+        } else {
+            // Restore transient UI properties with defaults
+            group.expanded = false;
+            group.lastActiveSongId = group.tabIds[0];
+        }
+    }
+    
+    // Remove empty/orphaned groups and clear mashup props on orphaned songs
+    for (const groupId of groupsToDelete) {
+        delete savedState.mashupGroups[groupId];
+    }
+    
+    // Clear mashup properties on any songs whose group no longer exists
+    if (savedState.songs) {
+        for (const song of savedState.songs) {
+            if (song.mashupGroupId && !savedState.mashupGroups[song.mashupGroupId]) {
+                song.mashupGroupId = null;
+                song.mashupIndex = null;
+            }
+        }
+    }
     
     Object.assign(state, savedState);
     emit(Events.STATE_LOADED, state);
@@ -1585,8 +1743,6 @@ export function getSerializableState() {
     const serializableSongs = state.songs.map(song => {
         const { 
             beatPositions,  // Derived from tempo/time signature
-            // Mashup group membership is transient, not persisted
-            mashupGroupId, mashupIndex,
             // Legacy properties (should not exist, but ensure cleanup)
             arrangement, virtualSections, virtualDuration,
             ...rest 
@@ -1594,11 +1750,21 @@ export function getSerializableState() {
         return rest;
     });
     
+    // Serialize mashup groups (strip transient UI state like expanded)
+    const serializableMashupGroups = {};
+    for (const [groupId, group] of Object.entries(state.mashupGroups)) {
+        serializableMashupGroups[groupId] = {
+            tabIds: [...group.tabIds],
+            name: group.name
+        };
+    }
+    
     return {
         songs: serializableSongs,
         activeSongId: state.activeSongId,
         currentSetListId: state.currentSetListId,
-        currentSetListName: state.currentSetListName
+        currentSetListName: state.currentSetListName,
+        mashupGroups: serializableMashupGroups
     };
 }
 
