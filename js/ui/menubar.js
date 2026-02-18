@@ -2493,7 +2493,8 @@ class MenuBarUI {
             songOptionsHtml,
             pitchOptionsHtml,
             allSongs,
-            metadataCache: {} // songName -> metadata
+            metadataCache: {}, // songName -> metadata
+            defaultTargetBpm: null // BPM from first entry's song, used to auto-fill new entries
         };
         
         return new Promise((resolve) => {
@@ -2552,6 +2553,8 @@ class MenuBarUI {
                                     
                                     // Clear entries and add from mashup data
                                     container.innerHTML = '';
+                                    // Set defaultTargetBpm from first entry so new entries get this value
+                                    editorState.defaultTargetBpm = mashupData.entries[0]?.targetBpm ?? null;
                                     for (const entry of mashupData.entries) {
                                         this._addMashupEntryRow(container, editorState, entry);
                                     }
@@ -2589,6 +2592,15 @@ class MenuBarUI {
                     if (entries.length === 0) {
                         if (errorDiv) {
                             errorDiv.textContent = 'At least one entry with a song is required';
+                            errorDiv.classList.remove('hidden');
+                        }
+                        return false;
+                    }
+                    
+                    // Validate that every entry has a target BPM
+                    if (entries.some(e => e.targetBpm === null)) {
+                        if (errorDiv) {
+                            errorDiv.textContent = 'Each entry must have a target BPM';
                             errorDiv.classList.remove('hidden');
                         }
                         return false;
@@ -2738,7 +2750,7 @@ class MenuBarUI {
      * Add an entry row to the mashup editor
      * @param {HTMLElement} container - Entries container
      * @param {Object} editorState - Shared editor state
-     * @param {Object} [prefill] - Optional prefill data { songName, arrangementName, pitch }
+     * @param {Object} [prefill] - Optional prefill data { songName, arrangementName, pitch, targetBpm }
      */
     _addMashupEntryRow(container, editorState, prefill = null) {
         // Remove empty state message if present
@@ -2764,12 +2776,14 @@ class MenuBarUI {
             <select class="mashup-entry-pitch" title="Pitch">
                 ${editorState.pitchOptionsHtml}
             </select>
+            <input type="number" class="mashup-entry-bpm" title="Target BPM" placeholder="BPM" min="1" step="any">
             <button type="button" class="mashup-entry-remove" title="Remove entry">&times;</button>
         `;
         
         const songSelect = row.querySelector('.mashup-entry-song');
         const arrangementSelect = row.querySelector('.mashup-entry-arrangement');
         const pitchSelect = row.querySelector('.mashup-entry-pitch');
+        const bpmInput = row.querySelector('.mashup-entry-bpm');
         const removeBtn = row.querySelector('.mashup-entry-remove');
         
         // Promise that resolves when the song change handler finishes loading arrangements
@@ -2798,7 +2812,7 @@ class MenuBarUI {
                 console.warn('Failed to fetch arrangements for', songName, err);
             }
             
-            // Load metadata for key info
+            // Load metadata for key info and BPM
             try {
                 if (!editorState.metadataCache[songName]) {
                     const metadata = await Metadata.loadMetadata(songName);
@@ -2810,6 +2824,29 @@ class MenuBarUI {
                     // Restore pitch value if prefilled
                     if (prefill?.pitch !== undefined) {
                         pitchSelect.value = String(prefill.pitch);
+                    }
+                }
+                
+                // BPM: set placeholder to this song's native BPM
+                const nativeBpm = metadata?.tempos?.[0]?.tempo;
+                if (nativeBpm && nativeBpm > 0) {
+                    bpmInput.placeholder = String(nativeBpm);
+                    bpmInput.dataset.nativeBpm = String(nativeBpm);
+                    
+                    // If this is the first entry and no defaultTargetBpm yet, establish it
+                    const isFirstEntry = row === container.querySelector('.mashup-entry-row');
+                    if (isFirstEntry && editorState.defaultTargetBpm === null) {
+                        editorState.defaultTargetBpm = nativeBpm;
+                        
+                        // Propagate to all existing rows with empty BPM inputs
+                        container.querySelectorAll('.mashup-entry-row .mashup-entry-bpm').forEach(input => {
+                            if (!input.value) {
+                                input.value = nativeBpm;
+                            }
+                        });
+                    } else if (!bpmInput.value && editorState.defaultTargetBpm !== null) {
+                        // Non-first entry with no value: fill with the mashup's default target BPM
+                        bpmInput.value = editorState.defaultTargetBpm;
                     }
                 }
             } catch (err) {
@@ -2836,6 +2873,10 @@ class MenuBarUI {
         
         // Apply prefill data
         if (prefill) {
+            // Set BPM before triggering song change so the handler sees it as non-empty
+            if (prefill.targetBpm !== undefined && prefill.targetBpm !== null) {
+                bpmInput.value = prefill.targetBpm;
+            }
             if (prefill.songName) {
                 songSelect.value = prefill.songName;
                 // Trigger change to load arrangements, then set values after it completes
@@ -2852,6 +2893,9 @@ class MenuBarUI {
             if (prefill.pitch !== undefined) {
                 pitchSelect.value = String(prefill.pitch);
             }
+        } else if (editorState.defaultTargetBpm !== null) {
+            // New entry with no prefill: pre-fill with the mashup's default target BPM
+            bpmInput.value = editorState.defaultTargetBpm;
         }
     }
     
@@ -2919,8 +2963,10 @@ class MenuBarUI {
             
             const arrangementName = row.querySelector('.mashup-entry-arrangement')?.value || null;
             const pitch = parseInt(row.querySelector('.mashup-entry-pitch')?.value || '0', 10);
+            const targetBpmRaw = parseFloat(row.querySelector('.mashup-entry-bpm')?.value);
+            const targetBpm = isNaN(targetBpmRaw) || targetBpmRaw <= 0 ? null : targetBpmRaw;
             
-            entries.push({ songName, arrangementName: arrangementName || null, pitch });
+            entries.push({ songName, arrangementName: arrangementName || null, pitch, targetBpm });
         });
         
         return entries;
@@ -2989,6 +3035,12 @@ class MenuBarUI {
                 // Apply pitch
                 if (entry.pitch && entry.pitch !== 0) {
                     song.transport.pitch = entry.pitch;
+                }
+                
+                // Apply speed from target BPM
+                const nativeBpm = song.metadata?.tempos?.[0]?.tempo;
+                if (nativeBpm && nativeBpm > 0) {
+                    song.transport.speed = Math.max(0.5, Math.min(2.0, entry.targetBpm / nativeBpm));
                 }
                 
                 // Apply arrangement if specified
@@ -3143,6 +3195,12 @@ class MenuBarUI {
                 // Apply pitch
                 if (mashupEntry.pitch && mashupEntry.pitch !== 0) {
                     song.transport.pitch = mashupEntry.pitch;
+                }
+                
+                // Apply speed from target BPM
+                const nativeBpm = song.metadata?.tempos?.[0]?.tempo;
+                if (nativeBpm && nativeBpm > 0) {
+                    song.transport.speed = Math.max(0.5, Math.min(2.0, mashupEntry.targetBpm / nativeBpm));
                 }
                 
                 // Apply arrangement if specified

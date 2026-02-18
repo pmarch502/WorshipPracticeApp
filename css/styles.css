@@ -2401,8 +2401,8 @@ select:disabled {
    Mashup Editor Modal
    ======================================== */
 #modal-dialog.modal-mashup-editor {
-    min-width: 580px;
-    max-width: 720px;
+    min-width: 640px;
+    max-width: 780px;
     width: 90vw;
 }
 
@@ -2484,7 +2484,8 @@ select:disabled {
     flex-shrink: 0;
 }
 
-.mashup-entry-row select {
+.mashup-entry-row select,
+.mashup-entry-row input[type="number"] {
     padding: 5px 6px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -2493,7 +2494,8 @@ select:disabled {
     font-size: 12px;
 }
 
-.mashup-entry-row select:focus {
+.mashup-entry-row select:focus,
+.mashup-entry-row input[type="number"]:focus {
     outline: none;
     border-color: var(--accent-primary);
 }
@@ -2511,6 +2513,18 @@ select:disabled {
 .mashup-entry-pitch {
     flex: 0 0 80px;
     min-width: 80px;
+}
+
+.mashup-entry-bpm {
+    flex: 0 0 70px;
+    min-width: 70px;
+    -moz-appearance: textfield;
+}
+
+.mashup-entry-bpm::-webkit-outer-spin-button,
+.mashup-entry-bpm::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
 
 .mashup-entry-remove {

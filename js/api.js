@@ -565,7 +565,7 @@ export async function getMashup(name) {
  * Save a mashup (create or update)
  * @param {string} name - Name of the mashup
  * @param {Object} data - Mashup data
- * @param {Array} data.entries - Array of { songName, arrangementName, pitch } objects
+ * @param {Array} data.entries - Array of { songName, arrangementName, pitch, targetBpm } objects
  * @param {boolean} [data.protected=false] - Whether to protect this mashup
  * @param {string} [data.secret] - Required if overwriting a protected mashup
  * @returns {Promise<Object>} - Response with success, message, and saved mashup

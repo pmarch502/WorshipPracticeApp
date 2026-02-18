@@ -1021,6 +1021,9 @@ async function handleSaveMashup(name, body) {
         if (typeof entry.pitch !== 'number' || !Number.isInteger(entry.pitch) || entry.pitch < -6 || entry.pitch > 6) {
             return response(400, { error: `Entry '${entry.songName}': pitch must be an integer from -6 to 6` });
         }
+        if (typeof entry.targetBpm !== 'number' || entry.targetBpm <= 0) {
+            return response(400, { error: `Entry '${entry.songName}': targetBpm must be a positive number` });
+        }
     }
     
     const key = `mashups/${name}.json`;
@@ -1053,7 +1056,8 @@ async function handleSaveMashup(name, body) {
         entries: entries.map(entry => ({
             songName: entry.songName,
             arrangementName: entry.arrangementName || null,
-            pitch: entry.pitch
+            pitch: entry.pitch,
+            targetBpm: entry.targetBpm
         })),
         protected: isProtected || false,
         createdAt: existingMashup?.createdAt || now,
