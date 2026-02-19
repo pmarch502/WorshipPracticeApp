@@ -124,6 +124,11 @@
             text-decoration: none;
         }
         
+        div.note a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        
         table {
             width: 100%;
             border-collapse: collapse;
@@ -326,12 +331,13 @@
                 <li><a href="#loop-functionality">7. Loop Functionality</a></li>
                 <li><a href="#arrangements">8. Arrangements</a></li>
                 <li><a href="#mute-sets">9. Mute Sets</a></li>
-                <li><a href="#set-lists">10. Set Lists</a></li>
-                <li><a href="#audio-controls">11. Audio Controls</a></li>
-                <li><a href="#keyboard-shortcuts">12. Keyboard Shortcuts</a></li>
-                <li><a href="#hidden-features">13. Hidden Features</a></li>
-                <li><a href="#cache-storage">14. Cache &amp; Storage</a></li>
-                <li><a href="#browser-requirements">15. Browser Requirements</a></li>
+                <li><a href="#mashups">10. Mashups</a></li>
+                <li><a href="#set-lists">11. Set Lists</a></li>
+                <li><a href="#audio-controls">12. Audio Controls</a></li>
+                <li><a href="#keyboard-shortcuts">13. Keyboard Shortcuts</a></li>
+                <li><a href="#hidden-features">14. Hidden Features</a></li>
+                <li><a href="#cache-storage">15. Cache &amp; Storage</a></li>
+                <li><a href="#browser-requirements">16. Browser Requirements</a></li>
                 <li><a href="#quick-reference">Quick Reference</a></li>
             </ul>
         </nav>
@@ -362,8 +368,12 @@
             
             <div class="interface-layout">
                 <div class="feature-card full-width">
-                    <h4>Tab Bar (Top)</h4>
-                    <p>Spans the full width at the top. Displays open songs as tabs. Click tabs to switch between songs. Drag tabs to reorder songs. Use the + button at the far left to open new songs. The dropdown menu on the far right provides access to Arrangements and Mute Sets for the current song.</p>
+                    <h4>Menu Bar (Top)</h4>
+                    <p>Spans the full width at the top. Displays menus for various features of the app: Arrangements, Mute Sets, Set Lists, and Mashups.</p>
+                </div>
+                <div class="feature-card full-width">
+                    <h4>Tab Bar</h4>
+                    <p>Spans the full width beneath the menu bar. Displays open songs as tabs. Mashups appear as a single collapsible tab containing their songs. Click tabs to switch between songs. Drag tabs to reorder songs. Use the + button at the far left to open new songs. The menu bar includes dropdowns for Set Lists and Mashups, and the dropdown menu on the far right provides access to Arrangements and Mute Sets for the current song.</p>
                 </div>
                 <div class="feature-card">
                     <h4>Track Controls (Left)</h4>
@@ -379,7 +389,7 @@
                 </div>
             </div>
             
-            <h3>Menu Button</h3>
+            <h3>Help Button</h3>
             <p>Click the <strong>?</strong> button in the track controls header to access:</p>
             <ul>
                 <li><strong>Preferences</strong> — Opens the Preferences dialog</li>
@@ -396,6 +406,15 @@
             <ul>
                 <li><strong>OFF</strong> — Playback continues in the background, allowing you to check chord charts, lyrics, or other materials while practicing. Custom arrangements (skipped sections) and loops work correctly even when the tab is hidden.</li>
                 <li><strong>ON</strong> — Playback pauses automatically when you leave the tab. Useful if you prefer focused practice sessions or want to ensure you don't miss anything while away.</li>
+            </ul>
+
+            <h4>Enhanced waveform visibility</h4>
+            <p>When enabled, waveforms will display larger than the actual peaks (i.e. normalized to max vertical height).</p>
+            <p><strong>Default: ON</strong></p>
+            <p>This setting is a matter of personal preference:</p>
+            <ul>
+                <li><strong>OFF</strong> — Waveform will accurately represent waveform peaks</li>
+                <li><strong>ON</strong> — Waveform will be normalized so that the waveforms highest peak will be adjusted to max height and all other peaks will be adjusted by the same amount.</li>
             </ul>
         </section>
         
@@ -896,16 +915,106 @@
             </div>
         </section>
         
-        <!-- Section 10: Set Lists -->
+        <!-- Section 10: Mashups -->
+        <section id="mashups">
+            <h2>10. Mashups</h2>
+            <p>Mashups allow you to chain multiple songs together into a sequence that auto-advances from one song to the next during playback. This is useful when your team plays two or more songs back-to-back as a medley without pausing between them.</p>
+            
+            <h3>Understanding Mashups</h3>
+            <ul>
+                <li>A mashup is an <strong>ordered list of entries</strong>, where each entry is a song with its own arrangement, pitch, and target BPM</li>
+                <li>During playback, when a song finishes (reaches the end or runs out of enabled arrangement sections), the app <strong>automatically transitions to the next song</strong> in the sequence</li>
+                <li>When the last song in the mashup finishes, playback stops</li>
+                <li>Mashups are saved to and loaded from the cloud, making them accessible from any device</li>
+            </ul>
+            
+            <h3>How Mashups Appear in the Tab Bar</h3>
+            <p>When a mashup is open, its songs appear as a <strong>single collapsible tab</strong> in the tab bar rather than as individual tabs. Click the mashup tab to expand or collapse it, revealing the individual song segments within.</p>
+            
+            <h3>Creating a Mashup</h3>
+            <ol>
+                <li>Click the <strong>Mashup</strong> dropdown in the menu bar</li>
+                <li>Select <strong>New...</strong></li>
+                <li>The <strong>Mashup Editor</strong> modal opens with an empty entry list</li>
+                <li>Click <strong>Add Entry</strong> to add a row for each song in the sequence</li>
+                <li>For each entry, configure:
+                    <ul>
+                        <li><strong>Song</strong> — Select the song from the dropdown</li>
+                        <li><strong>Arrangement</strong> — Optionally select a saved arrangement (defaults to the full song)</li>
+                        <li><strong>Pitch</strong> — Set the pitch offset in semitones (-6 to +6)</li>
+                        <li><strong>Target BPM</strong> — Optionally set a target tempo; the playback speed will be adjusted automatically to match</li>
+                    </ul>
+                </li>
+                <li><strong>Drag entries</strong> to reorder them as needed</li>
+                <li>Enter a name for the mashup</li>
+                <li>Optionally check <strong>"Mark as protected"</strong> to require an admin password to edit or delete</li>
+                <li>Click <strong>Save</strong></li>
+            </ol>
+            
+            <h3>Opening a Mashup</h3>
+            <ol>
+                <li>Click the <strong>Mashup</strong> dropdown in the menu bar</li>
+                <li>Select <strong>Open</strong> and choose a saved mashup from the list</li>
+                <li>Each song in the mashup is opened as a tab with its Click and Reference tracks loaded automatically</li>
+                <li>Pitch, speed (from target BPM), and arrangement settings are applied to each song</li>
+                <li>The songs appear as a single grouped tab in the tab bar</li>
+            </ol>
+            
+            <h3>Editing a Mashup</h3>
+            <ol>
+                <li>Click the <strong>Mashup</strong> dropdown and select <strong>Edit...</strong></li>
+                <li>Choose the mashup you want to edit</li>
+                <li>The Mashup Editor opens with the current entries pre-populated</li>
+                <li>Add, remove, or reorder entries as needed</li>
+                <li>Click <strong>Save</strong> to update the mashup</li>
+            </ol>
+            
+            <h3>Deleting a Mashup</h3>
+            <ol>
+                <li>Click the <strong>Mashup</strong> dropdown and select <strong>Delete</strong></li>
+                <li>Choose the mashup you want to delete</li>
+                <li>If the mashup is protected, enter the admin password</li>
+                <li>Confirm the deletion</li>
+            </ol>
+            
+            <h3>Using the Mashup Dropdown</h3>
+            <ul>
+                <li><strong>Open</strong> — Load a saved mashup</li>
+                <li><strong>New...</strong> — Create a new mashup from scratch</li>
+                <li><strong>Edit...</strong> — Edit an existing saved mashup</li>
+                <li><strong>Delete</strong> — Delete a saved mashup</li>
+            </ul>
+            
+            <h3>How Mashup Playback Works</h3>
+            <ul>
+                <li>When a song in the mashup ends, the app <strong>automatically loads and starts</strong> the next song in the sequence</li>
+                <li>A brief mute/unmute transition (~50ms) ensures a clean handoff between songs</li>
+                <li>Each song's pitch, speed, and arrangement are applied independently</li>
+                <li>If a song has a custom arrangement, disabled sections are skipped as usual</li>
+                <li>When the <strong>last song</strong> in the mashup finishes, playback stops and the view returns to the first song</li>
+            </ul>
+            
+            <div class="note">
+                <strong>Note:</strong> Mashups are stored globally on the cloud and are accessible from any device. They can also be included in set lists (see <a href="#set-lists">Set Lists</a>).
+            </div>
+            
+            <div class="tip">
+                <strong>Tip:</strong> Use the Target BPM field to align songs to a common tempo. The app will automatically calculate and apply the correct playback speed for each entry.
+            </div>
+        </section>
+        
+        <!-- Section 11: Set Lists -->
         <section id="set-lists">
-            <h2>10. Set Lists</h2>
-            <p>Set Lists allow you to save and quickly load an ordered collection of songs with pre-configured arrangements and pitch settings. They are ideal for preparing for worship services or practice sessions.</p>
+            <h2>11. Set Lists</h2>
+            <p>Set Lists allow you to save and quickly load an ordered collection of songs and mashups with pre-configured arrangements and pitch settings. They are ideal for preparing for worship services or practice sessions.</p>
             
             <h3>Understanding Set Lists</h3>
             <ul>
                 <li><strong>None:</strong> The default state—no set list is loaded</li>
                 <li><strong>Saved Set Lists:</strong> Custom configurations saved to the cloud</li>
-                <li>Set lists store the <strong>song name</strong>, <strong>arrangement</strong>, and <strong>pitch/key</strong> for each song</li>
+                <li>Set list entries can be <strong>individual songs</strong> or <strong>mashups</strong></li>
+                <li>Song entries store the <strong>song name</strong>, <strong>arrangement</strong>, and <strong>pitch/key</strong></li>
+                <li>Mashup entries store a <strong>reference to a saved mashup by name</strong>—all mashup settings (entries, arrangements, pitch, target BPM) come from the saved mashup</li>
                 <li>The same song can appear multiple times in a set list (e.g., with different keys or arrangements)</li>
                 <li>Mute sets are <strong>not</strong> stored in set lists—you apply them independently per song after loading</li>
             </ul>
@@ -916,17 +1025,22 @@
                 <li>Select a saved set list from the list</li>
                 <li>All currently open songs will be closed</li>
                 <li>Each song in the set list will be opened with its Click and Reference tracks automatically loaded</li>
-                <li>Arrangements and pitch settings are applied automatically</li>
+                <li>Mashup entries are loaded as grouped mashup tabs with all their songs, arrangements, pitch, and speed settings applied</li>
+                <li>Arrangements and pitch settings are applied automatically for standalone songs</li>
             </ol>
             
             <h3>Saving a Set List</h3>
             <ol>
-                <li>Open the songs you want in your set list (arrange tabs in the desired order)</li>
-                <li>Select arrangements and set pitch/key for each song as needed</li>
+                <li>Open the songs and/or mashups you want in your set list (arrange tabs in the desired order)</li>
+                <li>Select arrangements and set pitch/key for each standalone song as needed</li>
                 <li>Open the Set List dropdown and select <strong>Save Current As...</strong></li>
                 <li>Enter a name and optionally check <strong>"Mark as protected"</strong></li>
                 <li>Click <strong>Save</strong></li>
             </ol>
+            
+            <div class="note">
+                <strong>Note:</strong> Mashups that have been saved are stored in the set list by reference (by name). If you later update the saved mashup, all set lists referencing it will pick up the changes. Ad-hoc mashup groups (not saved) are stored as individual song entries instead.
+            </div>
             
             <h3>Using the Set List Dropdown</h3>
             <ul>
@@ -939,9 +1053,10 @@
             <h3>How Set Lists Work</h3>
             <ul>
                 <li>When a set list is loaded, <strong>Click</strong> and <strong>Reference</strong> tracks are automatically loaded for each song (matched by keyword in the track filename)</li>
+                <li>Mashup entries are fully restored—each song in the mashup is opened with its pitch, speed, and arrangement settings, and the songs are grouped as a mashup tab</li>
                 <li>You can load additional tracks manually via the track picker after the set list is loaded</li>
                 <li>Only the active song's tracks are loaded into the audio engine; switching tabs loads that song's tracks</li>
-                <li>If a song in the set list is no longer available, it will be skipped with a warning</li>
+                <li>If a song or mashup in the set list is no longer available, it will be skipped with a warning</li>
                 <li>If an arrangement in the set list is no longer available, the song will fall back to "Original"</li>
             </ul>
             
@@ -950,9 +1065,9 @@
             </div>
         </section>
         
-        <!-- Section 11: Audio Controls -->
+        <!-- Section 12: Audio Controls -->
         <section id="audio-controls">
-            <h2>11. Audio Controls</h2>
+            <h2>12. Audio Controls</h2>
             
             <h3>Speed Control (Time Stretch)</h3>
             <ul>
@@ -1026,9 +1141,9 @@
             </table>
         </section>
         
-        <!-- Section 11: Keyboard Shortcuts -->
+        <!-- Section 13: Keyboard Shortcuts -->
         <section id="keyboard-shortcuts">
-            <h2>12. Keyboard Shortcuts</h2>
+            <h2>13. Keyboard Shortcuts</h2>
             <p>Master these keyboard shortcuts to speed up your workflow.</p>
             
             <h3>Playback Controls</h3>
@@ -1108,9 +1223,9 @@
             </div>
         </section>
         
-        <!-- Section 12: Hidden Features -->
+        <!-- Section 14: Hidden Features -->
         <section id="hidden-features">
-            <h2>13. Hidden Features</h2>
+            <h2>14. Hidden Features</h2>
             <p>These features aren't immediately obvious but can greatly enhance your workflow.</p>
             
             <h3>Shift-Modified Controls</h3>
@@ -1172,9 +1287,9 @@
             <p>Tracks with names containing certain keywords (click, drum, perc, guide, loop, tambourine, shaker, cymbal, clap) are automatically marked as pitch-exempt and will not be affected by pitch changes. You can override this by clicking the musical note icon next to the track name.</p>
         </section>
         
-        <!-- Section 13: Cache & Storage -->
+        <!-- Section 15: Cache & Storage -->
         <section id="cache-storage">
-            <h2>14. Cache &amp; Storage</h2>
+            <h2>15. Cache &amp; Storage</h2>
             
             <h3>Cache Indicator</h3>
             <p>The storage indicator in the track controls header shows current cache usage (e.g., "45.2 MB / 2.0 GB").</p>
@@ -1214,9 +1329,9 @@
             </div>
         </section>
         
-        <!-- Section 14: Browser Requirements -->
+        <!-- Section 16: Browser Requirements -->
         <section id="browser-requirements">
-            <h2>15. Browser Requirements</h2>
+            <h2>16. Browser Requirements</h2>
             <p>The Worship Practice App requires a modern browser with support for advanced Web APIs.</p>
             
             <h3>Supported Browsers</h3>

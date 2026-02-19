@@ -1122,9 +1122,9 @@ body {
     transition: opacity var(--transition-fast), color var(--transition-fast);
 }
 
-.track-pitch-exempt-btn svg {
-    width: 14px;
-    height: 14px;
+.track-pitch-exempt-btn {
+    font-size: 14px;
+    line-height: 1;
 }
 
 /* Always visible when exempt (important indicator) */

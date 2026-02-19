@@ -308,6 +308,15 @@
 
     </div>
 
+    <!-- Cleanup: unregister any stale service workers left over from removed PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                registrations.forEach(function(r) { r.unregister(); });
+            });
+        }
+    </script>
+
     <!-- Scripts -->
     <script src="js/lib/soundtouch.js"></script>
     <script type="module" src="js/main.js"></script>

@@ -357,9 +357,7 @@ class TrackPanel {
             <div class="track-control-header">
                 <span class="track-name" title="${track.name}">${track.name}</span>
                 <button class="track-pitch-exempt-btn ${pitchExemptClasses}" title="${pitchExemptTooltip}">
-                    <svg viewBox="0 0 24 24" width="14" height="14">
-                        <path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                    </svg>
+                    &#9835;
                     ${isPitchExempt ? '<span class="pitch-exempt-slash"></span>' : ''}
                 </button>
                 <button class="track-delete-btn" title="Delete track">
