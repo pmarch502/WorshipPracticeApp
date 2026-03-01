@@ -11,6 +11,7 @@ import { getTransport } from './transport.js';
 import * as cacheManager from './cache/cacheManager.js';
 import * as Metadata from './metadata.js';
 import * as Manifest from './manifest.js';
+import { getPreference } from './storage.js';
 
 /**
  * Open a song from the manifest
@@ -101,6 +102,17 @@ export async function switchSong(songId) {
     // Unload current song's tracks
     if (currentSong) {
         TrackManager.unloadTracksForSong(currentSong);
+        
+        // When PCM caching is enabled, evict AudioBuffers from memory for the
+        // song we're switching away from. The data is safely on disk as PCM.
+        // Don't evict mashup songs -- they need instant access during auto-advance.
+        if (getPreference('cachePCMToDisk') && !currentSong.mashupGroupId) {
+            const trackIds = currentSong.tracks.map(t => t.id);
+            // Wait for any in-flight PCM writes to complete before evicting
+            await TrackManager.awaitPendingPCMWrites(trackIds);
+            audioEngine.clearAudioBuffers(trackIds);
+            console.log(`Evicted ${trackIds.length} AudioBuffers for "${currentSong.songName}" (PCM cached to disk)`);
+        }
     }
     
     // Switch to new song

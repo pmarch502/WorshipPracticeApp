@@ -357,6 +357,16 @@ class ModalManager {
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
+                    <div class="preference-item">
+                        <div class="preference-label">
+                            <span class="title">Cache decoded audio to disk</span>
+                            <span class="description">Reduces memory usage by saving decoded audio to disk. Switching between songs may take a few seconds.</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="pref-cache-pcm" ${prefs.cachePCMToDisk ? 'checked' : ''}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
                 </div>
             `;
             
@@ -372,6 +382,14 @@ class ModalManager {
                 // Dispatch event so waveform panel can re-render
                 window.dispatchEvent(new CustomEvent('preferenceChanged', {
                     detail: { key: 'enhancedWaveformVisibility', value: e.target.checked }
+                }));
+            });
+            
+            const pcmToggle = document.getElementById('pref-cache-pcm');
+            pcmToggle.addEventListener('change', (e) => {
+                setPreference('cachePCMToDisk', e.target.checked);
+                window.dispatchEvent(new CustomEvent('preferenceChanged', {
+                    detail: { key: 'cachePCMToDisk', value: e.target.checked }
                 }));
             });
             

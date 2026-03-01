@@ -4,7 +4,8 @@
  * File structure:
  * /audio-cache/
  *   /{songName}/
- *     /{trackFileName}
+ *     /{trackFileName}          (compressed MP3 blob)
+ *     /{trackFileName}.pcm      (decoded PCM data, when cachePCMToDisk preference is enabled)
  */
 
 const CACHE_ROOT = 'audio-cache';
@@ -139,6 +140,65 @@ export async function retrieve(songName, trackName) {
             return null;
         }
         console.error(`Failed to retrieve ${songName}/${trackName}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Store decoded PCM data in OPFS
+ * @param {string} songName - Song name (used as directory)
+ * @param {string} trackName - Track filename
+ * @param {Blob} pcmBlob - Serialized PCM blob from audioEngine.serializeAudioBuffer()
+ * @returns {Promise<boolean>} True if stored successfully
+ */
+export async function storePCM(songName, trackName, pcmBlob) {
+    if (!initialized) {
+        throw new Error('OPFS not initialized');
+    }
+    
+    try {
+        const songDir = await getSongDirectory(songName, true);
+        const safeTrackName = sanitizeName(trackName) + '.pcm';
+        
+        const fileHandle = await songDir.getFileHandle(safeTrackName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(pcmBlob);
+        await writable.close();
+        
+        console.log(`Cached PCM: ${songName}/${trackName} (${formatBytes(pcmBlob.size)})`);
+        return true;
+    } catch (error) {
+        console.error(`Failed to cache PCM ${songName}/${trackName}:`, error);
+        return false;
+    }
+}
+
+/**
+ * Retrieve decoded PCM data from OPFS
+ * @param {string} songName - Song name
+ * @param {string} trackName - Track filename
+ * @returns {Promise<Blob|null>} The PCM blob or null if not found
+ */
+export async function retrievePCM(songName, trackName) {
+    if (!initialized) {
+        throw new Error('OPFS not initialized');
+    }
+    
+    try {
+        const songDir = await getSongDirectory(songName, false);
+        if (!songDir) return null;
+        
+        const safeTrackName = sanitizeName(trackName) + '.pcm';
+        const fileHandle = await songDir.getFileHandle(safeTrackName);
+        const file = await fileHandle.getFile();
+        
+        console.log(`Retrieved PCM from cache: ${songName}/${trackName} (${formatBytes(file.size)})`);
+        return file;
+    } catch (error) {
+        if (error.name === 'NotFoundError') {
+            return null;
+        }
+        console.error(`Failed to retrieve PCM ${songName}/${trackName}:`, error);
         return null;
     }
 }

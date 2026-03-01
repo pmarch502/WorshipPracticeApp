@@ -104,6 +104,34 @@ export async function getPeaks(songName, trackName) {
 }
 
 /**
+ * Cache decoded PCM data for a track
+ * @param {string} songName - Song name (for OPFS directory)
+ * @param {string} trackName - Track filename
+ * @param {Blob} pcmBlob - Serialized PCM blob from audioEngine.serializeAudioBuffer()
+ * @returns {Promise<boolean>}
+ */
+export async function cachePCM(songName, trackName, pcmBlob) {
+    if (!initialized) return false;
+    
+    const result = await opfsCache.storePCM(songName, trackName, pcmBlob);
+    if (result) {
+        notifyCacheUpdate();
+    }
+    return result;
+}
+
+/**
+ * Get cached PCM data for a track
+ * @param {string} songName 
+ * @param {string} trackName 
+ * @returns {Promise<Blob|null>}
+ */
+export async function getPCM(songName, trackName) {
+    if (!initialized) return null;
+    return await opfsCache.retrievePCM(songName, trackName);
+}
+
+/**
  * Check if audio blob is cached
  * @param {string} songName 
  * @param {string} trackName 

@@ -501,6 +501,57 @@ class AudioEngine {
     }
 
     /**
+     * Serialize an AudioBuffer into a binary Blob for OPFS storage.
+     * Format: 16-byte header [sampleRate(f64), numChannels(u32), length(u32)]
+     *         followed by raw Float32 channel data for each channel.
+     * @param {AudioBuffer} audioBuffer
+     * @returns {Blob}
+     */
+    serializeAudioBuffer(audioBuffer) {
+        const header = new ArrayBuffer(16);
+        const view = new DataView(header);
+        view.setFloat64(0, audioBuffer.sampleRate);
+        view.setUint32(8, audioBuffer.numberOfChannels);
+        view.setUint32(12, audioBuffer.length);
+
+        const parts = [header];
+        for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+            // getChannelData returns a Float32Array view into the AudioBuffer's internal memory.
+            // We must copy it because the Blob constructor needs a stable snapshot.
+            const channelData = audioBuffer.getChannelData(ch);
+            parts.push(new Float32Array(channelData).buffer);
+        }
+
+        return new Blob(parts);
+    }
+
+    /**
+     * Deserialize a PCM Blob back into an AudioBuffer.
+     * This is much faster than decodeAudioData() since no decompression is needed.
+     * @param {Blob} pcmBlob - Blob created by serializeAudioBuffer()
+     * @returns {Promise<AudioBuffer>}
+     */
+    async deserializeAudioBuffer(pcmBlob) {
+        await this.init();
+
+        const buffer = await pcmBlob.arrayBuffer();
+        const view = new DataView(buffer);
+        const sampleRate = view.getFloat64(0);
+        const numChannels = view.getUint32(8);
+        const length = view.getUint32(12);
+
+        const audioBuffer = this.audioContext.createBuffer(numChannels, length, sampleRate);
+        let offset = 16;
+        for (let ch = 0; ch < numChannels; ch++) {
+            const channelData = new Float32Array(buffer, offset, length);
+            audioBuffer.copyToChannel(channelData, ch);
+            offset += length * 4;
+        }
+
+        return audioBuffer;
+    }
+
+    /**
      * Load audio for a track
      * @param {string} trackId - Track ID
      * @param {Blob} blob - Audio blob

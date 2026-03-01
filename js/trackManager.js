@@ -10,6 +10,42 @@ import * as Manifest from './manifest.js';
 import { getAudioEngine } from './audioEngine.js';
 import { getModal } from './ui/modal.js';
 import * as cacheManager from './cache/cacheManager.js';
+import { getPreference } from './storage.js';
+
+// Track in-flight PCM cache writes so we can await them before evicting AudioBuffers.
+// Maps trackId -> Promise that resolves when the PCM write completes.
+const pendingPCMWrites = new Map();
+
+/**
+ * Write decoded PCM data to OPFS cache in the background.
+ * Tracked in pendingPCMWrites so eviction can await completion.
+ * @param {string} trackId - Track ID (for tracking the in-flight write)
+ * @param {string} songName - Song name
+ * @param {string} trackFileName - Track filename
+ * @param {AudioBuffer} audioBuffer - Decoded audio buffer to serialize
+ */
+function backgroundCachePCM(trackId, songName, trackFileName, audioBuffer) {
+    const audioEngine = getAudioEngine();
+    const pcmBlob = audioEngine.serializeAudioBuffer(audioBuffer);
+    const writePromise = cacheManager.cachePCM(songName, trackFileName, pcmBlob)
+        .catch(err => console.warn(`Failed to cache PCM for ${trackFileName}:`, err))
+        .finally(() => pendingPCMWrites.delete(trackId));
+    pendingPCMWrites.set(trackId, writePromise);
+}
+
+/**
+ * Await all pending PCM cache writes for the given track IDs.
+ * Called before evicting AudioBuffers to ensure data is safely on disk.
+ * @param {string[]} trackIds - Track IDs to wait for
+ */
+export async function awaitPendingPCMWrites(trackIds) {
+    const pending = trackIds
+        .map(id => pendingPCMWrites.get(id))
+        .filter(Boolean);
+    if (pending.length > 0) {
+        await Promise.all(pending);
+    }
+}
 
 /**
  * Extract filename from a file path
@@ -99,7 +135,12 @@ export async function addTrackFromManifest(songName, trackFileName) {
         // 9. Store AudioBuffer in audioEngine memory cache
         audioEngine.audioBuffers.set(track.id, audioBuffer);
 
-        // 10. Create audio nodes
+        // 10. Cache decoded PCM to OPFS in background (if preference enabled)
+        if (getPreference('cachePCMToDisk')) {
+            backgroundCachePCM(track.id, songName, trackFileName, audioBuffer);
+        }
+
+        // 11. Create audio nodes
         audioEngine.createTrackNodes(track.id, audioBuffer);
 
         State.setLoading(false);
@@ -269,11 +310,62 @@ export async function loadTracksForSong(song) {
             let audioBuffer = null;
             const trackFileName = getFileNameFromPath(track.filePath);
             
+            const pcmEnabled = getPreference('cachePCMToDisk');
+            
             // 1. Check in-memory AudioBuffer cache first (fastest)
             if (audioEngine.hasAudioBuffer(track.id)) {
                 audioBuffer = audioEngine.getAudioBuffer(track.id);
                 console.log(`Using memory-cached AudioBuffer: ${track.name}`);
+            } else if (pcmEnabled) {
+                // 2. Try PCM cache (fast -- no MP3 decoding needed)
+                const pcmBlob = await cacheManager.getPCM(song.songName, trackFileName);
+                
+                if (pcmBlob) {
+                    audioBuffer = await audioEngine.deserializeAudioBuffer(pcmBlob);
+                    audioEngine.audioBuffers.set(track.id, audioBuffer);
+                    console.log(`Loaded from PCM cache: ${track.name}`);
+                } else {
+                    // 3. Try OPFS MP3 blob cache (requires decode)
+                    const cachedBlob = await cacheManager.getAudioBlob(song.songName, trackFileName);
+                    
+                    if (cachedBlob) {
+                        audioBuffer = await audioEngine.loadTrackAudio(track.id, cachedBlob);
+                        console.log(`Loaded from OPFS cache: ${track.name}`);
+                    } else {
+                        // 4. Fetch from server
+                        console.log(`Fetching from server: ${track.name}`);
+                        const response = await fetch(track.filePath);
+                        if (!response.ok) {
+                            console.warn(`Audio file not found for track: ${track.name}`);
+                            continue;
+                        }
+                        const blob = await response.blob();
+                        audioBuffer = await audioEngine.loadTrackAudio(track.id, blob);
+                        
+                        // Cache MP3 blob for future use (in background)
+                        const peaks = track.peaks?.left ? track.peaks : audioEngine.extractPeaks(audioBuffer, 200);
+                        cacheManager.cacheTrack(song.songName, trackFileName, blob, peaks)
+                            .catch(err => console.warn('Failed to cache track:', err));
+                    }
+                    
+                    // Write PCM to OPFS in background for next time
+                    backgroundCachePCM(track.id, song.songName, trackFileName, audioBuffer);
+                }
+                
+                // Load peaks from cache if track doesn't have them
+                if (!track.peaks || !track.peaks.left) {
+                    const cachedPeaks = await cacheManager.getPeaks(song.songName, trackFileName);
+                    if (cachedPeaks) {
+                        track.peaks = cachedPeaks;
+                        State.updateTrack(track.id, { peaks: track.peaks });
+                    } else if (audioBuffer) {
+                        const peaks = audioEngine.extractPeaks(audioBuffer, 200);
+                        track.peaks = peaks;
+                        State.updateTrack(track.id, { peaks: track.peaks });
+                    }
+                }
             } else {
+                // PCM caching disabled -- original 3-tier strategy
                 // 2. Try OPFS cache
                 const cachedBlob = await cacheManager.getAudioBlob(song.songName, trackFileName);
                 
@@ -292,7 +384,6 @@ export async function loadTracksForSong(song) {
                     audioBuffer = await audioEngine.loadTrackAudio(track.id, blob);
                     
                     // Cache for future use (in background)
-                    // peaks is now {left, right, isStereo} object
                     const peaks = track.peaks?.left ? track.peaks : audioEngine.extractPeaks(audioBuffer, 200);
                     cacheManager.cacheTrack(song.songName, trackFileName, blob, peaks)
                         .catch(err => console.warn('Failed to cache track:', err));

@@ -12,7 +12,8 @@ const PREFS_KEY = 'worshipPracticeApp_prefs';
  */
 const DEFAULT_PREFS = {
     pauseOnBlur: false,  // Pause playback when tab loses focus
-    enhancedWaveformVisibility: true  // Scale quiet tracks so waveforms are always visible
+    enhancedWaveformVisibility: true,  // Scale quiet tracks so waveforms are always visible
+    cachePCMToDisk: false  // Cache decoded audio (PCM) to disk to reduce memory usage
 };
 
 /**
