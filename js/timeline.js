@@ -18,6 +18,7 @@ const LOOP_BOUNDARY_COLOR = '#00d4ff';
 const MARKER_COLOR = 'rgba(255, 255, 0, 0.1)';
 //const MARKER_OUTLINE_COLOR = 'rgba(255, 255, 255, 0.4)';
 const MARKER_TEXT_COLOR = 'rgba(255, 255, 255, 0.4)';
+const MARKER_LINE_COLOR = 'rgba(255, 255, 0, 0.4)'; // Matches waveform SECTION_DIVIDER_COLOR
 
 // Minimum pixels of movement to distinguish drag from click
 const DRAG_THRESHOLD = 5;
@@ -45,6 +46,9 @@ class Timeline {
         this.zoomFitBtn = document.getElementById('zoom-fit');
         this.zoomValueEl = document.getElementById('zoom-value');
         this.zoomKnob = null;
+        
+        // Section indicator bar (DOM-based, above the canvases)
+        this.sectionIndicatorBar = document.getElementById('section-indicator-bar');
         
         this.scrollOffset = 0;
         this.resizeObserver = null;
@@ -671,6 +675,99 @@ class Timeline {
             // Legacy single timeline - render beats mode by default
             this.renderLegacyTimeline();
         }
+        
+        // Always render section indicators (DOM-based, above the canvases)
+        this.renderSectionIndicators();
+    }
+
+    /**
+     * Render section indicator bar (colored regions for metadata markers)
+     * Each marker defines the start of a section; sections span from one marker to the next.
+     * Colors cycle through the 6-color track palette.
+     */
+    renderSectionIndicators() {
+        if (!this.sectionIndicatorBar) return;
+        
+        // Clear existing elements
+        this.sectionIndicatorBar.innerHTML = '';
+        
+        const song = State.getActiveSong();
+        if (!song) return;
+        
+        const markers = song.metadata?.markers;
+        if (!markers || markers.length === 0) return;
+        
+        // Sort markers by start time
+        const sortedMarkers = [...markers].sort((a, b) => a.start - b.start);
+        
+        // Determine song duration (max track duration)
+        const totalDuration = song.tracks?.reduce((max, t) => Math.max(max, t.duration || 0), 0) || 0;
+        if (totalDuration <= 0) return;
+        
+        const barWidth = this.sectionIndicatorBar.offsetWidth;
+        if (barWidth <= 0) return;
+        
+        // Section color palette (same 6 colors as tracks, cycling)
+        const SECTION_COLORS = 6;
+        
+        for (let i = 0; i < sortedMarkers.length; i++) {
+            const marker = sortedMarkers[i];
+            
+            // Skip unlabeled markers - they don't get their own colored region
+            if (marker.unlabeled) continue;
+            
+            const sectionStart = marker.start;
+            const sectionEnd = (i + 1 < sortedMarkers.length) ? sortedMarkers[i + 1].start : totalDuration;
+            
+            const startX = this.timeToPixel(sectionStart);
+            const endX = this.timeToPixel(sectionEnd);
+            const width = endX - startX;
+            
+            // Skip if entirely off-screen
+            if (endX < 0 || startX > barWidth) continue;
+            
+            // Skip if too narrow to see
+            if (width < 1) continue;
+            
+            const colorIndex = (i % SECTION_COLORS) + 1;
+            
+            const el = document.createElement('div');
+            el.className = `section-indicator section-color-${colorIndex}`;
+            el.style.left = `${startX}px`;
+            el.style.width = `${width}px`;
+            el.textContent = marker.name || '';
+            
+            this.sectionIndicatorBar.appendChild(el);
+        }
+    }
+
+    /**
+     * Render vertical marker lines on a timeline canvas
+     * Draws yellow vertical lines at each marker position (matching waveform marker lines)
+     */
+    renderMarkerLines(ctx, canvas) {
+        const song = State.getActiveSong();
+        if (!song) return;
+        
+        const markers = song.metadata?.markers;
+        if (!markers || markers.length === 0) return;
+        
+        ctx.strokeStyle = MARKER_LINE_COLOR;
+        ctx.lineWidth = 1;
+        
+        for (const marker of markers) {
+            if (marker.start <= 0) continue; // Skip marker at time 0
+            
+            const x = this.timeToPixel(marker.start);
+            
+            // Skip if outside visible range
+            if (x < 0 || x > canvas.width) continue;
+            
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
     }
 
     /**
@@ -872,8 +969,8 @@ class Timeline {
             }
         }
         
-        // Render markers
-        this.renderMarkers(ctx, canvas);
+        // Render vertical marker lines (yellow lines at section boundaries)
+        this.renderMarkerLines(ctx, canvas);
         
         // Render loop region on top
         this.renderLoopRegion(ctx, canvas);
@@ -962,6 +1059,9 @@ class Timeline {
                 ctx.fillText(this.formatTime(time), x, tickHeight + 2);
             }
         }
+        
+        // Render vertical marker lines (yellow lines at section boundaries)
+        this.renderMarkerLines(ctx, canvas);
         
         // Render loop region on top
         this.renderLoopRegion(ctx, canvas);
