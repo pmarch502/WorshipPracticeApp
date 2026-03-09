@@ -22,6 +22,7 @@ import { getModal } from './ui/modal.js';
 import { getSongLoader } from './ui/songLoader.js';
 import * as Manifest from './manifest.js';
 import * as cacheManager from './cache/cacheManager.js';
+import { getBackgroundAudioSupport } from './backgroundAudio.js';
 
 class App {
     constructor() {
@@ -56,7 +57,10 @@ class App {
             // Initialize audio engine
             const transport = getTransport();
             await transport.init();
-            
+
+            // Initialize background audio support (iOS/Safari keepalive, media session, wake lock)
+            getBackgroundAudioSupport().init();
+
             // Load saved state
             await this.loadSavedState();
             
