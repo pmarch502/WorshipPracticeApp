@@ -482,7 +482,11 @@ class MenuBarUI {
                 if (checkmark) checkmark.classList.remove('hidden');
             }
             this.muteMenu.appendChild(noneItem);
-            
+
+            // "Invert Mutes" option
+            const invertItem = this.createMenuItem('Invert Mutes', () => this.invertMutes(song), false);
+            this.muteMenu.appendChild(invertItem);
+
             // List of mute sets
             if (muteSets.length > 0) {
                 this.muteMenu.appendChild(this.createDivider());
@@ -1051,7 +1055,26 @@ class MenuBarUI {
         
         this.updateMuteButtonText(song);
     }
-    
+
+    /**
+     * Invert all mute sections (muted becomes unmuted, unmuted becomes muted)
+     * then reset the current mute set selection to None
+     */
+    invertMutes(song) {
+        State.invertAllMuteSections();
+        State.setMuteSetModified(false);
+
+        const activeSong = State.getActiveSong();
+        if (activeSong) {
+            activeSong.currentMuteSetId = null;
+            activeSong.currentMuteSetName = null;
+            activeSong.currentMuteSetProtected = false;
+        }
+
+        this.updateMuteButtonText(song);
+        this.closeMuteDropdown();
+    }
+
     /**
      * Select a saved mute set (with unsaved changes check)
      */

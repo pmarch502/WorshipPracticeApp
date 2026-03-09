@@ -57,6 +57,7 @@ export function createDefaultSong(songName) {
 
 // Keywords that indicate a track should be exempt from pitch shifting (case-insensitive contains)
 const PITCH_EXEMPT_KEYWORDS = ['click', 'drum', 'perc', 'guide', 'loop', 'tambourine', 'shaker', 'cymbal', 'clap'];
+const MUTE_INVERT_EXEMPT_KEYWORDS = ['click', 'guide', 'reference'];
 
 /**
  * Check if a track name matches pitch-exempt keywords
@@ -1195,6 +1196,39 @@ export function initializeAllMuteSections(songId = null) {
         });
     }
     
+    return true;
+}
+
+/**
+ * Invert all mute sections for all tracks (muted becomes unmuted, unmuted becomes muted)
+ */
+export function invertAllMuteSections() {
+    const song = getActiveSong();
+    if (!song || !song.muteSections) return false;
+
+    for (const trackId of Object.keys(song.muteSections)) {
+        // Skip tracks whose names match exempt keywords (click, guide, reference)
+        const track = song.tracks.find(t => t.id === trackId);
+        if (track) {
+            const lower = track.name.toLowerCase();
+            if (MUTE_INVERT_EXEMPT_KEYWORDS.some(kw => lower.includes(kw))) continue;
+        }
+
+        const sections = song.muteSections[trackId];
+        if (sections) {
+            for (const section of sections) {
+                section.muted = !section.muted;
+            }
+        }
+    }
+
+    emit(Events.MUTE_SECTIONS_CHANGED, {
+        song,
+        trackId: null,
+        sections: null,
+        modified: false
+    });
+
     return true;
 }
 
