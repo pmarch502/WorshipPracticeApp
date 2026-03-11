@@ -1358,6 +1358,11 @@ body {
     text-overflow: ellipsis;
     color: rgba(255, 255, 255, 0.8);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    cursor: pointer;
+}
+
+.section-indicator:hover {
+    filter: brightness(1.5);
 }
 
 .section-indicator.section-color-1 { background-color: rgba(0, 212, 255, 0.3); }

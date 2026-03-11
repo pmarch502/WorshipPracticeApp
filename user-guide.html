@@ -414,7 +414,16 @@
             <p>This setting is a matter of personal preference:</p>
             <ul>
                 <li><strong>OFF</strong> — Waveform will accurately represent waveform peaks</li>
-                <li><strong>ON</strong> — Waveform will be normalized so that the waveforms highest peak will be adjusted to max height and all other peaks will be adjusted by the same amount.</li>
+                <li><strong>ON</strong> — Waveform will be normalized so that the waveforms highest peak will be adjusted to max height and all other peaks will be adjusted by the same amount. (This makes it easier to see when a track has quiet audio on it.)</li>
+            </ul>
+
+            <h4>Cache decoded audio to disk</h4>
+            <p>When tracks are loaded, the source .mp3 files must be decoded for proper timing/synchronization for the apps various features. Normally, we only cache the source .mp3 files. Every time those files are loaded from cache, they must be decoded. Storing the decoded audio takes a lot of space, but makes loading from cache much quicker.</p>
+            <p><strong>Default: OFF</strong></p>
+            <p>This setting is a matter of personal preference:</p>
+            <ul>
+                <li><strong>OFF</strong> — No decoded audio data is stored. Loading from cache takes longer because the data must be decoded.</li>
+                <li><strong>ON</strong> — Decoded audio data is stored making loading from cache much quicker. This also requires ~10X the space.</li>
             </ul>
         </section>
         
@@ -584,15 +593,18 @@
         <section id="timeline-waveform">
             <h2>6. Timeline &amp; Waveform</h2>
             
+            <h3>Markers</h3>
+            <p>If the song has section markers defined, they appear as colored labels spanning the length of the section. Common markers include Intro, Verse, Chorus, Bridge, etc.</p>
+            <ul>
+                <li><strong>Clicking a Section Label:</strong> Moves the play head to the beginning of that section. If audio is playing, audio playback jumps to that section, too.</li>
+            </ul>
+            
             <h3>Dual Timeline Display</h3>
             <p>The timeline header shows two synchronized timelines:</p>
             <ul>
                 <li><strong>Beats Timeline (top):</strong> Shows measure:beat notation (e.g., "4:2" = measure 4, beat 2)</li>
                 <li><strong>Time Timeline (bottom):</strong> Shows time in M:SS.m format (e.g., "1:30.5")</li>
             </ul>
-            
-            <h3>Markers</h3>
-            <p>If the song has section markers defined, they appear as labeled triangles on the beats timeline. Common markers include Intro, Verse, Chorus, Bridge, etc.</p>
             
             <h3>Timeline Interactions</h3>
             <table>
@@ -897,6 +909,7 @@
             <ul>
                 <li><strong>None (All Unmuted)</strong> — Clear all mute sections</li>
                 <li><strong>Saved mute sets</strong> — Load a previously saved mute set</li>
+                <li><strong>Invert Mutes</strong> — Flips the Mute state of every section of every track. This is useful for finding complementary parts. For example, if one guitar player defines a mute set for the lead guitar part, loading it and inverting it shows everything that is available to play for a rhythm guitar part (no duplicating parts).</li>
                 <li><strong>Save</strong> — Save changes to the current mute set</li>
                 <li><strong>Save As...</strong> — Save as a new mute set with a name</li>
                 <li><strong>Delete ></strong> — Delete a saved mute set</li>
@@ -911,7 +924,7 @@
             </ul>
             
             <div class="note">
-                <strong>Note:</strong> Mute sets only save tracks that have at least one muted section. Tracks with no muted sections are treated as fully unmuted.
+                <strong>Note:</strong> Inverting mute sets ignores the click, guide, and reference tracks. They are assumed to be part of a mute set in only the rarest of cases.
             </div>
         </section>
         

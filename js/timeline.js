@@ -191,6 +191,21 @@ class Timeline {
         document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
         
+        // Click section indicator to jump playback to that section
+        if (this.sectionIndicatorBar) {
+            this.sectionIndicatorBar.addEventListener('click', (e) => {
+                const indicator = e.target.closest('.section-indicator');
+                if (!indicator) return;
+                const startTime = parseFloat(indicator.dataset.startTime);
+                if (isNaN(startTime)) return;
+                if (window.audioEngine) {
+                    window.audioEngine.seek(startTime);
+                } else {
+                    State.setPosition(startTime);
+                }
+            });
+        }
+
         // Hide tooltip when Ctrl is released
         document.addEventListener('keyup', (e) => {
             if (e.key === 'Control') {
@@ -735,6 +750,7 @@ class Timeline {
             el.className = `section-indicator section-color-${colorIndex}`;
             el.style.left = `${startX}px`;
             el.style.width = `${width}px`;
+            el.dataset.startTime = sectionStart;
             el.textContent = marker.name || '';
             
             this.sectionIndicatorBar.appendChild(el);
