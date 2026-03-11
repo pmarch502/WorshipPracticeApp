@@ -289,7 +289,7 @@ class Timeline {
         const song = State.getActiveSong();
         if (!song) return 0;
         
-        const zoom = song.timeline.zoom || 1;
+        const zoom = this.getEffectiveZoom();
         const offset = song.timeline.offset || 0;
         
         let time = pixelX / (BASE_PIXELS_PER_SECOND * zoom);

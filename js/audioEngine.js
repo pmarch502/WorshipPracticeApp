@@ -51,6 +51,11 @@ class AudioEngine {
         
         // Guard flag to prevent concurrent play() calls
         this.isPlayInProgress = false;
+
+        // MediaStreamDestination for Safari background audio
+        this.mediaStreamDest = null;
+        this.outputAudioElement = null;
+        this.audioElementPrimed = false;
     }
 
     /**
@@ -80,7 +85,14 @@ class AudioEngine {
         // Connect both pitch shifters to master gain -> destination
         this.pitchShifter.connect(this.masterGain);
         this.bypassPitchShifter.connect(this.masterGain);
-        this.masterGain.connect(this.audioContext.destination);
+        // Route through MediaStreamDestination -> <audio> element for Safari background audio
+        this.mediaStreamDest = this.audioContext.createMediaStreamDestination();
+        this.masterGain.connect(this.mediaStreamDest);
+
+        this.outputAudioElement = document.createElement('audio');
+        this.outputAudioElement.srcObject = this.mediaStreamDest.stream;
+        this.outputAudioElement.setAttribute('playsinline', '');
+        document.body.appendChild(this.outputAudioElement);
         
         // Listen for tab visibility changes to pause/resume playback
         document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
@@ -94,6 +106,15 @@ class AudioEngine {
     async resume() {
         if (this.audioContext && this.audioContext.state === 'suspended') {
             await this.audioContext.resume();
+        }
+        // Prime the output audio element (must happen in user gesture call stack for iOS)
+        if (this.outputAudioElement && !this.audioElementPrimed) {
+            try {
+                await this.outputAudioElement.play();
+                this.audioElementPrimed = true;
+            } catch (e) {
+                console.warn('Failed to prime output audio element:', e);
+            }
         }
     }
 
@@ -713,7 +734,12 @@ class AudioEngine {
             const song = State.getActiveSong();
             if (!song || song.tracks.length === 0) return;
 
-            this.resume();
+            await this.resume();
+
+            // Ensure output audio element is playing
+            if (this.outputAudioElement && this.outputAudioElement.paused) {
+                try { await this.outputAudioElement.play(); } catch (e) {}
+            }
 
             // Mute master output to prevent stale SoundTouch buffer audio from playing
             this.setMasterMuted(true, 0);

@@ -2,80 +2,31 @@
  * Background Audio Support
  * Enables audio playback on iOS/Safari when the screen is locked or app is backgrounded.
  *
- * Three subsystems:
- * 1. Silent <audio> element keepalive - tricks iOS into granting background audio privileges
- * 2. Media Session API - lock screen controls and metadata
- * 3. Screen Wake Lock API - prevents screen dimming during playback
+ * Two subsystems:
+ * 1. Media Session API - lock screen controls and metadata
+ * 2. Screen Wake Lock API - prevents screen dimming during playback
+ *
+ * Background audio privileges are provided by the AudioEngine's MediaStreamDestination
+ * routing real audio through an <audio> element (see audioEngine.js).
  */
 
 import * as State from './state.js';
 import { getTransport } from './transport.js';
 import { getAudioEngine } from './audioEngine.js';
 
-// Tiny silent WAV (44 bytes of audio data, ~100ms)
-const SILENT_WAV_BASE64 = 'data:audio/wav;base64,' +
-    'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-
 class BackgroundAudioSupport {
     constructor() {
-        this.silentAudio = null;
-        this.primed = false;
         this.wakeLock = null;
         this.positionInterval = null;
     }
 
     init() {
-        this.createSilentAudio();
-        this.primeOnUserGesture();
         this.initMediaSession();
         this.attachStateListeners();
         console.log('Background audio support initialized');
     }
 
-    // ── 1. Silent <audio> Keepalive ──────────────────────────────────
-
-    createSilentAudio() {
-        this.silentAudio = document.createElement('audio');
-        this.silentAudio.src = SILENT_WAV_BASE64;
-        this.silentAudio.loop = true;
-        // Prevent iOS from showing native player UI
-        this.silentAudio.setAttribute('playsinline', '');
-    }
-
-    primeOnUserGesture() {
-        const prime = () => {
-            if (this.primed) return;
-            const p = this.silentAudio.play();
-            if (p && p.then) {
-                p.then(() => {
-                    this.silentAudio.pause();
-                    this.primed = true;
-                }).catch(() => {
-                    // Priming failed — will retry on next gesture via playSilent
-                });
-            } else {
-                this.silentAudio.pause();
-                this.primed = true;
-            }
-        };
-        document.addEventListener('click', prime, { once: true });
-        document.addEventListener('touchend', prime, { once: true });
-    }
-
-    playSilent() {
-        if (!this.silentAudio) return;
-        const p = this.silentAudio.play();
-        if (p && p.then) {
-            p.then(() => { this.primed = true; }).catch(() => {});
-        }
-    }
-
-    pauseSilent() {
-        if (!this.silentAudio) return;
-        this.silentAudio.pause();
-    }
-
-    // ── 2. Media Session API ─────────────────────────────────────────
+    // ── 1. Media Session API ─────────────────────────────────────────
 
     initMediaSession() {
         if (!('mediaSession' in navigator)) return;
@@ -145,7 +96,7 @@ class BackgroundAudioSupport {
         }
     }
 
-    // ── 3. Screen Wake Lock API ──────────────────────────────────────
+    // ── 2. Screen Wake Lock API ──────────────────────────────────────
 
     async requestWakeLock() {
         if (!('wakeLock' in navigator)) return;
@@ -171,7 +122,6 @@ class BackgroundAudioSupport {
     attachStateListeners() {
         State.subscribe(State.Events.PLAYBACK_STATE_CHANGED, ({ newState }) => {
             if (newState === 'playing') {
-                this.playSilent();
                 this.updateMediaMetadata(State.getActiveSong()?.name);
                 this.updatePositionState();
                 this.startPositionUpdates();
@@ -180,7 +130,6 @@ class BackgroundAudioSupport {
                     navigator.mediaSession.playbackState = 'playing';
                 }
             } else {
-                this.pauseSilent();
                 this.stopPositionUpdates();
                 this.releaseWakeLock();
                 if ('mediaSession' in navigator) {
