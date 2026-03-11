@@ -132,7 +132,13 @@ export async function retrieve(songName, trackName) {
         const safeTrackName = sanitizeName(trackName);
         const fileHandle = await songDir.getFileHandle(safeTrackName);
         const file = await fileHandle.getFile();
-        
+
+        // Guard against 0-byte files left by interrupted writes (e.g. Safari tab freeze)
+        if (file.size === 0) {
+            console.warn(`Skipping 0-byte cached file: ${songName}/${trackName}`);
+            return null;
+        }
+
         console.log(`Retrieved from cache: ${songName}/${trackName} (${formatBytes(file.size)})`);
         return file;
     } catch (error) {
@@ -191,7 +197,13 @@ export async function retrievePCM(songName, trackName) {
         const safeTrackName = sanitizeName(trackName) + '.pcm';
         const fileHandle = await songDir.getFileHandle(safeTrackName);
         const file = await fileHandle.getFile();
-        
+
+        // Guard against 0-byte files left by interrupted writes (e.g. Safari tab freeze)
+        if (file.size === 0) {
+            console.warn(`Skipping 0-byte cached PCM file: ${songName}/${trackName}`);
+            return null;
+        }
+
         console.log(`Retrieved PCM from cache: ${songName}/${trackName} (${formatBytes(file.size)})`);
         return file;
     } catch (error) {
@@ -329,6 +341,15 @@ function formatBytes(bytes) {
  * Get formatted usage string
  * @returns {Promise<string>}
  */
+/**
+ * Reset initialized state so init() will re-acquire OPFS handles.
+ * Called when recovering from bfcache restoration (Safari tab freeze).
+ */
+export function resetInitialized() {
+    initialized = false;
+    rootDirectory = null;
+}
+
 export async function getUsageString() {
     const { used, quota, percent } = await getUsage();
     return `${formatBytes(used)} / ${formatBytes(quota)} (${percent}%)`;

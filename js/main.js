@@ -53,7 +53,10 @@ class App {
             
             // Initialize UI components
             this.initUI();
-            
+
+            // Set up loading overlay early so it can respond to state changes during init
+            this.setupLoadingOverlay();
+
             // Initialize audio engine
             const transport = getTransport();
             await transport.init();
@@ -69,21 +72,22 @@ class App {
             
             // Set up auto-save
             this.setupAutoSave();
-            
-            // Set up loading overlay
-            this.setupLoadingOverlay();
-            
+
             // Set up cache indicator
             this.setupCacheIndicator();
             
             // Update empty states
             this.updateEmptyStates();
             
+            // Ensure loading overlay is hidden now that init is complete
+            State.setLoading(false);
+
             this.initialized = true;
             console.log('App initialized successfully');
-            
+
         } catch (error) {
             console.error('Failed to initialize app:', error);
+            State.setLoading(false);
             this.showInitError(error);
         }
     }
@@ -431,5 +435,21 @@ document.addEventListener('click', async () => {
     const audioEngine = getAudioEngine();
     await audioEngine.resume();
 }, { once: true });
+
+// Handle bfcache restoration (Safari aggressive tab freezing)
+// When Safari restores a frozen tab, IndexedDB/OPFS handles may be stale
+// while JS state (including initialized=true flags) is preserved.
+// Reinitializing the caches gets fresh handles and prevents silent failures.
+window.addEventListener('pageshow', async (event) => {
+    if (event.persisted) {
+        console.log('Page restored from bfcache, reinitializing caches...');
+        try {
+            await cacheManager.reinitialize();
+            console.log('Cache reinitialize complete after bfcache restore');
+        } catch (err) {
+            console.warn('Failed to reinitialize caches after bfcache restore:', err);
+        }
+    }
+});
 
 export default App;

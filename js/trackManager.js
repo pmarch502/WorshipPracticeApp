@@ -353,15 +353,25 @@ export async function loadTracksForSong(song) {
                 }
                 
                 // Load peaks from cache if track doesn't have them
+                // Isolated so a stale IndexedDB connection won't prevent audio node creation
                 if (!track.peaks || !track.peaks.left) {
-                    const cachedPeaks = await cacheManager.getPeaks(song.songName, trackFileName);
-                    if (cachedPeaks) {
-                        track.peaks = cachedPeaks;
-                        State.updateTrack(track.id, { peaks: track.peaks });
-                    } else if (audioBuffer) {
-                        const peaks = audioEngine.extractPeaks(audioBuffer, 200);
-                        track.peaks = peaks;
-                        State.updateTrack(track.id, { peaks: track.peaks });
+                    try {
+                        const cachedPeaks = await cacheManager.getPeaks(song.songName, trackFileName);
+                        if (cachedPeaks) {
+                            track.peaks = cachedPeaks;
+                            State.updateTrack(track.id, { peaks: track.peaks });
+                        } else if (audioBuffer) {
+                            const peaks = audioEngine.extractPeaks(audioBuffer, 200);
+                            track.peaks = peaks;
+                            State.updateTrack(track.id, { peaks: track.peaks });
+                        }
+                    } catch (peaksError) {
+                        console.warn(`Failed to load cached peaks for ${track.name}, extracting from audio:`, peaksError);
+                        if (audioBuffer) {
+                            const peaks = audioEngine.extractPeaks(audioBuffer, 200);
+                            track.peaks = peaks;
+                            State.updateTrack(track.id, { peaks: track.peaks });
+                        }
                     }
                 }
             } else {
@@ -390,17 +400,26 @@ export async function loadTracksForSong(song) {
                 }
                 
                 // 4. Load peaks from cache if track doesn't have them
-                // peaks is now {left, right, isStereo} object
+                // Isolated so a stale IndexedDB connection won't prevent audio node creation
                 if (!track.peaks || !track.peaks.left) {
-                    const cachedPeaks = await cacheManager.getPeaks(song.songName, trackFileName);
-                    if (cachedPeaks) {
-                        track.peaks = cachedPeaks;
-                        State.updateTrack(track.id, { peaks: track.peaks });
-                    } else {
-                        // Extract and cache peaks
-                        const peaks = audioEngine.extractPeaks(audioBuffer, 200);
-                        track.peaks = peaks;
-                        State.updateTrack(track.id, { peaks: track.peaks });
+                    try {
+                        const cachedPeaks = await cacheManager.getPeaks(song.songName, trackFileName);
+                        if (cachedPeaks) {
+                            track.peaks = cachedPeaks;
+                            State.updateTrack(track.id, { peaks: track.peaks });
+                        } else {
+                            // Extract and cache peaks
+                            const peaks = audioEngine.extractPeaks(audioBuffer, 200);
+                            track.peaks = peaks;
+                            State.updateTrack(track.id, { peaks: track.peaks });
+                        }
+                    } catch (peaksError) {
+                        console.warn(`Failed to load cached peaks for ${track.name}, extracting from audio:`, peaksError);
+                        if (audioBuffer) {
+                            const peaks = audioEngine.extractPeaks(audioBuffer, 200);
+                            track.peaks = peaks;
+                            State.updateTrack(track.id, { peaks: track.peaks });
+                        }
                     }
                 }
             }

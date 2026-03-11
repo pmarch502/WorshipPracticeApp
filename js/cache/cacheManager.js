@@ -41,16 +41,52 @@ export async function init() {
     if (initialized) {
         return { supported, opfs: true, peaks: true };
     }
-    
+
     const opfsOk = await opfsCache.init();
     const peaksOk = await peaksCache.init();
-    
+
     supported = opfsOk && peaksOk;
     initialized = true;
-    
+
+    // Request persistent storage (best-effort, fire-and-forget)
+    // Helps prevent Safari from evicting OPFS/IndexedDB data
+    requestPersistentStorage();
+
     console.log(`Cache manager initialized - OPFS: ${opfsOk}, Peaks: ${peaksOk}`);
-    
+
     return { supported, opfs: opfsOk, peaks: peaksOk };
+}
+
+/**
+ * Request persistent storage from the browser (best-effort).
+ * Reduces the chance of Safari evicting cached audio and peaks data.
+ */
+async function requestPersistentStorage() {
+    try {
+        if (navigator.storage && navigator.storage.persist) {
+            const granted = await navigator.storage.persist();
+            console.log(`Persistent storage ${granted ? 'granted' : 'denied'}`);
+        }
+    } catch (err) {
+        // Not critical — just log and move on
+        console.warn('Failed to request persistent storage:', err);
+    }
+}
+
+/**
+ * Reinitialize both sub-caches by resetting their state and re-calling init().
+ * Used after bfcache restoration (Safari pageshow event) to get fresh handles.
+ * @returns {Promise<{supported: boolean, opfs: boolean, peaks: boolean}>}
+ */
+export async function reinitialize() {
+    console.log('Reinitializing cache manager (bfcache recovery)...');
+
+    // Reset all sub-cache initialized flags so they re-acquire handles
+    opfsCache.resetInitialized();
+    peaksCache.resetInitialized();
+    initialized = false;
+
+    return await init();
 }
 
 /**
