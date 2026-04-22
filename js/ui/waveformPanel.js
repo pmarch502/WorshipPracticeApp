@@ -478,7 +478,8 @@ class WaveformPanel {
         const adjustedPosition = pixelPosition + (offset * BASE_PIXELS_PER_SECOND * zoom);
         
         this.playhead.style.display = 'block';
-        this.playhead.style.left = `${adjustedPosition}px`;
+        // translateX goes straight to the compositor; `left` would force layout every frame.
+        this.playhead.style.transform = `translateX(${adjustedPosition}px)`;
 
         // Auto-scroll to keep playhead visible during playback
         if (State.state.playbackState === 'playing') {

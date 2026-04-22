@@ -195,8 +195,17 @@ class App {
                 const activeSong = State.getActiveSong();
                 if (activeSong) {
                     await TrackManager.loadTracksForSong(activeSong);
+
+                    // State restoration rehydrates song.transport.pitch/speed but
+                    // does not touch the audio engine, so _pitch/_speed stay at
+                    // their constructor defaults. Sync them explicitly here —
+                    // without this, the UI shows the saved pitch but playback
+                    // uses 0 until the user nudges the pitch dropdown.
+                    const transport = getTransport();
+                    transport.setPitch(activeSong.transport.pitch);
+                    transport.setSpeed(activeSong.transport.speed);
                 }
-                
+
                 // Note: cleanupOrphanedBlobs removed - no longer storing blobs
                 
             } catch (error) {

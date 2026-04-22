@@ -1651,6 +1651,7 @@ body {
     pointer-events: none;
     z-index: 10;
     left: 0;
+    will-change: transform;
 }
 
 #playhead-line {

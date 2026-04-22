@@ -16,6 +16,12 @@ import { getPreference } from './storage.js';
 // Crossfade duration for section skipping (Phase 3)
 const SECTION_SKIP_CROSSFADE_MS = 50;
 
+// Throttle POSITION_CHANGED emission from the playback RAF loop to ~30Hz.
+// Audio-critical checks (section skip, loop, mute ramps) still run every
+// RAF tick; only UI broadcast is throttled to reduce main-thread cost.
+// Seeks/pauses/stops emit directly via State.setPosition() and bypass this.
+const UI_POSITION_EMIT_INTERVAL_MS = 33;
+
 class AudioEngine {
     constructor() {
         this.audioContext = null;
@@ -30,7 +36,8 @@ class AudioEngine {
         this.startPosition = 0; // Position in audio when playback started
         
         this.animationFrame = null;
-        
+        this.lastPositionEmitTime = 0; // performance.now() of last POSITION_CHANGED emission from RAF loop
+
         // Pitch/speed settings (applied globally via SoundTouch)
         this._pitch = 0; // semitones (-6 to +6)
         this._speed = 1.0; // tempo (0.5 to 2.0)
@@ -64,39 +71,53 @@ class AudioEngine {
      */
     async init() {
         if (this.audioContext) return;
-        
-        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        
+
+        // latencyHint 'playback' lets the browser use larger hardware buffers,
+        // absorbing short main-thread stalls before they reach the speaker.
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+            latencyHint: 'playback'
+        });
+
         // Initialize the SoundTouch pitch shifter worklet for normal tracks
         // PitchShifterWorklet is loaded from soundtouch.js (global)
         this.pitchShifter = new PitchShifterWorklet(this.audioContext);
         await this.pitchShifter.init();
-        
+
         // Initialize a second pitch shifter for pitch-exempt tracks
         // This ensures exempt tracks have the same latency as pitched tracks (staying in sync)
         // but with pitch always set to 0 semitones
         this.bypassPitchShifter = new PitchShifterWorklet(this.audioContext);
         await this.bypassPitchShifter.init();
         this.bypassPitchShifter.pitchSemitones = 0; // Always keep at 0
-        
+
         // Create master gain node
         this.masterGain = this.audioContext.createGain();
-        
-        // Connect both pitch shifters to master gain -> destination
+
+        // Connect both pitch shifters to master gain
         this.pitchShifter.connect(this.masterGain);
         this.bypassPitchShifter.connect(this.masterGain);
-        // Route through MediaStreamDestination -> <audio> element for Safari background audio
-        this.mediaStreamDest = this.audioContext.createMediaStreamDestination();
-        this.masterGain.connect(this.mediaStreamDest);
 
-        this.outputAudioElement = document.createElement('audio');
-        this.outputAudioElement.srcObject = this.mediaStreamDest.stream;
-        this.outputAudioElement.setAttribute('playsinline', '');
-        document.body.appendChild(this.outputAudioElement);
-        
+        // On iOS, route through MediaStream -> <audio> to keep audio alive
+        // when the screen locks or app is backgrounded. Everywhere else,
+        // connect directly: the MediaStream path is main-thread-serviced and
+        // can cause speed/pitch dips when the main thread stalls.
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (isIOS) {
+            this.mediaStreamDest = this.audioContext.createMediaStreamDestination();
+            this.masterGain.connect(this.mediaStreamDest);
+
+            this.outputAudioElement = document.createElement('audio');
+            this.outputAudioElement.srcObject = this.mediaStreamDest.stream;
+            this.outputAudioElement.setAttribute('playsinline', '');
+            document.body.appendChild(this.outputAudioElement);
+        } else {
+            this.masterGain.connect(this.audioContext.destination);
+        }
+
         // Listen for tab visibility changes to pause/resume playback
         document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
-        
+
         console.log('Audio engine initialized with SoundTouch worklets (primary + bypass), sample rate:', this.audioContext.sampleRate);
     }
 
@@ -744,6 +765,14 @@ class AudioEngine {
             // Mute master output to prevent stale SoundTouch buffer audio from playing
             this.setMasterMuted(true, 0);
 
+            // Belt-and-suspenders: force the engine to match what the UI shows.
+            // Any code path that mutates song.transport.pitch/speed without
+            // going through transport.setPitch/setSpeed would otherwise leave
+            // the worklet stale. resetPitchShifter() below reads _pitch/_speed,
+            // so syncing here guarantees the new worklet is correct.
+            this.setPitch(song.transport.pitch);
+            this.setSpeed(song.transport.speed);
+
             // Reset pitch shifter to clear any stale audio in SoundTouch buffers
             // This prevents audio from old position playing when speed != 1.0
             await this.resetPitchShifter();
@@ -1230,9 +1259,13 @@ class AudioEngine {
             
             // Update section mutes for all tracks (Phase 4 time-based mutes)
             this.updateAllSectionMutes(sourcePosition);
-            
-            // Update UI with virtual position
-            State.setPosition(virtualPosition);
+
+            // Update UI with virtual position (throttled to UI_POSITION_EMIT_INTERVAL_MS)
+            const nowMs = performance.now();
+            if (nowMs - this.lastPositionEmitTime >= UI_POSITION_EMIT_INTERVAL_MS) {
+                State.setPosition(virtualPosition);
+                this.lastPositionEmitTime = nowMs;
+            }
             
             // Check if we've reached the end of the arrangement/song
             const maxDuration = State.getMaxDuration(); // Returns virtual duration for arrangements
