@@ -1701,6 +1701,37 @@ body {
     user-select: none;
 }
 
+body.test-env::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 4px solid #ff9800;
+    pointer-events: none;
+    z-index: 99999;
+}
+
+body.test-env #app-version {
+    left: 60px;
+}
+
+.test-badge {
+    position: absolute;
+    left: 16px;
+    bottom: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    background: #ff9800;
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+    pointer-events: none;
+    user-select: none;
+}
+
 #transport-controls {
     display: flex;
     align-items: center;

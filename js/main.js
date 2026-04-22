@@ -32,6 +32,19 @@ class App {
     async init() {
         console.log('Initializing Worship Practice App...');
 
+        const TEST_HOSTNAME = 'd3g5ekus9zfwel.cloudfront.net';
+        if (location.hostname === TEST_HOSTNAME) {
+            document.body.classList.add('test-env');
+            document.title = `[TEST] ${document.title}`;
+            const versionEl = document.getElementById('app-version');
+            if (versionEl) {
+                const badge = document.createElement('span');
+                badge.className = 'test-badge';
+                badge.textContent = 'TEST';
+                versionEl.parentNode.insertBefore(badge, versionEl);
+            }
+        }
+
         try {
             // Check browser support for required APIs (OPFS, IndexedDB)
             if (!cacheManager.isSupported()) {
