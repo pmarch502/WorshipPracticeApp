@@ -91,6 +91,11 @@ async function advanceToNextEntry(currentSong, nextSongId) {
     // 6. Apply the next song's pitch and speed
     transport.setPitch(nextSong.transport.pitch);
     transport.setSpeed(nextSong.transport.speed);
+    // setSpeed re-schedules skip/loop events using the previous song's stale
+    // startPosition (isPlaying is still true). Clear that schedule before we
+    // yield to the event loop below, or it will fire an immediate skip into
+    // whatever section of the new arrangement that stale position lands in.
+    audioEngine.cancelScheduledEvents();
     
     // 7. Load the next song's track nodes (AudioBuffers already in memory cache - this is fast)
     if (nextSong.tracks.length > 0) {
